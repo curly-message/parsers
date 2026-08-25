@@ -1,78 +1,62 @@
 import { describe, expect, it } from 'vitest';
-import i18n from '@sveltekit-i18n/base';
-import parser, { Config } from '../../src';
+import { createParser } from '../../src';
 
-const TRANSLATIONS = { en: { greeting: 'Hi {{applicationName}}!' } };
+const GREETING = 'Hi {{applicationName}}!';
 
 type Payload = { applicationName: string };
 
-// The base core is a runes module compiled by the consumer's bundler, so it
-// cannot be constructed under plain Node. These closures are never invoked —
-// the typecheck step (tsc --noEmit, run by pretest) compiles them, which is
-// the entire point of this suite.
+// Resolution has no host to stand up, so these run for real. The negative
+// cases are compile-time only — `tsc --noEmit`, run by pretest, is what
+// makes them assertions.
 describe('payload typing', () => {
   it('accepts a named payload key when no payload type is declared', () => {
-    const check = () => {
-      const instance = new i18n({ initLocale: 'en', parser: parser(), translations: TRANSLATIONS });
+    const { resolve } = createParser();
 
-      instance.t('greeting', { applicationName: 'App' });
-    };
-
-    expect(check).toBeInstanceOf(Function);
-  });
-
-  it('accepts a named payload key through an annotated config', () => {
-    const check = () => {
-      const config: Config = { initLocale: 'en', parser: parser(), translations: TRANSLATIONS };
-      const instance = new i18n(config);
-
-      instance.t('greeting', { applicationName: 'App' });
-    };
-
-    expect(check).toBeInstanceOf(Function);
+    expect(resolve(GREETING, { payload: { applicationName: 'App' } })).toBe('Hi App!');
   });
 
   it('accepts a payload declared apart from the call', () => {
-    const check = () => {
-      const instance = new i18n({ initLocale: 'en', parser: parser(), translations: TRANSLATIONS });
-      const payload = { applicationName: 'App' };
+    const { resolve } = createParser();
+    const payload = { applicationName: 'App' };
 
-      instance.t('greeting', payload);
-    };
+    expect(resolve(GREETING, { payload })).toBe('Hi App!');
+  });
 
-    expect(check).toBeInstanceOf(Function);
+  it('accepts a declared payload type', () => {
+    const { resolve } = createParser<Payload>();
+
+    expect(resolve(GREETING, { payload: { applicationName: 'App' } })).toBe('Hi App!');
   });
 
   it('keeps the `default` payload key', () => {
-    const check = () => {
-      const instance = new i18n({ initLocale: 'en', parser: parser(), translations: TRANSLATIONS });
+    const { resolve } = createParser();
 
-      instance.t('common.undefined', { default: 'FALLBACK' });
-    };
+    expect(resolve(undefined, { payload: { default: 'FALLBACK' }, key: 'greeting' })).toBe('FALLBACK');
+  });
 
-    expect(check).toBeInstanceOf(Function);
+  it('resolves to the key when the message is missing', () => {
+    const { resolve } = createParser();
+
+    expect(resolve(undefined, { key: 'greeting' })).toBe('greeting');
+  });
+
+  it('resolves without a context', () => {
+    const { resolve } = createParser();
+
+    expect(resolve('Hi!')).toBe('Hi!');
   });
 
   it('rejects a typo against a declared payload type', () => {
-    const check = () => {
-      const config: Config<Payload> = { initLocale: 'en', parser: parser(), translations: TRANSLATIONS };
-      const instance = new i18n(config);
+    const { resolve } = createParser<Payload>();
 
-      // @ts-expect-error `aplicationName` is not a key of the declared payload
-      instance.t('greeting', { aplicationName: 'App' });
-    };
-
-    expect(check).toBeInstanceOf(Function);
+    // @ts-expect-error `aplicationName` is not a key of the declared payload
+    expect(resolve(GREETING, { payload: { aplicationName: 'App' } })).toBe('Hi !');
   });
 
-  it('rejects arguments beyond the payload and the modifier props', () => {
-    const check = () => {
-      const instance = new i18n({ initLocale: 'en', parser: parser(), translations: TRANSLATIONS });
+  it('rejects a context key resolution does not read', () => {
+    const { resolve } = createParser();
 
-      // @ts-expect-error `t` takes a payload and modifier props only
-      instance.t('greeting', { applicationName: 'App' }, {}, 'extra');
-    };
-
-    expect(check).toBeInstanceOf(Function);
+    // @ts-expect-error resolution reads the payload, the props, the locale and the key
+    expect(resolve(GREETING, { payload: { applicationName: 'App' }, extra: true })).toBe('Hi App!');
   });
 });

@@ -22,21 +22,41 @@ one of the comparisons `eq`, `ne`, `lt`, `lte`, `gt`, `gte`), a set of options,
 and a `default`. Locale-dependent formatting is delegated to `Intl`; the
 package itself has no runtime dependencies.
 
+## Usage
+
+```js
+import { createParser } from '@curly-message/parser';
+
+const { resolve } = createParser();
+
+resolve('Hello, {{name; default:Guest;}}!', { payload: { name: 'Alice' }, locale: 'en' });
+// -> 'Hello, Alice!'
+```
+
+`createParser(options?)` returns a parser whose `resolve(message, context?)`
+takes the four inputs resolution is defined over, plus the message's own key:
+
+| Context | Meaning |
+| --- | --- |
+| `payload` | The values the placeholders name. Its `default` key is the message-wide fallback. |
+| `props` | Per-call formatting options handed to the modifiers, keyed by modifier name. |
+| `locale` | The locale the locale-dependent modifiers format for. |
+| `key` | The message's identifier. A missing message resolves to it. |
+
+`options` carries `customModifiers` and `modifierDefaults`. Nothing else is
+read, and the package has no runtime dependencies — locale-dependent
+formatting is delegated to `Intl`.
+
 ## Status
 
 **Unreleased, and the public surface is unstable.**
 
-These sources are a verbatim move of
-[`@sveltekit-i18n/parser-curly`](https://github.com/sveltekit-i18n/parsers/tree/master/parser-curly),
-brought over unchanged so that the move itself is reviewable. They still carry
-that library's shape: the entry point is a parser factory whose `parse` takes
-base's argument tuple, and `@sveltekit-i18n/base` is still a peer dependency.
+Nothing here references a host framework: `resolve` takes the format's own
+inputs, and an adapter that presents this parser to a host library belongs in
+that host's own repository.
 
-Reshaping the surface around the format's own resolution inputs — message,
-payload, props, locale, key — is the next step, after which nothing here will
-reference a host framework and the adapter for `@sveltekit-i18n/base` will live
-in that ecosystem's repository. Documentation of the public API lands with that
-change; until then the specification and the test suite describe the behavior.
+The specification is normative — where this implementation and the
+specification disagree, this implementation is wrong.
 
 ## Development
 

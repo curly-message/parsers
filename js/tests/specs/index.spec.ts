@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import parser, { Parser } from '../../src';
+import { createParser, Parser } from '../../src';
 import { TRANSLATIONS } from '../data';
 
 const initLocale = 'en';
@@ -11,13 +11,13 @@ const message = (locale: string, key: string) => {
   return TRANSLATIONS[locale]?.[namespace]?.[path.join('.')];
 };
 
-const defaultParser = parser({
+const defaultParser = createParser({
   customModifiers: {
     test: ({ value }) => value,
   },
 });
 
-const localize = <P = Parser.PayloadDefault>(locale: string, { parse }: Parser.T = defaultParser) => (key: string, ...params: Parser.Params<P>): string => parse(message(locale, key), params, locale, key);
+const localize = <P = Parser.PayloadDefault>(locale: string, { resolve }: Parser.T = defaultParser) => (key: string, payload?: Parser.Payload<P>, props?: Parser.Context['props']): string => resolve(message(locale, key), { payload, props, locale, key });
 
 describe('parser', () => {
   it('returns a key string if not defined', () => {
@@ -113,7 +113,7 @@ describe('parser', () => {
     expect($t('common.modifier_number', { value }, { number: { maximumFractionDigits: 4 } })).toBe(new Intl.NumberFormat(initLocale, { maximumFractionDigits: 4 }).format(value));
   });
   it('`number` defaults work', () => {
-    const $t = localize<{ value?: any }>(initLocale, parser({ modifierDefaults: { number: { maximumFractionDigits: 4 } } }));
+    const $t = localize<{ value?: any }>(initLocale, createParser({ modifierDefaults: { number: { maximumFractionDigits: 4 } } }));
     const value = 123456.78987686643;
 
     expect($t('common.modifier_number', { value })).toBe(new Intl.NumberFormat(initLocale, { maximumFractionDigits: 4 }).format(value));
@@ -133,7 +133,7 @@ describe('parser', () => {
     expect($t('common.modifier_date', { value }, { date: { year: '2-digit', month: 'numeric', day: 'numeric' } })).toBe(new Intl.DateTimeFormat(initLocale, { year: '2-digit', month: 'numeric', day: 'numeric' }).format(value));
   });
   it('`date` defaults work', () => {
-    const $t = localize<{ value?: any }>(initLocale, parser({ modifierDefaults: { date: { timeStyle: 'full' } } }));
+    const $t = localize<{ value?: any }>(initLocale, createParser({ modifierDefaults: { date: { timeStyle: 'full' } } }));
     const value = Date.now();
 
     expect($t('common.modifier_date', { value })).toBe(new Intl.DateTimeFormat(initLocale, { timeStyle: 'full' }).format(value));
@@ -154,8 +154,8 @@ describe('parser', () => {
     expect($t('common.modifier_ago', { value }, { ago: { format: 'week' } })).not.toBe(new Intl.RelativeTimeFormat(initLocale).format(-7, 'day'));
   });
   it('`ago` defaults work', () => {
-    const $tDays = localize<{ value?: any }>(initLocale, parser({ modifierDefaults: { ago: { format: 'days' } } }));
-    const $tWeek = localize<{ value?: any }>(initLocale, parser({ modifierDefaults: { ago: { format: 'week' } } }));
+    const $tDays = localize<{ value?: any }>(initLocale, createParser({ modifierDefaults: { ago: { format: 'days' } } }));
+    const $tWeek = localize<{ value?: any }>(initLocale, createParser({ modifierDefaults: { ago: { format: 'week' } } }));
     const value = -1000 * 60 * 60 * 24 * 7;
 
     expect($tDays('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(initLocale).format(-7, 'day'));
@@ -172,14 +172,14 @@ describe('parser', () => {
   it('`currency` defaults work', () => {
     const value = 10;
     const ratio = 21.4;
-    const $tUsd = localize<{ value?: number }>(initLocale, parser({ modifierDefaults: { currency: { currency: 'USD', ratio: 1 } } }));
-    const $tCzk = localize<{ value?: number }>(initLocale, parser({ modifierDefaults: { currency: { currency: 'CZK', ratio } } }));
+    const $tUsd = localize<{ value?: number }>(initLocale, createParser({ modifierDefaults: { currency: { currency: 'USD', ratio: 1 } } }));
+    const $tCzk = localize<{ value?: number }>(initLocale, createParser({ modifierDefaults: { currency: { currency: 'CZK', ratio } } }));
 
     expect($tUsd('common.modifier_currency', { value })).toBe(new Intl.NumberFormat(initLocale, { style: 'currency', currency: 'USD' }).format(value));
     expect($tCzk('common.modifier_currency', { value })).toBe(new Intl.NumberFormat(initLocale, { style: 'currency', currency: 'CZK' }).format(value * ratio));
   });
   it('custom modifier works', () => {
-    const $t = localize<{ data?: any }>(initLocale, parser({
+    const $t = localize<{ data?: any }>(initLocale, createParser({
       customModifiers: {
         test: ({ value }) => value,
       },

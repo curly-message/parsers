@@ -40,19 +40,19 @@ without inheriting a host library. Keep that true:
   and [`SPEC.md`](https://github.com/curly-message/spec/blob/main/SPEC.md)
   disagree, that is a bug report against one of them — decide which, and say
   so, rather than quietly changing the other.
-- **No host-framework coupling in a published surface.** `@curly-message/parser`
-  is not a `@sveltekit-i18n/base` parser; the adapter that makes it one lives in
-  `sveltekit-i18n/parsers`. A dependency on a host library here is a blocking
-  change — stop and ask.
+- **No host-framework coupling in a published surface.** A parser here
+  implements the format, not any host library's calling convention; an adapter
+  that presents it to one belongs in that host's own repository. A dependency
+  on a host library here is a blocking change — stop and ask.
 - **Behavior changes are format changes.** Anything that alters what a message
   resolves to needs a matching change in the spec repository, in the same
   round of work.
 
 ## Current state
 
-The `js/` sources are a verbatim move of `@sveltekit-i18n/parser-curly` and
-still carry that coupling; removing it is in progress. Nothing here is
-published yet, so there is no migration cost to getting the shape right.
+`js/` resolves over the format's own named inputs and depends on no host
+library. Nothing here is published yet, so there is no migration cost to
+getting the shape right.
 
 ## Comments
 

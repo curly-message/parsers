@@ -1,7 +1,7 @@
 import * as defaultModifiers from './modifiers';
-import type { Parser, Modifier, Interpolate, Config } from './types';
+import type { Parser, Modifier, Interpolate, Locale } from './types';
 
-export type { Parser, Modifier, Config };
+export type { Parser, Modifier, Locale };
 
 const hasPlaceholders = (value: any) => typeof value === 'string' && /{{(?:(?!{{|}}).)+}}/.test(value);
 
@@ -83,8 +83,9 @@ const interpolate: Interpolate = ({ value, props, payload, parserOptions, locale
   return unesc(output);
 };
 
-const parser: Parser.Factory = (parserOptions) => ({
-  parse: (value, [payload, props], locale, key) => {
+export const createParser: Parser.Factory = (parserOptions) => ({
+  resolve: (message, { payload, props, locale, key } = {}) => {
+    let value = message;
 
     const payloadDefault = ownValue(payload, 'default');
 
@@ -99,5 +100,3 @@ const parser: Parser.Factory = (parserOptions) => ({
     return interpolate({ value, payload, props, parserOptions, locale });
   },
 });
-
-export default parser;

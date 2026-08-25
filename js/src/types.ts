@@ -1,7 +1,12 @@
-import type { Parser as P, Config as C } from '@sveltekit-i18n/base';
 import * as modifiers from './modifiers';
 
-export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: C.Locale, parserOptions?: Parser.Options };
+/**
+ * A locale as it reaches resolution — an opaque identifier the modifiers hand
+ * to `Intl`. The format neither parses nor validates it.
+ */
+export type Locale = string;
+
+export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options };
 
 export type Interpolate = (config: CommonProps & { payload?: Parser.Payload }) => string;
 
@@ -43,11 +48,34 @@ export module Parser {
 
   export type Payload<T = any> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, any> & PayloadDefault : T & PayloadDefault;
 
-  export type Params<P = PayloadDefault, M = Modifier.DefaultProps> = [payload?: Payload<P>, props?: Modifier.Props<M>];
+  export type Key = string;
 
-  export type T<Params extends P.Params = Parser.Params> = P.T<Params>;
+  export type Value = any;
 
-  export type Factory = <O extends string = string, Props = {}, Payload = {}>(options?: Parser.Options<O, Props>) => Parser.T<Parser.Params<Payload & PayloadDefault, Props & Modifier.DefaultProps>>;
+  /**
+   * Everything resolution reads besides the message itself. `key` is the
+   * message's own identifier where the caller has one — it is what a missing
+   * message resolves to.
+   */
+  export type Context<P = PayloadDefault, M = Modifier.DefaultProps> = {
+    payload?: Payload<P>;
+    props?: Modifier.Props<M>;
+    locale?: Locale;
+    key?: Key;
+  };
+
+  export type Resolve<C extends Parser.Context = Parser.Context> = (message: Value, context?: C) => string;
+
+  export type T<C extends Parser.Context = Parser.Context> = {
+    /**
+     * Interpolates the message against the given context and returns the result.
+     */
+    resolve: Resolve<C>;
+  };
+
+  /**
+   * The payload type comes first: with no host config to carry it, the factory
+   * is where a caller declares what its messages expect.
+   */
+  export type Factory = <Payload = {}, Props = {}, Key extends string = Modifier.Key>(options?: Parser.Options<Key, Props>) => Parser.T<Parser.Context<Payload & PayloadDefault, Props & Modifier.DefaultProps>>;
 }
-
-export type Config<P = Parser.PayloadDefault, M = Modifier.DefaultProps> = C.T<Parser.Params<P, M>>;
