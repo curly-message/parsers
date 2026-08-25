@@ -43,9 +43,17 @@ takes the four inputs resolution is defined over, plus the message's own key:
 | `locale` | The locale the locale-dependent modifiers format for. |
 | `key` | The message's identifier. A missing message resolves to it. |
 
-`options` carries `customModifiers` and `modifierDefaults`. Nothing else is
-read, and the package has no runtime dependencies — locale-dependent
+`options` carries `customModifiers`, `modifierDefaults` and `onReport`. Nothing
+else is read, and the package has no runtime dependencies — locale-dependent
 formatting is delegated to `Intl`.
+
+`onReport` is where diagnostics go. The parser writes to no channel of its own,
+so unset it reports nowhere; resolution still fails soft, it just does so
+silently. It is called with a `Report` describing what stopped resolution —
+`code`, an English `message` carrying nothing from the payload, the `limit`
+reached, the message's `key` where one was passed, and `text`, the excerpt that
+never settled. Only `text` derives from the payload, and it arrives truncated
+with its line terminators escaped, so a report is safe to write anywhere as-is.
 
 ## Status
 

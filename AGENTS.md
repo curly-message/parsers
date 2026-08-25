@@ -177,9 +177,12 @@ repository, not just these docs.
   single spread before it escapes to consumers.
 - Keep `index.ts` for the resolution pipeline; put pure, reusable helpers in
   `utils.ts` and modifier implementations in `modifiers.ts`.
-- Diagnostics go through `console.warn` at the interpolation guards, and
-  nowhere else. A parser has no logger of its own; adding one is a change to
-  the public surface, so propose it rather than introducing it in passing.
+- Diagnostics leave through the `onReport` option at the interpolation guards,
+  and nowhere else. The format specifies no channel to report through, so a
+  parser writes to none — it describes what happened and lets its caller decide
+  where that goes. Reporting somewhere directly, or widening what a `Report`
+  carries, is a change to the public surface: propose it rather than
+  introducing it in passing.
 - **Reuse before reimplementing** — `ownValue`, `unesc`, `getModifierDefaults`
   already exist. Grep before adding a helper; bend an existing one rather than
   forking.
@@ -213,6 +216,12 @@ risks are **DoS / robustness / prototype-chain**, not RCE/XSS.
   or multiplies its own placeholder terminate instead of hanging the caller.
   Don't remove them, don't raise them to buy behavior, and treat a change to
   either as a format change (§ Implementation independence).
+- **A report is the one thing that leaves carrying payload text.** `Report.text`
+  is derived from the payload, so it leaves truncated and with every line
+  terminator escaped — a consumer that writes a report somewhere must not be
+  able to have a payload forge a line there. `JSON.stringify` is not enough on
+  its own: it passes U+2028 and U+2029 through raw. Anything new a `Report`
+  carries out of the payload takes the same treatment.
 - **Placeholder matching is regex over consumer-controlled text**, which makes
   it the ReDoS surface here. A new or widened pattern needs an explicit check
   for catastrophic backtracking before it lands; if you touch one and can't

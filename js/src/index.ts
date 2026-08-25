@@ -1,7 +1,7 @@
 import * as defaultModifiers from './modifiers';
-import type { Parser, Modifier, Interpolate, Locale } from './types';
+import type { Parser, Modifier, Interpolate, Interpolation, Locale, Report } from './types';
 
-export type { Parser, Modifier, Locale };
+export type { Parser, Modifier, Locale, Report };
 
 const hasPlaceholders = (value: any) => typeof value === 'string' && /{{(?:(?!{{|}}).)+}}/.test(value);
 
@@ -57,14 +57,33 @@ const MAX_INTERPOLATION_LENGTH = 100000;
 
 const MAX_REPORTED_LENGTH = 120;
 
-const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value);
+// `JSON.stringify` escapes every line terminator except these two.
+const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value).slice(1, -1).replace(/[\u2028\u2029]/g, (separator) => `\\u${separator.charCodeAt(0).toString(16)}`);
 
-const interpolate: Interpolate = ({ value, props, payload, parserOptions, locale }) => {
+const REPORT_MESSAGES: Record<Report['code'], string> = {
+  'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
+  'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
+};
+
+const REPORT_LIMITS: Record<Report['code'], number> = {
+  'pass-limit': MAX_INTERPOLATION_PASSES,
+  'output-limit': MAX_INTERPOLATION_LENGTH,
+};
+
+const report = (code: Report['code'], text: string, key: Parser.Key | undefined, onReport: Parser.OnReport | undefined) => {
+  if (!onReport) return;
+
+  onReport({ code, message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(text) });
+};
+
+const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key }) => {
+  const { onReport } = parserOptions || {};
+
   let output = value;
 
   for (let pass = 0; hasPlaceholders(output); pass += 1) {
     if (pass === MAX_INTERPOLATION_PASSES) {
-      console.warn(`[i18n]: Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder: ${excerpt(output)}.`);
+      report('pass-limit', output, key, onReport);
 
       break;
     }
@@ -72,7 +91,7 @@ const interpolate: Interpolate = ({ value, props, payload, parserOptions, locale
     const next = placeholders({ value: output, payload, props, parserOptions, locale });
 
     if (next.length > MAX_INTERPOLATION_LENGTH) {
-      console.warn(`[i18n]: Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder: ${excerpt(output)}.`);
+      report('output-limit', output, key, onReport);
 
       break;
     }
@@ -97,6 +116,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
       value = key;
     }
 
-    return interpolate({ value, payload, props, parserOptions, locale });
+    return interpolate({ value, payload, props, parserOptions, locale, key });
   },
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createParser, Parser } from '../../src';
+import { createParser, Parser, Report } from '../../src';
 import { TRANSLATIONS } from '../data';
 
 const initLocale = 'en';
@@ -258,50 +258,68 @@ describe('parser', () => {
     expect($t('common.placeholder', { value: '{{first}}', first: '{{second}}', second: 'TEST_VALUE' })).toBe('VALUES: TEST_VALUE, TEST_VALUE, TEST_VALUE, TEST_VALUE');
   });
   it('reaching the interpolation cap reports a bounded excerpt', () => {
-    const $t = localize<{ [key: string]: any }>(initLocale);
+    const reports: Report[] = [];
+    const $t = localize<{ [key: string]: any }>(initLocale, createParser({ onReport: (report) => { reports.push(report); } }));
 
     const chain = (length: number) => Array.from({ length }, (_, i) => [`v${i + 1}`, i + 1 === length ? 'END' : `{{v${i + 2}}}`])
       .reduce((acc, [key, value]) => ({ ...acc, [key]: value }), {} as Record<string, any>);
 
-    const { warn } = console;
-    const warnings: string[] = [];
+    expect($t('common.placeholder_chain', chain(10))).toBe('END');
+    expect($t('common.placeholder_chain', chain(11))).toBe('{{v11}}');
 
-    console.warn = (warning: string) => { warnings.push(warning); };
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toEqual({
+      code: 'pass-limit',
+      message: 'Interpolation stopped after 10 passes. A payload value probably references its own placeholder.',
+      key: 'common.placeholder_chain',
+      limit: 10,
+      text: '{{v11}}',
+    });
+  });
+  it('a report never carries a line terminator out of the payload', () => {
+    const reports: Report[] = [];
+    const $t = localize<{ v1?: string }>(initLocale, createParser({ onReport: (report) => { reports.push(report); } }));
 
-    try {
-      expect($t('common.placeholder_chain', chain(10))).toBe('END');
-      expect($t('common.placeholder_chain', chain(11))).toBe('{{v11}}');
-      expect($t('common.placeholder_chain', { v1: `{{v1}}\n[i18n]: FORGED${'x'.repeat(1000)}` })).toContain('[i18n]: FORGED');
-    } finally {
-      console.warn = warn;
+    for (const terminator of ['\n', '\r', '\u2028', '\u2029']) {
+      expect($t('common.placeholder_chain', { v1: `{{v1}}${terminator}[i18n]: FORGED${'x'.repeat(1000)}` })).toContain('[i18n]: FORGED');
     }
 
-    expect(warnings).toHaveLength(2);
-    expect(warnings[0]).toContain('"{{v11}}"');
-    expect(warnings[1].length).toBeLessThan(300);
-    expect(warnings[1]).not.toContain('\n');
+    expect(reports).toHaveLength(4);
+
+    for (const report of reports) {
+      expect(report.text.length).toBeLessThan(300);
+      expect(report.text).not.toMatch(/[\n\r\u2028\u2029]/);
+      expect(report.message).not.toContain('FORGED');
+    }
   });
   it('exceeding the output budget stops interpolation and reports it', () => {
-    const $t = localize<{ v1?: string }>(initLocale);
+    const reports: Report[] = [];
+    const $t = localize<{ v1?: string }>(initLocale, createParser({ onReport: (report) => { reports.push(report); } }));
 
+    const output = $t('common.placeholder_chain', { v1: `${'{{v1}}'.repeat(4)}${'x'.repeat(64)}` });
+
+    expect(output.length).toBeLessThanOrEqual(100000);
+    expect(output.length).toBe(27968);
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ code: 'output-limit', limit: 100000, key: 'common.placeholder_chain' });
+    expect(reports[0].text.length).toBeLessThan(300);
+  });
+  it('without `onReport` a parser reports nowhere and still fails soft', () => {
     const { warn } = console;
-    const warnings: string[] = [];
+    const warnings: unknown[] = [];
 
-    console.warn = (warning: string) => { warnings.push(warning); };
+    console.warn = (...args: unknown[]) => { warnings.push(args); };
 
     try {
-      const output = $t('common.placeholder_chain', { v1: `${'{{v1}}'.repeat(4)}${'x'.repeat(64)}` });
+      const $t = localize<{ v1?: string }>(initLocale);
 
-      expect(output.length).toBeLessThanOrEqual(100000);
-      expect(output.length).toBe(27968);
+      expect($t('common.placeholder_chain', { v1: '{{v1}}' })).toBe('{{v1}}');
     } finally {
       console.warn = warn;
     }
 
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('stopped before exceeding');
-    expect(warnings[0].length).toBeLessThan(300);
-    expect(warnings[0]).not.toContain('\n');
+    expect(warnings).toHaveLength(0);
   });
   const timePerOp = (run: () => void) => {
     run();
