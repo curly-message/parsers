@@ -1,0 +1,18 @@
+node_modules/
+dist/
+build/
+lib/
+
+.env
+.vscode/
+.idea/
+
+.DS_Store
+Thumbs.db
+
+*.log
+
+# Claude Code: user- and session-local only. Shared settings, skills, agents
+# and commands under .claude/ stay tracked.
+.claude/settings.local.json
+.claude/worktrees/
