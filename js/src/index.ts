@@ -24,53 +24,56 @@ const stringify = (value: any, fallback = '') => {
   }
 };
 
-const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale }) => `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder) => {
-  const [escapedKey] = placeholder.match(/(?!{|\s)(?:\\[:;]|\\(?![:;])|[^:;\\\n\r\u2028\u2029])*?(?:\\[:;]|\\(?![:;])|[^:;\s\\])(?=\s*(?:[:;]|}}$))/) || [];
-  const key = escapedKey === undefined ? undefined : unesc(escapedKey) as keyof Parser.Payload;
-  const value = ownValue(payload, key);
-
-  const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
-  const declaredDefault = inlineDefault === undefined ? ownValue(payload, 'default') : inlineDefault;
-  const defaultValue = declaredDefault === undefined ? '' : stringify(declaredDefault);
-
-  let [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
-
-  if (value === undefined && modifierKey !== 'ne') return defaultValue;
-
-  const hasModifier = !!modifierKey;
-
+const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale }) => {
   const { customModifiers } = parserOptions || {};
   const modifiers = { ...defaultModifiers, ...(customModifiers || {}) };
+  const modifierKeys = Object.keys(modifiers);
 
-  modifierKey = (Object.keys(modifiers).includes(modifierKey) ? modifierKey : 'eq');
+  return `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder) => {
+    const [escapedKey] = placeholder.match(/(?!{|\s)(?:\\[:;]|\\(?![:;])|[^:;\\\n\r\u2028\u2029])*?(?:\\[:;]|\\(?![:;])|[^:;\s\\])(?=\s*(?:[:;]|}}$))/) || [];
+    const key = escapedKey === undefined ? undefined : unesc(escapedKey) as keyof Parser.Payload;
+    const value = ownValue(payload, key);
 
-  const modifier = modifiers[modifierKey as keyof typeof modifiers];
-  const options = (
-    placeholder.match(/(?:\\[;]|[^\s:;{}])(?:(?:[^;]|\\[;])*[^:;}])?/gi) as RegExpMatchArray || []
-  ).reduce(
-    (acc, option, i) => {
-      // NOTE: First item is a placeholder and modifier
-      if (i > 0) {
-        const parts = option.split(/(?<!\\):/);
-        const optionKey = unesc(parts[0].trim());
-        const optionValue = parts[parts.length - 1].trimStart();
+    const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
+    const declaredDefault = inlineDefault === undefined ? ownValue(payload, 'default') : inlineDefault;
+    const defaultValue = declaredDefault === undefined ? '' : stringify(declaredDefault);
 
-        if (optionKey && optionKey !== 'default' && optionValue) acc.push({ key: optionKey, value: optionValue });
-      }
+    let [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
 
-      return acc;
-    }, [] as Modifier.ModifierOption[],
-  );
+    if (value === undefined && modifierKey !== 'ne') return defaultValue;
 
-  if (!hasModifier && !options.length) return stringify(value, defaultValue);
+    const hasModifier = !!modifierKey;
 
-  // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
-  try {
-    return String(modifier({ value, options, props, defaultValue, locale, parserOptions }));
-  } catch {
-    return defaultValue;
-  }
-});
+    modifierKey = (modifierKeys.includes(modifierKey) ? modifierKey : 'eq');
+
+    const modifier = modifiers[modifierKey as keyof typeof modifiers];
+    const options = (
+      placeholder.match(/(?:\\[;]|[^\s:;{}])(?:(?:[^;]|\\[;])*[^:;}])?/gi) as RegExpMatchArray || []
+    ).reduce(
+      (acc, option, i) => {
+        // NOTE: First item is a placeholder and modifier
+        if (i > 0) {
+          const parts = option.split(/(?<!\\):/);
+          const optionKey = unesc(parts[0].trim());
+          const optionValue = parts[parts.length - 1].trimStart();
+
+          if (optionKey && optionKey !== 'default' && optionValue) acc.push({ key: optionKey, value: optionValue });
+        }
+
+        return acc;
+      }, [] as Modifier.ModifierOption[],
+    );
+
+    if (!hasModifier && !options.length) return stringify(value, defaultValue);
+
+    // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
+    try {
+      return String(modifier({ value, options, props, defaultValue, locale, parserOptions }));
+    } catch {
+      return defaultValue;
+    }
+  });
+};
 
 const MAX_INTERPOLATION_PASSES = 10;
 
