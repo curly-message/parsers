@@ -24,6 +24,12 @@ Initial version line for `@curly-message/parser`.
   Registering the name through `customModifiers` makes it known — a caller's
   table overrides the built-in one, so a host can supply what its messages
   need.
+* A payload's own `default` outranks the `default` a placeholder declares.
+  The message carries the fallback a translator wrote; the payload is where a
+  caller overrides it for one call, so `{{count; default:no}}` under
+  `{ default: '-' }` now resolves to `'-'` rather than `'no'`. The inline
+  default still applies wherever the payload does not own a `default`, and a
+  present value still outranks both.
 * Resolution never raises. A modifier that cannot produce a result now resolves
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any

@@ -68,7 +68,19 @@ describe('parser', () => {
     expect(resolve('{{count}}', { payload: { default: 0 } })).toBe('0');
     expect(resolve('{{count}}', { payload: { default: false } })).toBe('false');
     expect(resolve('{{count:number}}', { payload: { count: 'not a number', default: 0 }, locale: 'en' })).toBe('0');
-    expect(resolve('{{count; default:INLINE}}', { payload: { default: 0 } })).toBe('INLINE');
+    expect(resolve('{{count; default:INLINE}}', { payload: { default: 0 } })).toBe('0');
+  });
+  it('an own payload `default` overrides an inline one', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{count; default:INLINE}}', { payload: {} })).toBe('INLINE');
+    expect(resolve('{{count; default:INLINE}}', { payload: { default: 'PAYLOAD' } })).toBe('PAYLOAD');
+    expect(resolve('{{count; default:INLINE}}', { payload: { count: 7, default: 'PAYLOAD' } })).toBe('7');
+    expect(resolve('Hi {{name; default:friend}}, you have {{count; default:no}} messages', { payload: { name: 'Ann', default: '-' } })).toBe('Hi Ann, you have - messages');
+
+    const inherited = Object.create({ default: 'INHERITED' });
+
+    expect(resolve('{{count; default:INLINE}}', { payload: inherited })).toBe('INLINE');
   });
   it('placeholders containing escaped values work', () => {
     const resolve = resolverFor<{ 'pl:ace;holder'?: any }>(defaultLocale);
@@ -359,7 +371,7 @@ describe('parser', () => {
     const resolve = resolverFor<{ [key: string]: any }>(defaultLocale);
 
     expect(resolve('common.placeholder_inherited')).toBe('VALUES: , , , INLINE DEFAULT');
-    expect(resolve('common.placeholder_inherited', { default: 'DEFAULT VALUE' })).toBe('VALUES: DEFAULT VALUE, DEFAULT VALUE, DEFAULT VALUE, INLINE DEFAULT');
+    expect(resolve('common.placeholder_inherited', { default: 'DEFAULT VALUE' })).toBe('VALUES: DEFAULT VALUE, DEFAULT VALUE, DEFAULT VALUE, DEFAULT VALUE');
     expect(resolve('common.placeholder_inherited', { constructor: 'OWN VALUE' })).toBe('VALUES: OWN VALUE, , , INLINE DEFAULT');
 
     const inherited = Object.create({ default: 'INHERITED DEFAULT' });

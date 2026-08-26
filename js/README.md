@@ -44,7 +44,7 @@ takes the four inputs resolution is defined over, plus the message's own key:
 
 | Context | Meaning |
 | --- | --- |
-| `payload` | The values the placeholders name. Its `default` key is the message-wide fallback. |
+| `payload` | The values the placeholders name. Its `default` key is the message-wide fallback, and it overrides the `default` a placeholder declares. |
 | `props` | Per-call formatting options handed to the modifiers, keyed by modifier name. |
 | `locale` | The locale the locale-dependent modifiers format for. |
 | `key` | The message's identifier. A missing message resolves to it. |

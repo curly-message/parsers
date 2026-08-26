@@ -35,7 +35,8 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
     const value = ownValue(payload, key);
 
     const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
-    const declaredDefault = inlineDefault === undefined ? ownValue(payload, 'default') : inlineDefault;
+    const payloadDefault = ownValue(payload, 'default');
+    const declaredDefault = payloadDefault === undefined ? inlineDefault : payloadDefault;
     const defaultValue = declaredDefault === undefined ? '' : stringify(declaredDefault);
 
     const [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
