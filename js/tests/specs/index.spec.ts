@@ -187,6 +187,20 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_custom', { data: 'TEST_STRING' })).toBe('TEST_STRING');
   });
+  it('a modifier that raises resolves to the fallback chain', () => {
+    const throwing = createParser({ customModifiers: { test: () => { throw new Error('MODIFIER FAILURE'); } } });
+    const resolveThrowing = resolverFor<{ data?: any }>(defaultLocale, throwing);
+    const resolve = resolverFor<{ value?: any }>(defaultLocale);
+
+    expect(resolveThrowing('common.modifier_custom_default', { data: 'TEST_STRING' })).toBe('FALLBACK');
+    expect(resolveThrowing('common.modifier_custom', { data: 'TEST_STRING' })).toBe('');
+
+    expect(resolve('common.modifier_currency_default', { value: 10 })).toBe('FALLBACK');
+
+    const { resolve: resolveRaw } = defaultParser;
+
+    expect(resolveRaw(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 }, locale: 'not a locale' })).toBe('FALLBACK');
+  });
   it('modifiers containing escaped values work', () => {
     const resolve = resolverFor<{ 'va:lue'?: any }>(defaultLocale);
 

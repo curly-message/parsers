@@ -48,7 +48,12 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
 
   if (!hasModifier && !options.length) return value;
 
-  return modifier({ value, options, props, defaultValue, locale, parserOptions });
+  // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
+  try {
+    return modifier({ value, options, props, defaultValue, locale, parserOptions });
+  } catch {
+    return defaultValue;
+  }
 });
 
 const MAX_INTERPOLATION_PASSES = 10;

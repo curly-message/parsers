@@ -17,3 +17,7 @@ Initial version line for `@curly-message/parser`.
   soft either way. A report's excerpt of the unsettled text arrives truncated
   and with every line terminator escaped, U+2028 and U+2029 included, so a
   payload cannot forge a line wherever the caller writes it.
+* Resolution never raises. A modifier that cannot produce a result now resolves
+  its placeholder to the fallback chain instead of propagating out of
+  `resolve`: `{{price:currency}}` with no currency code configured, and any
+  formatting modifier under a locale the host rejects, used to throw.
