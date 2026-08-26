@@ -5,7 +5,47 @@ export type { Parser, Modifier, Locale, Report };
 
 const hasPlaceholders = (value: any) => typeof value === 'string' && /{{(?:(?!{{|}}).)+}}/.test(value);
 
-const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\(?=:|;|{|})/g, '') : value;
+// The syntax reserves a colon, a semicolon, either brace, a backslash and
+// whitespace. A backslash writes any of them as text; before anything else it
+// is text itself, so a Windows path and a regular expression survive as typed.
+const RESERVED = /[:;{}\\\s]/;
+
+const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/g, (sequence, character) => RESERVED.test(character) ? character : sequence) : value;
+
+// Whitespace an escape sequence claims is text, not padding around it.
+const trim = (value: string) => {
+  let start = -1;
+  let end = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const escaped = value[index] === '\\' && index + 1 < value.length;
+
+    if (!escaped && /\s/.test(value[index])) continue;
+
+    if (start < 0) start = index;
+
+    index += escaped ? 1 : 0;
+    end = index + 1;
+  }
+
+  return start < 0 ? '' : value.slice(start, end);
+};
+
+// Separates on every occurrence of `separator` no escape sequence claims.
+const split = (value: string, separator: string) => {
+  const parts: string[] = [];
+  let from = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '\\') index += 1;
+    else if (value[index] === separator) {
+      parts.push(value.slice(from, index));
+      from = index + 1;
+    }
+  }
+
+  return [...parts, value.slice(from)];
+};
 
 const ownValue = (target: any, key?: PropertyKey) => {
   try {
@@ -30,18 +70,37 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
   const modifierKeys = Object.keys(modifiers);
 
   return `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder) => {
-    const [escapedKey] = placeholder.match(/(?!{|\s)(?:\\[:;]|\\(?![:;])|[^:;\\\n\r\u2028\u2029])*?(?:\\[:;]|\\(?![:;])|[^:;\s\\])(?=\s*(?:[:;]|}}$))/) || [];
-    const key = escapedKey === undefined ? undefined : unesc(escapedKey) as keyof Parser.Payload;
+    const [declaration, ...declaredOptions] = split(placeholder.slice(2, -2), ';');
+    const [declaredKey, ...declaredModifier] = split(declaration, ':');
+
+    const declaredName = trim(declaredKey);
+    const key = declaredName ? unesc(declaredName) as keyof Parser.Payload : undefined;
     const value = ownValue(payload, key);
 
-    const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
+    const options: Modifier.ModifierOption[] = [];
+    let inlineDefault: string | undefined;
+
+    declaredOptions.forEach((option) => {
+      const [declaredOptionKey, ...declaredValue] = split(option, ':');
+      const optionKey = unesc(trim(declaredOptionKey));
+      // The first colon is the separator and every later one is value. An
+      // option that names no value at all stands for itself; one that ends
+      // at its colon declares the empty string.
+      const optionValue = declaredValue.length ? trim(declaredValue.join(':')) : trim(declaredOptionKey);
+
+      if (!optionKey) return;
+
+      if (inlineDefault === undefined && optionKey.toLowerCase() === 'default') inlineDefault = optionValue;
+
+      if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
+    });
+
     const payloadDefault = ownValue(payload, 'default');
-    const declaredDefault = payloadDefault === undefined ? inlineDefault?.trim() : payloadDefault;
+    const declaredDefault = payloadDefault === undefined ? inlineDefault : payloadDefault;
     const defaultValue = declaredDefault === undefined ? '' : declaredDefault;
     const defaultText = stringify(defaultValue);
 
-    const [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
-
+    const modifierKey = trim(declaredModifier.join(':'));
     const hasModifier = !!modifierKey;
 
     // A modifier nobody registered is a defect in the message, not a selection:
@@ -55,28 +114,9 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
 
     if (value === undefined && modifierKey !== 'ne') return defaultText;
 
-    const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
-    const options = (
-      placeholder.match(/(?:\\[;]|[^\s:;{}])(?:(?:[^;]|\\[;])*[^;}])?/gi) as RegExpMatchArray || []
-    ).reduce(
-      (acc, option, i) => {
-        // NOTE: First item is a placeholder and modifier
-        if (i > 0) {
-          const [declaredKey, ...declaredValue] = option.split(/(?<!\\):/);
-          const optionKey = unesc(declaredKey.trim());
-          // The first colon is the separator and every later one is value. An
-          // option that names no value at all stands for itself; one that ends
-          // at its colon declares the empty string.
-          const optionValue = declaredValue.length ? declaredValue.join(':').trim() : declaredKey.trim();
-
-          if (optionKey && optionKey !== 'default') acc.push({ key: optionKey, value: optionValue });
-        }
-
-        return acc;
-      }, [] as Modifier.ModifierOption[],
-    );
-
     if (!hasModifier && !options.length) return stringify(value, defaultText);
+
+    const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
 
     // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
     try {

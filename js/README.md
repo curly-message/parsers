@@ -61,6 +61,28 @@ reached where the report is about one, the message's `key` where one was
 passed, and `text`, the excerpt that never settled. Only `text` derives from the payload, and it arrives truncated
 with its line terminators escaped, so a report is safe to write anywhere as-is.
 
+## Escaping
+
+The syntax reserves a colon, a semicolon, either brace, a backslash and
+whitespace. A backslash takes the structural meaning away from the character
+that follows it, and the rule is the same everywhere in a message — inside a
+placeholder and in the text around it alike.
+
+```
+Braces are written \{\{ like this \}\}      ->  "Braces are written {{ like this }}"
+Hello, {{first\ name; default:Guest}}!      ->  names the payload key "first name"
+{{count; 1:one\ ; default:none}}            ->  keeps the trailing space
+C:\\temp                                    ->  "C:\temp"
+```
+
+Before anything the syntax does not reserve, a backslash is text itself, so a
+regular expression or a Windows path survives as typed: `\d+` resolves to
+`\d+`, and `C:\Users\name` to `C:\Users\name`.
+
+A payload value is read the same way, because a value may carry a placeholder
+of its own. A value that has to keep a backslash in front of a reserved
+character doubles it — `\\server\share` resolves to `\server\share`.
+
 ## Status
 
 **Unreleased, and the public surface is unstable.**

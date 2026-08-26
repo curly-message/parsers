@@ -89,6 +89,17 @@ export module Parser {
 
   export type PayloadDefault = { [key in 'default']?: any };
 
+  /**
+   * The values a message's placeholders name, plus `default` — the fallback
+   * for every key the payload does not carry.
+   *
+   * A value passes through the same unescaping as the message around it: a
+   * backslash before a character the syntax reserves — `:`, `;`, `{`, `}`, a
+   * backslash, or whitespace — writes that character as text and is dropped
+   * itself, while a backslash before anything else is left as it is. So a
+   * value holding `\d+` arrives as typed, and one holding `\\server\share`
+   * resolves to `\server\share` unless each consumed backslash is doubled.
+   */
   export type Payload<T = any> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, any> & PayloadDefault : T & PayloadDefault;
 
   export type Key = string;

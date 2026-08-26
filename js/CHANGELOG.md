@@ -78,3 +78,23 @@ Initial version line for `@curly-message/parser`.
   last segment, so a time, a URL or a namespaced identifier had to be escaped
   to survive being written down. Escaping still works and is no longer
   required.
+* A backslash escapes every character the syntax reserves, anywhere in a
+  message. The escape set was `:`, `;`, `{` and `}`, and only inside a
+  placeholder, so a backslash in the surrounding text — or one before
+  whitespace or another backslash — had no way to say what it meant. It now
+  covers a backslash and whitespace as well and applies to the whole message:
+  `a\ b` resolves to `a b`, `\\` to a single backslash, `{{v\ x}}` names the
+  payload key `v x`, and `{{count; 1:ONE\ }}` keeps its trailing space instead
+  of having it trimmed away. A backslash before anything the syntax does not
+  reserve is text, as it was, so `\d+` and `C:\Users\name` survive as typed.
+* A payload value is unescaped by that same rule. It always went through the
+  unescaping pass — a value is rescanned so that it may carry a placeholder of
+  its own — but under the narrower set the difference only showed inside a
+  placeholder. A value holding `\\server\share` now resolves to
+  `\server\share` and one holding `a\ b` to `a b`, so a value that has to keep
+  a backslash before a reserved character doubles it; `\d+` is unaffected.
+* An inline `default` whose value starts with a colon declares that value.
+  `{{count; default::x}}` used to drop the default and resolve to the empty
+  string, because the inline default was read by a rule of its own instead of
+  being split at its first colon like every other option; it now resolves to
+  `':x'`.

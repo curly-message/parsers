@@ -405,6 +405,51 @@ describe('parser', () => {
     expect(resolve('{{v; 1:10\\:30}}', { payload: { v: 1 } })).toBe('10:30');
     expect(resolve('{{v; 1:https://example.com/a:b; default:D}}', { payload: { v: 1 } })).toBe('https://example.com/a:b');
   });
+  it('a backslash escapes every character the syntax reserves', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('a\\\\b')).toBe('a\\b');
+    expect(resolve('a\\ b')).toBe('a b');
+    expect(resolve('a\\;b')).toBe('a;b');
+    expect(resolve('a\\{\\{b')).toBe('a{{b');
+  });
+  it('a backslash before anything else is text', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('C:\\Users\\name')).toBe('C:\\Users\\name');
+    expect(resolve('\\d+')).toBe('\\d+');
+  });
+  it('escaped whitespace is text, not padding', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; 1:ONE\\ }}', { payload: { v: 1 } })).toBe('ONE ');
+    expect(resolve('{{v; 1:\\ ONE}}', { payload: { v: 1 } })).toBe(' ONE');
+    expect(resolve('{{v\\ x; 1:ONE}}', { payload: { 'v x': 1 } })).toBe('ONE');
+    expect(resolve('{{v; \\ :X; default:D}}', { payload: { v: ' ' } })).toBe('X');
+    expect(resolve('{{v; \\ :X; default:D}}', { payload: { v: 'x' } })).toBe('D');
+  });
+  it('an escaped backslash does not escape what follows it', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; a\\\\:b:X}}', { payload: { v: 'a\\' } })).toBe('b:X');
+    expect(resolve('{{v; a\\\\:b:X}}', { payload: { v: 'a\\:b' } })).toBe('');
+    expect(resolve('{{v; a\\\\:b:X; default:D}}', { payload: { v: 'z' } })).toBe('D');
+  });
+  it('an inline default keeps every colon after the first', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; default::x}}')).toBe(':x');
+    expect(resolve('{{v; default:10:30}}')).toBe('10:30');
+    expect(resolve('{{v; default:https://example.com/a:b}}')).toBe('https://example.com/a:b');
+  });
+  it('a payload value is unescaped by the same rule as the message', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v}}', { payload: { v: 'a\\\\b' } })).toBe('a\\b');
+    expect(resolve('{{v}}', { payload: { v: 'a\\ b' } })).toBe('a b');
+    expect(resolve('{{v}}', { payload: { v: '\\\\server\\share' } })).toBe('\\server\\share');
+    expect(resolve('{{v}}', { payload: { v: 'C:\\Users\\name' } })).toBe('C:\\Users\\name');
+  });
   it('keys starting with an escaped semicolon work', () => {
     const resolve = resolverFor<{ ';value'?: any }>(defaultLocale);
 
