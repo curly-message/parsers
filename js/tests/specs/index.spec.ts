@@ -58,6 +58,18 @@ describe('parser', () => {
 
     expect(resolve('common.placeholder_unknown', { default: 'DYNAMIC_DEFAULT_VALUE' })).toBe('DYNAMIC_DEFAULT_VALUE');
   });
+  it('reads a falsy own `default` as present', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve(undefined, { payload: { default: 0 }, key: 'greeting' })).toBe('0');
+    expect(resolve(undefined, { payload: { default: '' }, key: 'greeting' })).toBe('');
+    expect(resolve(undefined, { payload: { default: false }, key: 'greeting' })).toBe('false');
+
+    expect(resolve('{{count}}', { payload: { default: 0 } })).toBe('0');
+    expect(resolve('{{count}}', { payload: { default: false } })).toBe('false');
+    expect(resolve('{{count:number}}', { payload: { count: 'not a number', default: 0 }, locale: 'en' })).toBe('0');
+    expect(resolve('{{count; default:INLINE}}', { payload: { default: 0 } })).toBe('INLINE');
+  });
   it('placeholders containing escaped values work', () => {
     const resolve = resolverFor<{ 'pl:ace;holder'?: any }>(defaultLocale);
 

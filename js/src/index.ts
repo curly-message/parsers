@@ -14,8 +14,9 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
   const key = escapedKey === undefined ? undefined : unesc(escapedKey) as keyof Parser.Payload;
   const value = ownValue(payload, key);
 
-  let [, defaultValue = ''] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
-  defaultValue = defaultValue || ownValue(payload, 'default') || '';
+  const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
+  const declaredDefault = inlineDefault === undefined ? ownValue(payload, 'default') : inlineDefault;
+  const defaultValue = declaredDefault === undefined ? '' : String(declaredDefault);
 
   let [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
 
@@ -111,10 +112,8 @@ export const createParser: Parser.Factory = (parserOptions) => ({
   resolve: (message, { payload, props, locale, key } = {}) => {
     let value = message;
 
-    const payloadDefault = ownValue(payload, 'default');
-
-    if (payloadDefault && value === undefined) {
-      value = payloadDefault;
+    if (value === undefined) {
+      value = ownValue(payload, 'default');
     }
 
     if (value === undefined) {

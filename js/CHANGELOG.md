@@ -30,3 +30,11 @@ Initial version line for `@curly-message/parser`.
   rather than handed back as it arrived — `42` resolves to `'42'` and `null` to
   `'null'` — and a resolution that reaches the end of the fallback chain with
   nothing left to fall back to resolves to the empty string.
+* An own `default` entry counts as present whatever its value — zero, empty,
+  `false`, `null` and `NaN` included — at the placeholder level and at the
+  message level alike. Only a key the payload does not own falls further down
+  the chain: `{{count}}` under the payload `{ default: 0 }` used to resolve to
+  the empty string, and a message that does not exist under that same payload
+  used to resolve to its own key; both now resolve to `'0'`. A `default` that
+  is not a string renders as text like any other value, so `null` renders as
+  `'null'`.
