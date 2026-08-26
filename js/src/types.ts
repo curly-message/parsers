@@ -8,13 +8,14 @@ export type Locale = string;
 
 export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options };
 
-export type Interpolate = (config: CommonProps & { payload?: Parser.Payload }) => string;
-
 /**
- * The interpolation loop. It sees the message's key on top of what a single
- * pass needs, because a report names the message it came from.
+ * A single interpolation pass. It sees the message's key on top of what a pass
+ * needs to substitute, because a report names the message it came from.
  */
-export type Interpolation = (config: Parameters<Interpolate>[0] & { key?: Parser.Key }) => string;
+export type Interpolate = (config: CommonProps & { payload?: Parser.Payload, key?: Parser.Key }) => string;
+
+/** The interpolation loop. */
+export type Interpolation = Interpolate;
 
 /**
  * A diagnostic the parser hands to its caller. The format does not specify a
@@ -23,7 +24,7 @@ export type Interpolation = (config: Parameters<Interpolate>[0] & { key?: Parser
  */
 export type Report = {
   /** What stopped resolution. */
-  code: 'pass-limit' | 'output-limit';
+  code: 'unknown-modifier' | 'pass-limit' | 'output-limit';
   /**
    * The same in English. It is self-contained and carries nothing from the
    * payload, so writing it anywhere is safe without further thought.

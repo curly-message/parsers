@@ -207,6 +207,36 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_custom', { data: 'TEST_STRING' })).toBe('TEST_STRING');
   });
+  it('a modifier the parser does not know resolves to the fallback chain and reports it', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    expect(resolve('{{value:plural; 1:one; default:many}}', { payload: { value: 1 }, key: 'common.plural' })).toBe('many');
+    expect(resolve('{{value:plural; 1:one}}', { payload: { value: 1 } })).toBe('');
+    expect(resolve('{{value:GT; 1:ONE; default:FALLBACK}}', { payload: { value: 1 } })).toBe('FALLBACK');
+    expect(resolve('{{value:x-icon; ok:CHECK; default:FALLBACK}}', { payload: { value: 'ok' } })).toBe('FALLBACK');
+    expect(resolve('{{value:plural; 1:one; default:FALLBACK}}', { payload: {} })).toBe('FALLBACK');
+
+    expect(reports).toHaveLength(5);
+    expect(reports[0]).toEqual({
+      code: 'unknown-modifier',
+      message: 'A placeholder named a modifier this parser does not know.',
+      key: 'common.plural',
+      text: '{{value:plural; 1:one; default:many}}',
+    });
+  });
+  it('a modifier the caller registers is one the parser knows', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({
+      customModifiers: { plural: ({ value }) => (`${value}` === '1' ? 'one' : 'many') },
+      onReport: (report) => { reports.push(report); },
+    });
+
+    expect(resolve('{{value:plural}}', { payload: { value: 1 } })).toBe('one');
+    expect(resolve('{{value:plural}}', { payload: { value: 7 } })).toBe('many');
+
+    expect(reports).toHaveLength(0);
+  });
   it('a modifier that raises resolves to the fallback chain', () => {
     const throwing = createParser({ customModifiers: { test: () => { throw new Error('MODIFIER FAILURE'); } } });
     const resolveThrowing = resolverFor<{ data?: any }>(defaultLocale, throwing);

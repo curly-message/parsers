@@ -24,8 +24,8 @@ const stringify = (value: any, fallback = '') => {
   }
 };
 
-const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale }) => {
-  const { customModifiers } = parserOptions || {};
+const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale, key: messageKey }) => {
+  const { customModifiers, onReport } = parserOptions || {};
   const modifiers = { ...defaultModifiers, ...(customModifiers || {}) };
   const modifierKeys = Object.keys(modifiers);
 
@@ -38,15 +38,22 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
     const declaredDefault = inlineDefault === undefined ? ownValue(payload, 'default') : inlineDefault;
     const defaultValue = declaredDefault === undefined ? '' : stringify(declaredDefault);
 
-    let [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
-
-    if (value === undefined && modifierKey !== 'ne') return defaultValue;
+    const [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
 
     const hasModifier = !!modifierKey;
 
-    modifierKey = (modifierKeys.includes(modifierKey) ? modifierKey : 'eq');
+    // A modifier nobody registered is a defect in the message, not a selection:
+    // running `eq` in its place would render a plausible answer to a question the
+    // message never asked.
+    if (hasModifier && !modifierKeys.includes(modifierKey)) {
+      report('unknown-modifier', placeholder, messageKey, onReport);
 
-    const modifier = modifiers[modifierKey as keyof typeof modifiers];
+      return defaultValue;
+    }
+
+    if (value === undefined && modifierKey !== 'ne') return defaultValue;
+
+    const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
     const options = (
       placeholder.match(/(?:\\[;]|[^\s:;{}])(?:(?:[^;]|\\[;])*[^:;}])?/gi) as RegExpMatchArray || []
     ).reduce(
@@ -85,11 +92,12 @@ const MAX_REPORTED_LENGTH = 120;
 const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value).slice(1, -1).replace(/[\u2028\u2029]/g, (separator) => `\\u${separator.charCodeAt(0).toString(16)}`);
 
 const REPORT_MESSAGES: Record<Report['code'], string> = {
+  'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
   'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
   'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
 };
 
-const REPORT_LIMITS: Record<Report['code'], number> = {
+const REPORT_LIMITS: Partial<Record<Report['code'], number>> = {
   'pass-limit': MAX_INTERPOLATION_PASSES,
   'output-limit': MAX_INTERPOLATION_LENGTH,
 };
@@ -112,7 +120,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
       break;
     }
 
-    const next = placeholders({ value: output, payload, props, parserOptions, locale });
+    const next = placeholders({ value: output, payload, props, parserOptions, locale, key });
 
     if (next.length > MAX_INTERPOLATION_LENGTH) {
       report('output-limit', output, key, onReport);

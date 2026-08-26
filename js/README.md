@@ -23,7 +23,9 @@ and a `default`. Locale-dependent formatting is delegated to `Intl`; the
 package itself has no runtime dependencies. A modifier that cannot produce a
 result — a locale the host rejects, a custom modifier that throws — resolves
 the placeholder to its `default` rather than raising, and so does a value that
-no conversion turns into text. Given no locale at all, the formatting
+no conversion turns into text. A placeholder naming a modifier the parser does
+not know resolves to its `default` and is reported; it is never run as a
+comparison instead. Given no locale at all, the formatting
 modifiers resolve to the empty string.
 
 ## Usage
@@ -55,8 +57,8 @@ formatting is delegated to `Intl`.
 so unset it reports nowhere; resolution still fails soft, it just does so
 silently. It is called with a `Report` describing what stopped resolution —
 `code`, an English `message` carrying nothing from the payload, the `limit`
-reached, the message's `key` where one was passed, and `text`, the excerpt that
-never settled. Only `text` derives from the payload, and it arrives truncated
+reached where the report is about one, the message's `key` where one was
+passed, and `text`, the excerpt that never settled. Only `text` derives from the payload, and it arrives truncated
 with its line terminators escaped, so a report is safe to write anywhere as-is.
 
 ## Status

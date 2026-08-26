@@ -226,8 +226,10 @@ risks are **DoS / robustness / prototype-chain**, not RCE/XSS.
   it the ReDoS surface here. A new or widened pattern needs an explicit check
   for catastrophic backtracking before it lands; if you touch one and can't
   establish that, flag it.
-- **Fail soft at the edges.** An unrecognized modifier falls back to `eq`, a
-  missing payload key yields the declared default. Resolving a message must not
+- **Fail soft at the edges.** A missing payload key yields the declared
+  default, and so does a modifier the parser does not know — that one reports
+  as well, because naming a modifier nobody registered is a defect in the
+  message rather than a comparison to run. Resolving a message must not
   throw.
 
 ## 12. Comments & language
