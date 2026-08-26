@@ -60,9 +60,14 @@ export module Modifier {
 
   export type ModifierOption = Record<'key' | 'value', string>;
 
-  export type DefaultValue = string | undefined;
+  /**
+   * What a placeholder falls back to. A default declared in the message is
+   * text by nature; one taken from the payload arrives at the type the caller
+   * put there, the same way a value does.
+   */
+  export type DefaultValue = any;
 
-  export type T<CustomModifierProps = any> = (config: CommonProps<CustomModifierProps> & { options: ModifierOption[]; defaultValue?: DefaultValue }) => string;
+  export type T<CustomModifierProps = any> = (config: CommonProps<CustomModifierProps> & { options: ModifierOption[]; defaultValue?: DefaultValue }) => any;
 
   export type DefaultModifiers = typeof modifiers;
 

@@ -249,6 +249,25 @@ describe('parser', () => {
 
     expect(reports).toHaveLength(0);
   });
+  it('a modifier reads a payload default at the type the payload gave it', () => {
+    const seen: unknown[] = [];
+    const { resolve } = createParser({ customModifiers: { test: ({ defaultValue }) => { seen.push(defaultValue); return 'DONE'; } } });
+
+    expect(resolve('{{value:test}}', { payload: { value: 'V', default: 0 } })).toBe('DONE');
+    expect(resolve('{{value:test}}', { payload: { value: 'V', default: false } })).toBe('DONE');
+    expect(resolve('{{value:test}}', { payload: { value: 'V', default: null } })).toBe('DONE');
+    expect(resolve('{{value:test}}', { payload: { value: 'V', default: [1, 2] } })).toBe('DONE');
+    expect(resolve('{{value:test; default:INLINE}}', { payload: { value: 'V' } })).toBe('DONE');
+
+    expect(seen).toEqual([0, false, null, [1, 2], 'INLINE']);
+  });
+  it('a payload default a modifier cannot turn into text still fails soft', () => {
+    const { resolve } = defaultParser;
+    const raising = { toString: () => { throw new Error('NO TEXT'); } };
+
+    expect(resolve('{{value; 1:ONE}}', { payload: { value: 2, default: raising } })).toBe('');
+    expect(resolve('{{value}}', { payload: { default: raising } })).toBe('');
+  });
   it('a modifier that raises resolves to the fallback chain', () => {
     const throwing = createParser({ customModifiers: { test: () => { throw new Error('MODIFIER FAILURE'); } } });
     const resolveThrowing = resolverFor<{ data?: any }>(defaultLocale, throwing);

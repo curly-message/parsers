@@ -37,7 +37,8 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
     const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
     const payloadDefault = ownValue(payload, 'default');
     const declaredDefault = payloadDefault === undefined ? inlineDefault : payloadDefault;
-    const defaultValue = declaredDefault === undefined ? '' : stringify(declaredDefault);
+    const defaultValue = declaredDefault === undefined ? '' : declaredDefault;
+    const defaultText = stringify(defaultValue);
 
     const [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
 
@@ -49,10 +50,10 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
     if (hasModifier && !modifierKeys.includes(modifierKey)) {
       report('unknown-modifier', placeholder, messageKey, onReport);
 
-      return defaultValue;
+      return defaultText;
     }
 
-    if (value === undefined && modifierKey !== 'ne') return defaultValue;
+    if (value === undefined && modifierKey !== 'ne') return defaultText;
 
     const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
     const options = (
@@ -72,13 +73,13 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
       }, [] as Modifier.ModifierOption[],
     );
 
-    if (!hasModifier && !options.length) return stringify(value, defaultValue);
+    if (!hasModifier && !options.length) return stringify(value, defaultText);
 
     // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
     try {
       return String(modifier({ value, options, props, defaultValue, locale, parserOptions }));
     } catch {
-      return defaultValue;
+      return defaultText;
     }
   });
 };

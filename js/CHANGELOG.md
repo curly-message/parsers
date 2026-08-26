@@ -30,6 +30,12 @@ Initial version line for `@curly-message/parser`.
   `{ default: '-' }` now resolves to `'-'` rather than `'no'`. The inline
   default still applies wherever the payload does not own a `default`, and a
   present value still outranks both.
+* A modifier reads a payload `default` at the type the payload gave it. A
+  value already reached a modifier unconverted while its default arrived as
+  text, so a modifier could not tell `0` from `'0'` on one of its two inputs;
+  both now arrive as they were written. A default declared in the message is
+  text by nature and is unaffected, and what a placeholder resolves to is
+  unchanged — the parser converts it on the way out, as it always did.
 * Resolution never raises. A modifier that cannot produce a result now resolves
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any
