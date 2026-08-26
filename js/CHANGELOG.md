@@ -26,3 +26,7 @@ Initial version line for `@curly-message/parser`.
   Unix epoch and `{{count:number; default:99;}}` over `0` used to render `99`;
   both now resolve to the fallback chain only when the value is not a number,
   and zero formats as zero.
+* Resolution always returns a string. A message that is not one is converted
+  rather than handed back as it arrived — `42` resolves to `'42'` and `null` to
+  `'null'` — and a resolution that reaches the end of the fallback chain with
+  nothing left to fall back to resolves to the empty string.

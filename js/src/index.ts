@@ -104,7 +104,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
     output = next;
   }
 
-  return unesc(output);
+  return String(unesc(output));
 };
 
 export const createParser: Parser.Factory = (parserOptions) => ({
@@ -118,7 +118,7 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     }
 
     if (value === undefined) {
-      value = key;
+      value = key === undefined ? '' : key;
     }
 
     return interpolate({ value, payload, props, parserOptions, locale, key });

@@ -25,6 +25,14 @@ describe('parser', () => {
 
     expect(resolve('common.undefined')).toBe('common.undefined');
   });
+  it('resolves every message to a string', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve(42)).toBe('42');
+    expect(resolve(null)).toBe('null');
+    expect(resolve(true)).toBe('true');
+    expect(resolve(undefined)).toBe('');
+  });
   it('key returns proper value', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
