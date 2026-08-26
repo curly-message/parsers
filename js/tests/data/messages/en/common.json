@@ -27,10 +27,5 @@
   "modifier_short_option": "VALUES: {{value; x:; 5:FIVE; default:DEF;}}, {{value:gt; 1:; 5:FIVE; default:DEF;}}, {{value:ne; z; default:DEF;}}",
   "placeholder_escaped_leading": "VALUES: {{\\;value}}, {{\\;value; 1:VALUE1; default:DEFAULT VALUE;}}",
   "placeholder_unparsable": "VALUES: {{ }}, {{{}}, {{  }}",
-  "placeholder_inherited": "VALUES: {{constructor}}, {{toString}}, {{__proto__}}, {{valueOf; default:INLINE DEFAULT}}",
-  "preprocess": [
-    {
-      "test": "passed"
-    }
-  ]
+  "placeholder_inherited": "VALUES: {{constructor}}, {{toString}}, {{__proto__}}, {{valueOf; default:INLINE DEFAULT}}"
 }
