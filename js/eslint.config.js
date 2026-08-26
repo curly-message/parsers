@@ -45,7 +45,7 @@ export default tseslint.config(
     },
   },
   {
-    // The formatting contract shared across the sveltekit-i18n repos.
+    // The formatting contract this repository lints by, named in AGENTS.md.
     plugins: { '@stylistic': stylistic },
     rules: {
       '@stylistic/comma-dangle': ['error', 'always-multiline'],
