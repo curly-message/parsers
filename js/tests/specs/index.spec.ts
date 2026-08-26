@@ -221,6 +221,15 @@ describe('parser', () => {
 
     expect(resolveRaw(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 }, locale: 'not a locale' })).toBe('FALLBACK');
   });
+  it('a formatting modifier resolves to the empty string with no locale', () => {
+    const { resolve } = defaultParser;
+
+    for (const modifier of ['number', 'date', 'ago', 'currency']) {
+      expect(resolve(`{{value:${modifier}; default:FALLBACK;}}`, { payload: { value: 10 } })).toBe('');
+    }
+
+    expect(resolve(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 } })).toBe('');
+  });
   it('a value that cannot become text resolves to the fallback chain', () => {
     const { resolve } = defaultParser;
     const opaque = Object.create(null);
