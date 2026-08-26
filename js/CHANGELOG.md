@@ -68,3 +68,8 @@ Initial version line for `@curly-message/parser`.
   to drop the option and render `'some'`; both now render the empty string the
   option declares. An option that names no value at all is unchanged and still
   stands for itself, so `{{count; 1}}` renders `'1'`.
+* Whitespace around an option's value and around an inline `default` is
+  layout, not content. `{{count; 1 : one ; default : none }}` rendered
+  `'one '` and `'none '`, so a message spaced out for readability leaked that
+  spacing into what it resolved to, and only the leading side was ever
+  dropped; both sides are now trimmed. Whitespace inside a value is untouched.

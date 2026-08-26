@@ -51,7 +51,7 @@ describe('parser', () => {
   it('default value works for placeholders', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
-    expect(resolve('common.placeholder_default')).toBe('VALUES: DEFAULT_VALUE, DEFAULT_VALUE, DEFAULT_VALUE , DEFAULT_VALUE');
+    expect(resolve('common.placeholder_default')).toBe('VALUES: DEFAULT_VALUE, DEFAULT_VALUE, DEFAULT_VALUE, DEFAULT_VALUE');
   });
   it('dynamic default works for placeholders', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -90,9 +90,9 @@ describe('parser', () => {
   it('`eq` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
-    expect(resolve('common.modifier_eq', { value: 'option9' })).toBe('VALUES: DEFAULT VALUE, DEFAULT VALUE , DEFAULT VALUE, DEFAULT VALUE  ');
-    expect(resolve('common.modifier_eq', { value: 'option2' })).toBe('VALUES: VALUE2, VALUE2 , VALUE2, VALUE2  ');
-    expect(resolve('common.modifier_eq')).toBe('VALUES: DEFAULT VALUE, DEFAULT VALUE , DEFAULT VALUE, DEFAULT VALUE  ');
+    expect(resolve('common.modifier_eq', { value: 'option9' })).toBe('VALUES: DEFAULT VALUE, DEFAULT VALUE, DEFAULT VALUE, DEFAULT VALUE');
+    expect(resolve('common.modifier_eq', { value: 'option2' })).toBe('VALUES: VALUE2, VALUE2, VALUE2, VALUE2');
+    expect(resolve('common.modifier_eq')).toBe('VALUES: DEFAULT VALUE, DEFAULT VALUE, DEFAULT VALUE, DEFAULT VALUE');
   });
   it('`ne` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -346,7 +346,7 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_default_single_char', { age: 7 })).toBe('as a 7-year-old');
     expect(resolve('common.modifier_default_single_char', { age: 18 })).toBe('as an 18-year-old');
-    expect(resolve('common.placeholder_default_single_char')).toBe('VALUES: a, a, a , a');
+    expect(resolve('common.placeholder_default_single_char')).toBe('VALUES: a, a, a, a');
     expect(resolve('common.placeholder_default_single_char', { value: 'TEST_VALUE' })).toBe('VALUES: TEST_VALUE, TEST_VALUE, TEST_VALUE, TEST_VALUE');
   });
   it('escaped semicolons in default values work', () => {
@@ -387,6 +387,15 @@ describe('parser', () => {
     expect(resolve('{{v; 2}}', { payload: { v: 1 } })).toBe('');
     expect(resolve('{{v; 2; default:D}}', { payload: { v: 1 } })).toBe('D');
     expect(resolve('{{v:ne; z; default:D}}', { payload: { v: 'a' } })).toBe('z');
+  });
+  it('an option value and an inline default are trimmed on both sides', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; 1:ONE   ; 2:TWO}}', { payload: { v: 1 } })).toBe('ONE');
+    expect(resolve('{{v; 1:   ONE}}', { payload: { v: 1 } })).toBe('ONE');
+    expect(resolve('{{v; 1 : ONE ; default : D }}', { payload: { v: 1 } })).toBe('ONE');
+    expect(resolve('{{v;  default : D }}', { payload: {} })).toBe('D');
+    expect(resolve('{{v; 1:   ; default:D}}', { payload: { v: 1 } })).toBe('');
   });
   it('keys starting with an escaped semicolon work', () => {
     const resolve = resolverFor<{ ';value'?: any }>(defaultLocale);

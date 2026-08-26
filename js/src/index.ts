@@ -36,7 +36,7 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
 
     const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
     const payloadDefault = ownValue(payload, 'default');
-    const declaredDefault = payloadDefault === undefined ? inlineDefault : payloadDefault;
+    const declaredDefault = payloadDefault === undefined ? inlineDefault?.trim() : payloadDefault;
     const defaultValue = declaredDefault === undefined ? '' : declaredDefault;
     const defaultText = stringify(defaultValue);
 
@@ -66,7 +66,7 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
           const optionKey = unesc(declaredKey.trim());
           // An option that names no value at all stands for itself; one that
           // ends at its colon declares the empty string.
-          const optionValue = declaredValue.length ? declaredValue[declaredValue.length - 1].trimStart() : declaredKey.trim();
+          const optionValue = declaredValue.length ? declaredValue[declaredValue.length - 1].trim() : declaredKey.trim();
 
           if (optionKey && optionKey !== 'default') acc.push({ key: optionKey, value: optionValue });
         }
