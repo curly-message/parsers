@@ -7,7 +7,22 @@ const hasPlaceholders = (value: any) => typeof value === 'string' && /{{(?:(?!{{
 
 const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\(?=:|;|{|})/g, '') : value;
 
-const ownValue = (target: any, key?: PropertyKey) => (key !== undefined && !!target && Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined);
+const ownValue = (target: any, key?: PropertyKey) => {
+  try {
+    return key !== undefined && !!target && Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+// Fail soft: a value that cannot become text resolves to the fallback chain, never out of `resolve`.
+const stringify = (value: any, fallback = '') => {
+  try {
+    return String(value);
+  } catch {
+    return fallback;
+  }
+};
 
 const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale }) => `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder) => {
   const [escapedKey] = placeholder.match(/(?!{|\s)(?:\\[:;]|\\(?![:;])|[^:;\\\n\r\u2028\u2029])*?(?:\\[:;]|\\(?![:;])|[^:;\s\\])(?=\s*(?:[:;]|}}$))/) || [];
@@ -16,7 +31,7 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
 
   const [, inlineDefault] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
   const declaredDefault = inlineDefault === undefined ? ownValue(payload, 'default') : inlineDefault;
-  const defaultValue = declaredDefault === undefined ? '' : String(declaredDefault);
+  const defaultValue = declaredDefault === undefined ? '' : stringify(declaredDefault);
 
   let [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
 
@@ -47,11 +62,11 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
     }, [] as Modifier.ModifierOption[],
   );
 
-  if (!hasModifier && !options.length) return value;
+  if (!hasModifier && !options.length) return stringify(value, defaultValue);
 
   // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
   try {
-    return modifier({ value, options, props, defaultValue, locale, parserOptions });
+    return String(modifier({ value, options, props, defaultValue, locale, parserOptions }));
   } catch {
     return defaultValue;
   }
@@ -105,7 +120,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
     output = next;
   }
 
-  return String(unesc(output));
+  return stringify(unesc(output));
 };
 
 export const createParser: Parser.Factory = (parserOptions) => ({

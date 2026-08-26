@@ -38,3 +38,8 @@ Initial version line for `@curly-message/parser`.
   used to resolve to its own key; both now resolve to `'0'`. A `default` that
   is not a string renders as text like any other value, so `null` renders as
   `'null'`.
+* No value can raise out of resolution. A payload value, a declared `default`,
+  a modifier's result or the message itself that no conversion turns into text
+  — an object with a null prototype, a `toString` that raises — resolves to the
+  fallback chain instead, and a payload member whose own getter raises when it
+  is read counts as missing.

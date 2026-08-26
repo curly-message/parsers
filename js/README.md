@@ -22,7 +22,8 @@ one of the comparisons `eq`, `ne`, `lt`, `lte`, `gt`, `gte`), a set of options,
 and a `default`. Locale-dependent formatting is delegated to `Intl`; the
 package itself has no runtime dependencies. A modifier that cannot produce a
 result — a rejected locale, a custom modifier that throws — resolves the
-placeholder to its `default` rather than raising.
+placeholder to its `default` rather than raising, and so does a value that no
+conversion turns into text.
 
 ## Usage
 

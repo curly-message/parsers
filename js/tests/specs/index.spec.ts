@@ -221,6 +221,34 @@ describe('parser', () => {
 
     expect(resolveRaw(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 }, locale: 'not a locale' })).toBe('FALLBACK');
   });
+  it('a value that cannot become text resolves to the fallback chain', () => {
+    const { resolve } = defaultParser;
+    const opaque = Object.create(null);
+    const raising = { toString: () => { throw new Error('TO STRING FAILURE'); } };
+
+    expect(resolve(opaque)).toBe('');
+    expect(resolve(raising)).toBe('');
+
+    expect(resolve('{{value}}', { payload: { value: opaque } })).toBe('');
+    expect(resolve('{{value}}', { payload: { value: raising, default: 'FALLBACK' } })).toBe('FALLBACK');
+    expect(resolve('{{value}}', { payload: { value: 'TEST_STRING', default: opaque } })).toBe('TEST_STRING');
+
+    const { resolve: resolveThrowing } = createParser({ customModifiers: { test: () => { throw new Error('MODIFIER FAILURE'); } } });
+
+    expect(resolveThrowing('{{value:test}}', { payload: { value: 'TEST_STRING', default: opaque } })).toBe('');
+
+    const { resolve: resolveOpaque } = createParser({ customModifiers: { test: () => opaque } });
+
+    expect(resolveOpaque('{{value:test; default:FALLBACK}}', { payload: { value: 'TEST_STRING' } })).toBe('FALLBACK');
+  });
+  it('a payload member that raises when read resolves to the fallback chain', () => {
+    const { resolve } = defaultParser;
+    const raise = () => { throw new Error('PAYLOAD MEMBER FAILURE'); };
+
+    expect(resolve('{{value}}', { payload: { get value() { return raise(); }, default: 'FALLBACK' } })).toBe('FALLBACK');
+    expect(resolve('{{value}}', { payload: { get default() { return raise(); } } })).toBe('');
+    expect(resolve(undefined, { payload: { get default() { return raise(); } }, key: 'KEY' })).toBe('KEY');
+  });
   it('a formatting modifier that cannot format its input resolves to the fallback chain', () => {
     const resolve = resolverFor<{ value?: any, default?: string }>(defaultLocale);
 
