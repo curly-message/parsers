@@ -21,3 +21,8 @@ Initial version line for `@curly-message/parser`.
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any
   formatting modifier under a locale the host rejects, used to throw.
+* A formatting modifier reads its value as the host does, and falls back when
+  that conversion fails. `{{when:date}}` over `'tomorrow'` used to render the
+  Unix epoch and `{{count:number; default:99;}}` over `0` used to render `99`;
+  both now resolve to the fallback chain only when the value is not a number,
+  and zero formats as zero.

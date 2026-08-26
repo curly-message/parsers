@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { getModifierDefaults } from './utils';
+import { getModifierDefaults, getModifierInput } from './utils';
 
 export const eq: Modifier.T = ({ value, options = [], defaultValue = '' }) => (options.find(
   ({ key }) => `${key}`.toLowerCase() === `${value}`.toLowerCase(),
@@ -32,20 +32,27 @@ export const gte: Modifier.T = ({ value, options = [], defaultValue = '' }) => e
 export const number: Modifier.T<Modifier.NumberProps> = ({ value, props, defaultValue = '', locale = '', parserOptions }) => {
   if (!locale) return '';
 
+  const input = getModifierInput(value);
+
+  if (input === undefined) return defaultValue;
+
   const { maximumFractionDigits: maximumFractionDigitsDefault, ...defaults } = getModifierDefaults<Modifier.NumberProps>('number', parserOptions);
   const { maximumFractionDigits = maximumFractionDigitsDefault || 2, ...rest } = props?.number || {};
 
-  return new Intl.NumberFormat(locale, { ...defaults, maximumFractionDigits, ...rest }).format(+value || +defaultValue);
+  return new Intl.NumberFormat(locale, { ...defaults, maximumFractionDigits, ...rest }).format(input);
 };
 
 export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValue = '', locale = '', parserOptions }) => {
   if (!locale) return '';
 
+  const input = getModifierInput(value);
+
+  if (input === undefined) return defaultValue;
 
   const { ...defaults } = getModifierDefaults<Modifier.DateProps>('date', parserOptions);
   const { ...rest } = props?.date || {};
 
-  return new Intl.DateTimeFormat(locale, { ...defaults, ...rest }).format(+value || +defaultValue);
+  return new Intl.DateTimeFormat(locale, { ...defaults, ...rest }).format(input);
 };
 
 const agoMap = [
@@ -77,11 +84,14 @@ const agoFormat = (millis: number, resolution?: Intl.RelativeTimeFormatUnit | 'a
 export const ago: Modifier.T<Modifier.AgoProps> = ({ value, defaultValue = '', locale = '', props, parserOptions }) => {
   if (!locale) return '';
 
+  const input = getModifierInput(value);
+
+  if (input === undefined) return defaultValue;
+
   const { format: formatDefault, numeric: numericDefault, ...defaults } = getModifierDefaults<Modifier.AgoProps>('ago', parserOptions);
   const { format = formatDefault || 'auto', numeric = numericDefault || 'auto', ...rest } = props?.ago || {};
 
-  const inputValue = +value || +defaultValue;
-  const formatParams = agoFormat(inputValue, format);
+  const formatParams = agoFormat(input, format);
 
   return new Intl.RelativeTimeFormat(locale, { ...defaults, numeric, ...rest }).format(...formatParams);
 };
@@ -92,5 +102,9 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = ({ value, defaultVal
   const { ratio: ratioDefault, currency: currencyDefault, ...defaults } = getModifierDefaults<Modifier.CurrencyProps>('currency', parserOptions);
   const { ratio = ratioDefault || 1, currency = currencyDefault, ...rest } = props?.currency || {};
 
-  return new Intl.NumberFormat(locale, { ...defaults, style: 'currency', currency, ...rest }).format(ratio * (value || defaultValue));
+  const input = getModifierInput(value * ratio);
+
+  if (input === undefined) return defaultValue;
+
+  return new Intl.NumberFormat(locale, { ...defaults, style: 'currency', currency, ...rest }).format(input);
 };

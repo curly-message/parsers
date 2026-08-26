@@ -201,6 +201,21 @@ describe('parser', () => {
 
     expect(resolveRaw(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 }, locale: 'not a locale' })).toBe('FALLBACK');
   });
+  it('a formatting modifier that cannot format its input resolves to the fallback chain', () => {
+    const resolve = resolverFor<{ value?: any, default?: string }>(defaultLocale);
+
+    expect(resolve('common.modifier_number_default', { value: 'not a number' })).toBe('FALLBACK');
+    expect(resolve('common.modifier_currency_default', { value: 'not a number' }, { currency: { currency: 'USD', ratio: 1 } })).toBe('FALLBACK');
+    expect(resolve('common.modifier_date', { value: 'not a number', default: 'FALLBACK' })).toBe('FALLBACK');
+    expect(resolve('common.modifier_ago', { value: 'not a number', default: 'FALLBACK' })).toBe('FALLBACK');
+    expect(resolve('common.modifier_date', { value: 'not a number' })).toBe('');
+  });
+  it('a formatting modifier formats zero rather than falling back', () => {
+    const resolve = resolverFor<{ value?: any }>(defaultLocale);
+
+    expect(resolve('common.modifier_number_default', { value: 0 })).toBe(new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 2 }).format(0));
+    expect(resolve('common.modifier_currency_default', { value: 0 }, { currency: { currency: 'USD', ratio: 1 } })).toBe(new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(0));
+  });
   it('modifiers containing escaped values work', () => {
     const resolve = resolverFor<{ 'va:lue'?: any }>(defaultLocale);
 
