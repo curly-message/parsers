@@ -367,9 +367,26 @@ describe('parser', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
     expect(resolve('common.modifier_short_option')).toBe('VALUES: DEF, DEF, z');
-    expect(resolve('common.modifier_short_option', { value: 'x' })).toBe('VALUES: x, DEF, z');
-    expect(resolve('common.modifier_short_option', { value: 5 })).toBe('VALUES: FIVE, 1, z');
-    expect(resolve('common.modifier_short_option', { value: 2 })).toBe('VALUES: DEF, 1, z');
+    expect(resolve('common.modifier_short_option', { value: 'x' })).toBe('VALUES: , DEF, z');
+    expect(resolve('common.modifier_short_option', { value: 5 })).toBe('VALUES: FIVE, , z');
+    expect(resolve('common.modifier_short_option', { value: 2 })).toBe('VALUES: DEF, , z');
+  });
+  it('an option that ends at its colon declares an empty value', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; 1:; 2:TWO}}', { payload: { v: 1 } })).toBe('');
+    expect(resolve('{{v; 1: ; 2:TWO}}', { payload: { v: 1 } })).toBe('');
+    expect(resolve('{{v; 1:; default:D}}', { payload: { v: 1 } })).toBe('');
+    expect(resolve('{{v:gt; 1:; default:D}}', { payload: { v: 7 } })).toBe('');
+    expect(resolve('{{v; 2:; default:D}}', { payload: { v: 1 } })).toBe('D');
+  });
+  it('an option that names no value at all stands for itself', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; 1}}', { payload: { v: 1 } })).toBe('1');
+    expect(resolve('{{v; 2}}', { payload: { v: 1 } })).toBe('');
+    expect(resolve('{{v; 2; default:D}}', { payload: { v: 1 } })).toBe('D');
+    expect(resolve('{{v:ne; z; default:D}}', { payload: { v: 'a' } })).toBe('z');
   });
   it('keys starting with an escaped semicolon work', () => {
     const resolve = resolverFor<{ ';value'?: any }>(defaultLocale);

@@ -1,28 +1,32 @@
 import type { Modifier } from './types';
 import { getModifierDefaults, getModifierInput } from './utils';
 
-export const eq: Modifier.T = ({ value, options = [], defaultValue = '' }) => (options.find(
-  ({ key }) => `${key}`.toLowerCase() === `${value}`.toLowerCase(),
-) || {}).value || defaultValue;
+// A selection that matched answers with its own value, empty or not. Only a
+// selection that matched nothing falls back.
+const selected = (option: Modifier.ModifierOption | undefined, defaultValue: any) => (option ? option.value : defaultValue);
 
-export const ne: Modifier.T = ({ value, options = [], defaultValue = '' }) => (options.find(
+export const eq: Modifier.T = ({ value, options = [], defaultValue = '' }) => selected(options.find(
+  ({ key }) => `${key}`.toLowerCase() === `${value}`.toLowerCase(),
+), defaultValue);
+
+export const ne: Modifier.T = ({ value, options = [], defaultValue = '' }) => selected(options.find(
   ({ key }) => `${key}`.toLowerCase() !== `${value}`.toLowerCase(),
-) || {}).value || defaultValue;
+), defaultValue);
 
 export const lt: Modifier.T = ({ value, options = [], defaultValue = '' }) => {
   const sortedOptions = options.sort((a, b) => +a.key - +b.key);
 
-  return (sortedOptions.find(
+  return selected(sortedOptions.find(
     ({ key }) => +value < +key,
-  ) || {}).value || defaultValue;
+  ), defaultValue);
 };
 
 export const gt: Modifier.T = ({ value, options = [], defaultValue = '' }) => {
   const sortedOptions = options.sort((a, b) => +b.key - +a.key);
 
-  return (sortedOptions.find(
+  return selected(sortedOptions.find(
     ({ key }) => +value > +key,
-  ) || {}).value || defaultValue;
+  ), defaultValue);
 };
 
 export const lte: Modifier.T = ({ value, options = [], defaultValue = '' }) => eq({ value, options, defaultValue: lt({ value, options, defaultValue }) });

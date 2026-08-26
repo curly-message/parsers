@@ -57,16 +57,18 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
 
     const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
     const options = (
-      placeholder.match(/(?:\\[;]|[^\s:;{}])(?:(?:[^;]|\\[;])*[^:;}])?/gi) as RegExpMatchArray || []
+      placeholder.match(/(?:\\[;]|[^\s:;{}])(?:(?:[^;]|\\[;])*[^;}])?/gi) as RegExpMatchArray || []
     ).reduce(
       (acc, option, i) => {
         // NOTE: First item is a placeholder and modifier
         if (i > 0) {
-          const parts = option.split(/(?<!\\):/);
-          const optionKey = unesc(parts[0].trim());
-          const optionValue = parts[parts.length - 1].trimStart();
+          const [declaredKey, ...declaredValue] = option.split(/(?<!\\):/);
+          const optionKey = unesc(declaredKey.trim());
+          // An option that names no value at all stands for itself; one that
+          // ends at its colon declares the empty string.
+          const optionValue = declaredValue.length ? declaredValue[declaredValue.length - 1].trimStart() : declaredKey.trim();
 
-          if (optionKey && optionKey !== 'default' && optionValue) acc.push({ key: optionKey, value: optionValue });
+          if (optionKey && optionKey !== 'default') acc.push({ key: optionKey, value: optionValue });
         }
 
         return acc;

@@ -62,3 +62,9 @@ Initial version line for `@curly-message/parser`.
   — an object with a null prototype, a `toString` that raises — resolves to the
   fallback chain instead, and a payload member whose own getter raises when it
   is read counts as missing.
+* An option declares its value at its colon, empty included. `{{count; 1:;
+  default:some}}` used to answer with the option's own key and render `'1'`,
+  and `{{count; 1: ; default:some}}` — the same intent one space apart — used
+  to drop the option and render `'some'`; both now render the empty string the
+  option declares. An option that names no value at all is unchanged and still
+  stands for itself, so `{{count; 1}}` renders `'1'`.
