@@ -397,6 +397,14 @@ describe('parser', () => {
     expect(resolve('{{v;  default : D }}', { payload: {} })).toBe('D');
     expect(resolve('{{v; 1:   ; default:D}}', { payload: { v: 1 } })).toBe('');
   });
+  it('an option value keeps every colon after the first', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; 1:10:30; 2:11:30}}', { payload: { v: 1 } })).toBe('10:30');
+    expect(resolve('{{v; 1:10:30; 2:11:30}}', { payload: { v: 2 } })).toBe('11:30');
+    expect(resolve('{{v; 1:10\\:30}}', { payload: { v: 1 } })).toBe('10:30');
+    expect(resolve('{{v; 1:https://example.com/a:b; default:D}}', { payload: { v: 1 } })).toBe('https://example.com/a:b');
+  });
   it('keys starting with an escaped semicolon work', () => {
     const resolve = resolverFor<{ ';value'?: any }>(defaultLocale);
 

@@ -64,9 +64,10 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
         if (i > 0) {
           const [declaredKey, ...declaredValue] = option.split(/(?<!\\):/);
           const optionKey = unesc(declaredKey.trim());
-          // An option that names no value at all stands for itself; one that
-          // ends at its colon declares the empty string.
-          const optionValue = declaredValue.length ? declaredValue[declaredValue.length - 1].trim() : declaredKey.trim();
+          // The first colon is the separator and every later one is value. An
+          // option that names no value at all stands for itself; one that ends
+          // at its colon declares the empty string.
+          const optionValue = declaredValue.length ? declaredValue.join(':').trim() : declaredKey.trim();
 
           if (optionKey && optionKey !== 'default') acc.push({ key: optionKey, value: optionValue });
         }

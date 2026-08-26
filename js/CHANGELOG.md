@@ -73,3 +73,8 @@ Initial version line for `@curly-message/parser`.
   `'one '` and `'none '`, so a message spaced out for readability leaked that
   spacing into what it resolved to, and only the leading side was ever
   dropped; both sides are now trimmed. Whitespace inside a value is untouched.
+* An option's value starts at its first colon and keeps every colon after it.
+  `{{shift; 1:10:30; 2:22:00}}` rendered `'30'`, discarding everything but the
+  last segment, so a time, a URL or a namespaced identifier had to be escaped
+  to survive being written down. Escaping still works and is no longer
+  required.
