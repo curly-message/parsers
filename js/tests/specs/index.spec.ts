@@ -993,11 +993,11 @@ describe('parser', () => {
       expect(resolve('common.placeholder_chain', { v1: `{{v1}}${terminator}[i18n]: FORGED${'x'.repeat(1000)}` })).toContain('[i18n]: FORGED');
     }
 
-    expect(reports).toHaveLength(4);
+    expect(reports).toHaveLength(LINE_TERMINATORS.length);
 
     for (const report of reports) {
       expect(report.text.length).toBeLessThan(300);
-      expect(report.text).not.toMatch(/[\n\r\u2028\u2029]/);
+      for (const terminator of LINE_TERMINATORS) expect(report.text).not.toContain(terminator);
       expect(report.message).not.toContain('FORGED');
     }
   });
