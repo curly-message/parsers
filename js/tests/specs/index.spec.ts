@@ -884,6 +884,33 @@ describe('parser', () => {
     expect(resolve(`{{v; 1:${run}ONE${run}}}`, { payload: { v: 1 } })).toBe('ONE');
     expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: WHITESPACE.join('') }, locale: defaultLocale })).toBe('FALLBACK');
   });
+  it('the whitespace class is `line-term` and twenty-one more, and nothing else in the plane', () => {
+    const { resolve } = defaultParser;
+    // Spelled out, not filtered from `WHITESPACE`: that constant would absorb
+    // whatever `line-term` gave up, and the expectation would never move.
+    const besideLineTerm = [
+      '\u0009', '\u000b', '\u000c', '\u0020', '\u00a0', '\u1680', '\u2000', '\u2001',
+      '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008', '\u2009',
+      '\u200a', '\u202f', '\u205f', '\u3000', '\ufeff',
+    ];
+    const reserved = [':', ';', '{', '}', '\\'];
+    const codePoint = (character: string) => `U+${character.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
+    const expected = [...LINE_TERMINATORS, ...besideLineTerm].map(codePoint).sort();
+    const measured: string[] = [];
+
+    for (let code = 0x0000; code <= 0xffff; code += 1) {
+      const character = String.fromCharCode(code);
+
+      if (reserved.includes(character)) continue;
+
+      const text = `{{${character}v${character}}}`;
+      const output = resolve(text, { payload: { v: 'HIT' } });
+
+      if (output === text || output === 'HIT') measured.push(codePoint(character));
+    }
+
+    expect(measured).toEqual(expected);
+  });
   it('an escaped backslash does not escape what follows it', () => {
     const { resolve } = defaultParser;
 
