@@ -141,6 +141,10 @@ whitespace. A backslash takes the structural meaning away from the character
 that follows it, and the rule is the same everywhere in a message — inside a
 placeholder and in the text around it alike.
 
+Whitespace means the twenty-five code points the specification enumerates, not
+whatever the host calls whitespace: a host's own class is defined over a
+Unicode category that has changed membership before.
+
 ```
 Braces are written \{\{ like this \}\}      ->  "Braces are written {{ like this }}"
 Hello, {{first\ name; default:Guest}}!      ->  names the payload key "first name"

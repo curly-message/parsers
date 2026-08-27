@@ -1,6 +1,6 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Interpolate, Interpolation, Locale, Report } from './types';
-import { mergeLayer, ownKeys, ownValue } from './utils';
+import { isBlank, mergeLayer, ownKeys, ownValue } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
@@ -54,11 +54,12 @@ const nextPlaceholder = (value: string, from: number): [number, number] | undefi
 const hasPlaceholders = (value: any) => typeof value === 'string' && !!nextPlaceholder(value, 0);
 
 // The syntax reserves a colon, a semicolon, either brace, a backslash and
-// whitespace. A backslash writes any of them as text; before anything else it
-// is text itself, so a Windows path and a regular expression survive as typed.
-const RESERVED = /[:;{}\\\s]/;
+// whitespace, which `isBlank` answers for. A backslash writes any of them as
+// text; before anything else it is text itself, so a Windows path and a
+// regular expression survive as typed.
+const RESERVED = /[:;{}\\]/;
 
-const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/g, (sequence, character) => RESERVED.test(character) ? character : sequence) : value;
+const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/g, (sequence, character) => RESERVED.test(character) || isBlank(character) ? character : sequence) : value;
 
 // Whitespace an escape sequence claims is text, not padding around it.
 const trim = (value: string) => {
@@ -68,7 +69,7 @@ const trim = (value: string) => {
   for (let index = 0; index < value.length; index += 1) {
     const escaped = value[index] === '\\' && index + 1 < value.length;
 
-    if (!escaped && /\s/.test(value[index])) continue;
+    if (!escaped && isBlank(value[index])) continue;
 
     if (start < 0) start = index;
 

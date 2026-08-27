@@ -142,6 +142,10 @@ Initial version line for `@curly-message/parser`.
   payload key `v x`, and `{{count; 1:ONE\ }}` keeps its trailing space instead
   of having it trimmed away. A backslash before anything the syntax does not
   reserve is text, as it was, so `\d+` and `C:\Users\name` survive as typed.
+  The whitespace it reserves is the class the specification enumerates, not
+  the host's own — a host's notion is defined over a Unicode category that
+  has changed membership before, which would leave the same message resolving
+  two ways on two engines.
 * A payload value is unescaped by that same rule. It always went through the
   unescaping pass — a value is rescanned so that it may carry a placeholder of
   its own — but under the narrower set the difference only showed inside a

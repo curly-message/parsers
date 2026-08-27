@@ -1,5 +1,13 @@
 import type { Parser } from './types';
 
+/**
+ * Whether text carries nothing outside the format's whitespace class. That
+ * class is enumerated rather than delegated, because the host's own notion is
+ * defined over a live Unicode general category and has changed membership
+ * before.
+ */
+export const isBlank = (value: string) => !/[^\t\n\v\f\r\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/.test(value);
+
 export const ownValue = (target: any, key?: PropertyKey) => {
   try {
     return key !== undefined && !!target && Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined;
@@ -50,7 +58,7 @@ export const getModifierDefaults = <T>(key: keyof T, parserOptions: Parser.Optio
  */
 export const getModifierInput = (value: any) => {
   // `+''` is `0`, so blank text would otherwise format as a number nobody wrote.
-  if (typeof value === 'string' && !value.trim()) return undefined;
+  if (typeof value === 'string' && isBlank(value)) return undefined;
 
   const input = +value;
 

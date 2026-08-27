@@ -32,6 +32,31 @@ class Opaque {
   }
 }
 
+// The format's whitespace class (SPEC.md section 6). Every member is written as
+// an escape: a literal invisible code point is invisible to review and to a
+// diff.
+const WHITESPACE = [
+  '\u0009', '\u000a', '\u000b', '\u000c', '\u000d', '\u0020', '\u00a0', '\u1680',
+  '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007',
+  '\u2008', '\u2009', '\u200a', '\u2028', '\u2029', '\u202f', '\u205f', '\u3000',
+  '\ufeff',
+];
+
+// The four the class shares with `line-term`, which a placeholder holds in no
+// position (section 6, note 1), so only the rest reach the trimming rules.
+const LINE_TERMINATORS = ['\u000a', '\u000d', '\u2028', '\u2029'];
+
+const PLACEHOLDER_WHITESPACE = WHITESPACE.filter((character) => !LINE_TERMINATORS.includes(character));
+
+// Code points some other notion of whitespace reaches for and this class does
+// not: U+0085, which Unicode's White_Space property holds; U+001C-U+001F, which
+// Python's `str.isspace` holds; U+180E, which White_Space held until UCD 6.3.0;
+// and six more that only look blank.
+const NOT_WHITESPACE = [
+  '\u0085', '\u001c', '\u001d', '\u001e', '\u001f', '\u180e', '\u200b', '\u2060',
+  '\u061c', '\u00ad', '\u3164', '\u2800',
+];
+
 describe('parser', () => {
   it('returns a key string if not defined', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -573,6 +598,17 @@ describe('parser', () => {
       expect(resolve('{{v:currency; default:FALLBACK}}', { payload: { v: value }, props, locale: defaultLocale })).toBe('FALLBACK');
     }
   });
+  it('a payload value of only whitespace is not a number a formatting modifier can format', () => {
+    const { resolve } = defaultParser;
+    const props = { currency: { currency: 'USD', ratio: 21.4 } };
+
+    for (const space of WHITESPACE) {
+      expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: space }, locale: defaultLocale })).toBe('FALLBACK');
+      expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: space }, locale: defaultLocale })).toBe('FALLBACK');
+      expect(resolve('{{v:ago; default:FALLBACK}}', { payload: { v: space }, locale: defaultLocale })).toBe('FALLBACK');
+      expect(resolve('{{v:currency; default:FALLBACK}}', { payload: { v: space }, props, locale: defaultLocale })).toBe('FALLBACK');
+    }
+  });
   it('`date` reads a date string, not only a timestamp', () => {
     const { resolve } = defaultParser;
     const stamp = Date.parse('2024-03-05T10:00:00.000Z');
@@ -707,7 +743,7 @@ describe('parser', () => {
   it('a placeholder holds no line terminator in any position', () => {
     const { resolve } = defaultParser;
 
-    for (const terminator of ['\n', '\r', '\u2028', '\u2029']) {
+    for (const terminator of LINE_TERMINATORS) {
       expect(resolve(`{{${terminator}v${terminator}}}`, { payload: { v: 'HIT' } })).toBe(`{{${terminator}v${terminator}}}`);
       expect(resolve(`{{a}} {{${terminator}v${terminator}}}`, { payload: { a: 'A', v: 'HIT' } })).toBe(`A {{${terminator}v${terminator}}}`);
       expect(resolve(`{{v; a:${terminator}b; default:D}}`, { payload: { v: 'HIT' } })).toBe(`{{v; a:${terminator}b; default:D}}`);
@@ -723,6 +759,77 @@ describe('parser', () => {
     expect(resolve('{{v\\ x; 1:ONE}}', { payload: { 'v x': 1 } })).toBe('ONE');
     expect(resolve('{{v; \\ :X; default:D}}', { payload: { v: ' ' } })).toBe('X');
     expect(resolve('{{v; \\ :X; default:D}}', { payload: { v: 'x' } })).toBe('D');
+  });
+  it('only the whitespace class is trimmed around a key', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of PLACEHOLDER_WHITESPACE) {
+      expect(resolve(`{{${space}v${space}}}`, { payload: { [`${space}v${space}`]: 'PADDED', v: 'HIT' } })).toBe('HIT');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{${character}v${character}}}`, { payload: { [`${character}v${character}`]: 'PADDED', v: 'HIT' } })).toBe('PADDED');
+    }
+  });
+  it('only the whitespace class is trimmed around a modifier name', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of PLACEHOLDER_WHITESPACE) {
+      expect(resolve(`{{v:${space}test${space}; default:D}}`, { payload: { v: 'HIT' } })).toBe('HIT');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{v:${character}test${character}; default:D}}`, { payload: { v: 'HIT' } })).toBe('D');
+    }
+  });
+  it('only the whitespace class is trimmed around an option key', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of PLACEHOLDER_WHITESPACE) {
+      expect(resolve(`{{v;${space}1${space}:ONE; default:D}}`, { payload: { v: 1 } })).toBe('ONE');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{v;${character}1${character}:ONE; default:D}}`, { payload: { v: 1 } })).toBe('D');
+    }
+  });
+  it('only the whitespace class is trimmed around an option value and an inline default', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of PLACEHOLDER_WHITESPACE) {
+      expect(resolve(`{{v; 1:${space}ONE${space}}}`, { payload: { v: 1 } })).toBe('ONE');
+      expect(resolve(`{{v; default:${space}D${space}}}`, { payload: {} })).toBe('D');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{v; 1:${character}ONE${character}}}`, { payload: { v: 1 } })).toBe(`${character}ONE${character}`);
+      expect(resolve(`{{v; default:${character}D${character}}}`, { payload: {} })).toBe(`${character}D${character}`);
+    }
+  });
+  it('escaped whitespace is text at every code point the class enumerates', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of PLACEHOLDER_WHITESPACE) {
+      expect(resolve(`{{v; 1:ONE\\${space}}}`, { payload: { v: 1 } })).toBe(`ONE${space}`);
+      expect(resolve(`{{v\\${space}x; 1:ONE; default:D}}`, { payload: { [`v${space}x`]: 1 } })).toBe('ONE');
+      expect(resolve(`{{v; \\${space}:X; default:D}}`, { payload: { v: space } })).toBe('X');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{v\\${character}x; 1:ONE; default:D}}`, { payload: { [`v${character}x`]: 1 } })).toBe('D');
+      expect(resolve(`{{v; \\${character}:X; default:D}}`, { payload: { v: character } })).toBe('D');
+    }
+  });
+  it('a backslash escapes the whitespace class and nothing outside it', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of WHITESPACE) {
+      expect(resolve(`a\\${space}b`)).toBe(`a${space}b`);
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`a\\${character}b`)).toBe(`a\\${character}b`);
+    }
   });
   it('an escaped backslash does not escape what follows it', () => {
     const { resolve } = defaultParser;
@@ -802,7 +909,7 @@ describe('parser', () => {
     const reports: Report[] = [];
     const resolve = resolverFor<{ v1?: string }>(defaultLocale, createParser({ onReport: (report) => { reports.push(report); } }));
 
-    for (const terminator of ['\n', '\r', '\u2028', '\u2029']) {
+    for (const terminator of LINE_TERMINATORS) {
       expect(resolve('common.placeholder_chain', { v1: `{{v1}}${terminator}[i18n]: FORGED${'x'.repeat(1000)}` })).toContain('[i18n]: FORGED');
     }
 
