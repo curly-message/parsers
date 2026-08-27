@@ -602,11 +602,27 @@ describe('parser', () => {
     const { resolve } = defaultParser;
     const props = { currency: { currency: 'USD', ratio: 21.4 } };
 
+    // No arm for a code point outside the class: it is not blank, so it reaches
+    // the host's numeric conversion, reads as `NaN`, and takes the same
+    // fallback for the opposite reason.
     for (const space of WHITESPACE) {
       expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: space }, locale: defaultLocale })).toBe('FALLBACK');
       expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: space }, locale: defaultLocale })).toBe('FALLBACK');
       expect(resolve('{{v:ago; default:FALLBACK}}', { payload: { v: space }, locale: defaultLocale })).toBe('FALLBACK');
       expect(resolve('{{v:currency; default:FALLBACK}}', { payload: { v: space }, props, locale: defaultLocale })).toBe('FALLBACK');
+    }
+  });
+  it('a numeric comparison converts a blank payload value like any other text', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of WHITESPACE) {
+      expect(resolve('{{v:lt; 1:X; default:D}}', { payload: { v: space } })).toBe('X');
+      expect(resolve('{{v:gt; -1:X; default:D}}', { payload: { v: space } })).toBe('X');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve('{{v:lt; 1:X; default:D}}', { payload: { v: character } })).toBe('D');
+      expect(resolve('{{v:gt; -1:X; default:D}}', { payload: { v: character } })).toBe('D');
     }
   });
   it('`date` reads a date string, not only a timestamp', () => {
@@ -811,11 +827,14 @@ describe('parser', () => {
 
     for (const space of PLACEHOLDER_WHITESPACE) {
       expect(resolve(`{{v; 1:ONE\\${space}}}`, { payload: { v: 1 } })).toBe(`ONE${space}`);
+      expect(resolve(`{{v; 1:\\${space}ONE}}`, { payload: { v: 1 } })).toBe(`${space}ONE`);
       expect(resolve(`{{v\\${space}x; 1:ONE; default:D}}`, { payload: { [`v${space}x`]: 1 } })).toBe('ONE');
       expect(resolve(`{{v; \\${space}:X; default:D}}`, { payload: { v: space } })).toBe('X');
     }
 
     for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{v; 1:ONE\\${character}}}`, { payload: { v: 1 } })).toBe(`ONE\\${character}`);
+      expect(resolve(`{{v; 1:\\${character}ONE}}`, { payload: { v: 1 } })).toBe(`\\${character}ONE`);
       expect(resolve(`{{v\\${character}x; 1:ONE; default:D}}`, { payload: { [`v${character}x`]: 1 } })).toBe('D');
       expect(resolve(`{{v; \\${character}:X; default:D}}`, { payload: { v: character } })).toBe('D');
     }
@@ -830,6 +849,40 @@ describe('parser', () => {
     for (const character of NOT_WHITESPACE) {
       expect(resolve(`a\\${character}b`)).toBe(`a\\${character}b`);
     }
+  });
+  it('a valueless option is trimmed by the whitespace class', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of PLACEHOLDER_WHITESPACE) {
+      expect(resolve(`{{v:ne;${space}z${space}; default:D}}`, { payload: { v: 'a' } })).toBe('z');
+      expect(resolve(`{{v;${space}; default:D}}`, { payload: { v: 1 } })).toBe('1');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{v:ne;${character}z${character}; default:D}}`, { payload: { v: 'a' } })).toBe(`${character}z${character}`);
+      expect(resolve(`{{v;${character}; default:D}}`, { payload: { v: 1 } })).toBe('D');
+    }
+  });
+  it('a placeholder part made only of whitespace trims away to nothing', () => {
+    const { resolve } = defaultParser;
+
+    for (const space of PLACEHOLDER_WHITESPACE) {
+      expect(resolve(`{{v; 1:${space}; default:D}}`, { payload: { v: 1 } })).toBe('');
+      expect(resolve(`{{v:${space}}}`, { payload: { v: 'HIT' } })).toBe('HIT');
+    }
+
+    for (const character of NOT_WHITESPACE) {
+      expect(resolve(`{{v; 1:${character}; default:D}}`, { payload: { v: 1 } })).toBe(character);
+      expect(resolve(`{{v:${character}}}`, { payload: { v: 'HIT' } })).toBe('');
+    }
+  });
+  it('a run of whitespace trims like a single member', () => {
+    const { resolve } = defaultParser;
+    const run = PLACEHOLDER_WHITESPACE.join('');
+
+    expect(resolve(`{{${run}v${run}}}`, { payload: { v: 'HIT' } })).toBe('HIT');
+    expect(resolve(`{{v; 1:${run}ONE${run}}}`, { payload: { v: 1 } })).toBe('ONE');
+    expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: WHITESPACE.join('') }, locale: defaultLocale })).toBe('FALLBACK');
   });
   it('an escaped backslash does not escape what follows it', () => {
     const { resolve } = defaultParser;
