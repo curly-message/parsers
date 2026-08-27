@@ -284,7 +284,7 @@ describe('parser', () => {
 
     expect(resolve('{{v:number}}', { payload: { v: value }, props: { number: { useGrouping: undefined, maximumFractionDigits: undefined } }, locale: defaultLocale })).toBe('1234.5679');
   });
-  it('a modifier never receives a payload-supplied object by reference', () => {
+  it('a modifier receives a payload-supplied `props` copied one level down', () => {
     const seen: any[] = [];
     const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
     const wrapperProps = { number: { maximumFractionDigits: 1 } };
@@ -680,6 +680,40 @@ describe('parser', () => {
 
     expect(resolve('C:\\Users\\name')).toBe('C:\\Users\\name');
     expect(resolve('\\d+')).toBe('\\d+');
+  });
+  it('an empty placeholder names no key and resolves to the fallback chain', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{}}')).toBe('');
+    expect(resolve('{{}}', { payload: { default: 'D' } })).toBe('D');
+    expect(resolve('{{ }}', { payload: { default: 'D' } })).toBe('D');
+  });
+  it('a backslash before the opening pair writes it as text', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('\\{{v}}', { payload: { v: 'HIT' } })).toBe('{{v}}');
+    expect(resolve('\\{{v}}')).toBe('{{v}}');
+    expect(resolve('\\\\{{v}}', { payload: { v: 'HIT' } })).toBe('\\HIT');
+  });
+  it('a backslash before the closing pair writes it as text', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v\\}}', { payload: { v: 'HIT' } })).toBe('{{v}}');
+    expect(resolve('{{v\\}}}', { payload: { 'v}': 'HIT' } })).toBe('HIT');
+    expect(resolve('{{v\\\\}}', { payload: { 'v\\': 'HIT' } })).toBe('HIT');
+    expect(resolve('{{a\\}b}}', { payload: { 'a}b': 'HIT' } })).toBe('HIT');
+    expect(resolve('{{v\\{}}', { payload: { 'v{': 'HIT' } })).toBe('HIT');
+  });
+  it('a placeholder holds no line terminator in any position', () => {
+    const { resolve } = defaultParser;
+
+    for (const terminator of ['\n', '\r', '\u2028', '\u2029']) {
+      expect(resolve(`{{${terminator}v${terminator}}}`, { payload: { v: 'HIT' } })).toBe(`{{${terminator}v${terminator}}}`);
+      expect(resolve(`{{a}} {{${terminator}v${terminator}}}`, { payload: { a: 'A', v: 'HIT' } })).toBe(`A {{${terminator}v${terminator}}}`);
+      expect(resolve(`{{v; a:${terminator}b; default:D}}`, { payload: { v: 'HIT' } })).toBe(`{{v; a:${terminator}b; default:D}}`);
+      expect(resolve(`{{a}} {{v; a:${terminator}b; default:D}}`, { payload: { a: 'A', v: 'HIT' } })).toBe(`A {{v; a:${terminator}b; default:D}}`);
+      expect(resolve(`{{v\\${terminator}x}}`, { payload: { [`v${terminator}x`]: 'HIT' } })).toBe(`{{v${terminator}x}}`);
+    }
   });
   it('escaped whitespace is text, not padding', () => {
     const { resolve } = defaultParser;

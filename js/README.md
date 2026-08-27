@@ -17,6 +17,11 @@ inbox     { count: 1 }       ->  "You have 1 message."
 inbox     { count: 1234 }    ->  "You have 1,234 messages."
 ```
 
+A placeholder is written on one line: a `{{` and a `}}` with a line terminator
+anywhere between them are text rather than a placeholder, and escaping the
+terminator does not make them one. A placeholder that names no key — `{{}}`,
+`{{ }}` — is a placeholder still, and resolves through the fallback chain.
+
 Placeholders may carry a modifier (`:number`, `:date`, `:ago`, `:currency`, or
 one of the comparisons `eq`, `ne`, `lt`, `lte`, `gt`, `gte`), a set of options,
 and a `default`. Locale-dependent formatting is delegated to `Intl`; the
@@ -141,6 +146,19 @@ Braces are written \{\{ like this \}\}      ->  "Braces are written {{ like this
 Hello, {{first\ name; default:Guest}}!      ->  names the payload key "first name"
 {{count; 1:one\ ; default:none}}            ->  keeps the trailing space
 C:\\temp                                    ->  "C:\temp"
+```
+
+The rule reaches the braces themselves: a brace a backslash consumed is text,
+so it cannot be half of a delimiter. That is what lets a key end in a closing
+brace; one that starts no pair needs no escape.
+
+```
+\{{v}}      ->  "{{v}}"      text, whatever the payload carries
+\\{{v}}     ->  a backslash, then the placeholder {{v}}
+{{v\}}      ->  "{{v}}"      no closing pair, so the whole run is text
+{{v\}}}     ->  names the payload key "v}"
+{{v\\}}     ->  names the payload key "v\"
+{{a}b}}     ->  names the payload key "a}b"
 ```
 
 Before anything the syntax does not reserve, a backslash is text itself, so a

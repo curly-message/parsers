@@ -4,7 +4,54 @@ import { mergeLayer, ownKeys, ownValue } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
-const hasPlaceholders = (value: any) => typeof value === 'string' && /{{(?:(?!{{|}}).)+}}/.test(value);
+const TERMINATOR = /[\n\r\u2028\u2029]/;
+
+// A backslash consumes the character after it, so a brace an escape claimed
+// is text rather than half of a delimiter, and a placeholder holds no line
+// terminator in any position.
+const placeholderEnd = (value: string, open: number) => {
+  for (let index = open + 2; index < value.length; index += 1) {
+    const character = value[index];
+
+    if (character === '\\') {
+      if (TERMINATOR.test(value.charAt(index + 1))) return undefined;
+
+      index += 1;
+      continue;
+    }
+
+    if (TERMINATOR.test(character)) return undefined;
+
+    if (character === '{' && value[index + 1] === '{') return undefined;
+
+    if (character === '}' && value[index + 1] === '}') return index + 2;
+  }
+
+  return undefined;
+};
+
+// Both scans skip an escape sequence whole, so the parity of a run of
+// backslashes is never counted backwards and the cost stays linear in the
+// length of the message. An attempt that fails leaves the braces it rejected
+// to a later pair.
+const nextPlaceholder = (value: string, from: number): [number, number] | undefined => {
+  for (let index = from; index < value.length; index += 1) {
+    if (value[index] === '\\') {
+      index += 1;
+      continue;
+    }
+
+    if (value[index] !== '{' || value[index + 1] !== '{') continue;
+
+    const end = placeholderEnd(value, index);
+
+    if (end !== undefined) return [index, end];
+  }
+
+  return undefined;
+};
+
+const hasPlaceholders = (value: any) => typeof value === 'string' && !!nextPlaceholder(value, 0);
 
 // The syntax reserves a colon, a semicolon, either brace, a backslash and
 // whitespace. A backslash writes any of them as text; before anything else it
@@ -198,17 +245,23 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
   // it can shrink to nothing but no further, so resolving the rest only builds
   // text nobody reads — and a value that multiplies its own placeholder builds
   // text no string can hold.
+  const source = `${message}`;
+  const parts: string[] = [];
   let growth = 0;
+  let from = 0;
 
-  return `${message}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder: string, offset: number) => {
-    if (offset + growth > MAX_INTERPOLATION_LENGTH) return placeholder;
+  for (let match = nextPlaceholder(source, from); match; match = nextPlaceholder(source, from)) {
+    const [open, end] = match;
+    const placeholder = source.slice(open, end);
+    const resolved = open + growth > MAX_INTERPOLATION_LENGTH ? placeholder : resolvePlaceholder(placeholder);
 
-    const resolved = resolvePlaceholder(placeholder);
+    parts.push(source.slice(from, open), resolved);
 
     growth += resolved.length - placeholder.length;
+    from = end;
+  }
 
-    return resolved;
-  });
+  return [...parts, source.slice(from)].join('');
 };
 
 const MAX_INTERPOLATION_PASSES = 10;

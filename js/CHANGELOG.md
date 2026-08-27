@@ -148,6 +148,30 @@ Initial version line for `@curly-message/parser`.
   placeholder. A value holding `\\server\share` now resolves to
   `\server\share` and one holding `a\ b` to `a b`, so a value that has to keep
   a backslash before a reserved character doubles it; `\d+` is unaffected.
+* A backslash reaches the braces themselves, so a brace it consumed cannot be
+  half of a delimiter. A pair used to open or close a placeholder whatever
+  stood in front of it: `\{{v}}` resolved and rendered `\HIT` over the payload
+  `{ v: 'HIT' }`, and `{{v\}}` named the key `v\`, which put a closing brace
+  out of reach at the end of a key. Both are text now — `\{{v}}` renders
+  `{{v}}`, and `{{v\}}` has no closing pair, so it renders `{{v}}` as well —
+  while `{{v\}}}` closes at its last two braces and names the key `v}`.
+  Doubling the backslash gives each side its own meaning back: `\\{{v}}` is a
+  backslash in front of a placeholder, and `{{v\\}}` names the key `v\`. An
+  escape that consumed a lone brace is unchanged, so `{{\{v}}` still names
+  `{v` and `{{a\}b}}` still names `a}b`.
+* A placeholder holds no line terminator, in any position. A terminator beside
+  the key was padding to the pass that substitutes placeholders and a
+  rejection to the scan that decides whether to run one, so `"{{\nv\n}}"` was
+  text on its own and resolved inside `"{{a}} {{\nv\n}}"` — one construct with
+  two answers, decided by what else the message carried. Such a construct is
+  text unconditionally now, and carriage return, U+2028 and U+2029 count
+  exactly as a newline does. Escaping the terminator still does not make a
+  placeholder of it.
+* A placeholder that names no key is a placeholder still. `{{}}` was text
+  while `{{ }}` resolved, so a single space decided whether the braces meant
+  anything at all; `{{}}` now resolves through the same fallback chain as its
+  spaced twin, rendering the payload's `default` where the payload carries one
+  and the empty string otherwise.
 * An inline `default` whose value starts with a colon declares that value.
   `{{count; default::x}}` used to drop the default and resolve to the empty
   string, because the inline default was read by a rule of its own instead of
