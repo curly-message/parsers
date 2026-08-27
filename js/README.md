@@ -61,6 +61,27 @@ reached where the report is about one, the message's `key` where one was
 passed, and `text`, the excerpt that never settled. Only `text` derives from the payload, and it arrives truncated
 with its line terminators escaped, so a report is safe to write anywhere as-is.
 
+## Payload
+
+Everything the format carries is text. A payload value reaches a modifier, and
+the output, as text whatever type it was written at: a plain object and an
+array become JSON, and every other value becomes what the host makes of it, so
+a `Date`, a `RegExp` or a class instance reads as its own `toString` writes it.
+
+```
+{ v: 1234.5 }      ->  1234.5
+{ v: [1, 2] }      ->  [1,2]
+{ v: { a: 1 } }    ->  {"a":1}
+{ v: /re/g }       ->  /re/g
+```
+
+That conversion costs a `Date` its sub-second precision, because `String(date)`
+writes seconds: `{{v:date}}` over `new Date('2024-03-05T10:00:00.123Z')`
+renders the same instant with its milliseconds zeroed. The text is not numeric
+either, so `{{v:number}}`, `{{v:currency}}`, `{{v:ago}}`, `{{v:lt}}` and
+`{{v:gt}}` over a `Date` resolve to the fallback chain. Pass a timestamp or an
+ISO string where a placeholder needs either.
+
 ## Escaping
 
 The syntax reserves a colon, a semicolon, either brace, a backslash and

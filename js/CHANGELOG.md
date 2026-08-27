@@ -30,12 +30,27 @@ Initial version line for `@curly-message/parser`.
   `{ default: '-' }` now resolves to `'-'` rather than `'no'`. The inline
   default still applies wherever the payload does not own a `default`, and a
   present value still outranks both.
-* A modifier reads a payload `default` at the type the payload gave it. A
-  value already reached a modifier unconverted while its default arrived as
-  text, so a modifier could not tell `0` from `'0'` on one of its two inputs;
-  both now arrive as they were written. A default declared in the message is
-  text by nature and is unaffected, and what a placeholder resolves to is
-  unchanged — the parser converts it on the way out, as it always did.
+* Everything a modifier reads is text. A value used to reach a modifier at the
+  type the payload gave it while a default arrived as text; both are converted
+  the same way now, so a modifier has one kind of input to read. A plain object
+  and an array become JSON — `{ v: { a: 1 } }` reaches a modifier as
+  `{"a":1}` — and every other value becomes what the host makes of it, so a
+  `Date`, a `RegExp` and a class instance keep the text their own `toString`
+  writes, and `{{v:date}}` over a `Date` still formats.
+* A `Date` reaches a modifier at second precision, because that is what
+  `String(date)` writes. The offset survives, so the instant does, but the
+  milliseconds do not: `{{v:date}}` over `new Date('2024-03-05T10:00:00.123Z')`
+  renders `10:00:00.000` where the same instant written as an ISO string or as
+  a timestamp renders `10:00:00.123`. That text is not numeric either, so
+  `{{v:number}}`, `{{v:currency}}`, `{{v:ago}}`, `{{v:lt}}` and `{{v:gt}}` over
+  a `Date` resolve to the fallback chain; pass `getTime()` where a placeholder
+  needs the number.
+* A value that is present but cannot become text is reported as
+  `unserializable-value`. Resolution reads it as missing and falls through to
+  the fallback chain, as it already did, and now says so. The report fires for
+  a placeholder's value and for each default link the chain reads and cannot
+  convert, never for a key nobody passed or a default nothing consulted —
+  neither is a defect.
 * A layer of formatting options cannot reset the layer beneath it. The parser's
   `modifierDefaults` and the `props` a call passes keep the same modifier-keyed
   shape and compose per property: each layer overrides only the properties it
@@ -52,6 +67,19 @@ Initial version line for `@curly-message/parser`.
   Unix epoch and `{{count:number; default:99;}}` over `0` used to render `99`;
   both now resolve to the fallback chain only when the value is not a number,
   and zero formats as zero.
+* Blank text is not a number. `+''` is `0`, so `{{v:number}}` over `''`
+  rendered `'0'` and `{{v:date}}` over `''` rendered the Unix epoch, formatting
+  a value nobody wrote; text that is empty or whitespace-only now resolves to
+  the fallback chain in `number`, `date`, `ago` and `currency`. `currency`
+  applied its `ratio` before it read the value, which turned blank text into a
+  `0` its guard never saw; it reads the value first, then applies the ratio.
+* `date` reads a date string, not only a timestamp. `+'2024-03-05T10:00:00Z'`
+  is `NaN`, so a date written as text resolved to the fallback chain. Numeric
+  text is still a timestamp, and anything else is now left to the host's own
+  `Date` parsing, so an ISO string and the form `String(new Date())` writes
+  both format. Text that is no date at all — `'tomorrow'`, `''` — still
+  resolves to the fallback chain, and `number`, `ago` and `currency` stay
+  numeric.
 * Resolution always returns a string. A message that is not one is converted
   rather than handed back as it arrived — `42` resolves to `'42'` and `null` to
   `'null'` — and a resolution that reaches the end of the fallback chain with
@@ -66,9 +94,9 @@ Initial version line for `@curly-message/parser`.
   `'null'`.
 * No value can raise out of resolution. A payload value, a declared `default`,
   a modifier's result or the message itself that no conversion turns into text
-  — an object with a null prototype, a `toString` that raises — resolves to the
-  fallback chain instead, and a payload member whose own getter raises when it
-  is read counts as missing.
+  — a structure that references itself, a `toString` that raises — resolves to
+  the fallback chain instead, and a payload member whose own getter raises when
+  it is read counts as missing.
 * An option declares its value at its colon, empty included. `{{count; 1:;
   default:some}}` used to answer with the option's own key and render `'1'`,
   and `{{count; 1: ; default:some}}` — the same intent one space apart — used

@@ -19,6 +19,19 @@ const defaultParser = createParser({
 
 const resolverFor = <P = Parser.PayloadDefault>(locale: string, { resolve }: Parser.T = defaultParser) => (key: string, payload?: Parser.Payload<P>, props?: Parser.Context['props']): string => resolve(message(locale, key), { payload, props, locale, key });
 
+// Two values no conversion can describe: `JSON.stringify` raises on the
+// circular one, and `String` on the class instance, which its prototype keeps
+// off the JSON path.
+const circular: Record<string, unknown> = {};
+
+circular.self = circular;
+
+class Opaque {
+  toString(): string {
+    throw new Error('NO TEXT');
+  }
+}
+
 describe('parser', () => {
   it('returns a key string if not defined', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -81,6 +94,31 @@ describe('parser', () => {
     const inherited = Object.create({ default: 'INHERITED' });
 
     expect(resolve('{{count; default:INLINE}}', { payload: inherited })).toBe('INLINE');
+  });
+  it('a payload value reaches a placeholder as text', () => {
+    class Amount {
+      toString(): string {
+        return '10 USD';
+      }
+    }
+
+    const { resolve } = defaultParser;
+    const stamp = Date.parse('2024-03-05T10:00:00.000Z');
+
+    expect(resolve('{{v}}', { payload: { v: { a: 1, b: 'x' } } })).toBe('{"a":1,"b":"x"}');
+    expect(resolve('{{v}}', { payload: { v: Object.assign(Object.create(null), { a: 1 }) } })).toBe('{"a":1}');
+    expect(resolve('{{v}}', { payload: { v: [1, 2] } })).toBe('[1,2]');
+    expect(resolve('{{v}}', { payload: { v: ['a', { b: 2 }] } })).toBe('["a",{"b":2}]');
+
+    expect(resolve('{{v}}', { payload: { v: new Date(stamp) } })).toBe(String(new Date(stamp)));
+    expect(resolve('{{v}}', { payload: { v: /ab+c/gi } })).toBe('/ab+c/gi');
+    expect(resolve('{{v}}', { payload: { v: new Map([['a', 1]]) } })).toBe('[object Map]');
+    expect(resolve('{{v}}', { payload: { v: new Set([1, 2]) } })).toBe('[object Set]');
+    expect(resolve('{{v}}', { payload: { v: new Amount() } })).toBe('10 USD');
+
+    expect(resolve('{{v}}', { payload: { v: null } })).toBe('null');
+    expect(resolve('{{v}}', { payload: { v: NaN } })).toBe('NaN');
+    expect(resolve('{{v}}', { payload: { v: {} } })).toBe('{}');
   });
   it('placeholders containing escaped values work', () => {
     const resolve = resolverFor<{ 'pl:ace;holder'?: any }>(defaultLocale);
@@ -255,7 +293,42 @@ describe('parser', () => {
 
     expect(reports).toHaveLength(0);
   });
-  it('a modifier reads a payload default at the type the payload gave it', () => {
+  it('a value that cannot become text is reported, and one nobody passed is not', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: circular }, key: 'common.opaque' })).toBe('INLINE');
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toEqual({
+      code: 'unserializable-value',
+      message: 'A payload value could not become text, so resolution read it as missing.',
+      key: 'common.opaque',
+      text: '{{v; default:INLINE}}',
+    });
+
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: circular, default: new Opaque() } })).toBe('INLINE');
+
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value', 'unserializable-value', 'unserializable-value']);
+
+    expect(resolve('{{v; default:INLINE}}', { payload: {} })).toBe('INLINE');
+    expect(resolve('{{v}}', { payload: { v: 'TEXT' } })).toBe('TEXT');
+
+    expect(reports).toHaveLength(3);
+  });
+  it('a default nobody reads is never consulted, and one that is read still reports', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    expect(resolve('{{v}} {{v}} {{v}}', { payload: { v: 'A', default: circular } })).toBe('A A A');
+
+    expect(reports).toHaveLength(0);
+
+    expect(resolve('{{v}}', { payload: { default: circular } })).toBe('');
+
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
+  it('a modifier reads a payload default as text, whatever type the payload gave it', () => {
     const seen: unknown[] = [];
     const { resolve } = createParser({ customModifiers: { test: ({ defaultValue }) => { seen.push(defaultValue); return 'DONE'; } } });
 
@@ -265,14 +338,13 @@ describe('parser', () => {
     expect(resolve('{{value:test}}', { payload: { value: 'V', default: [1, 2] } })).toBe('DONE');
     expect(resolve('{{value:test; default:INLINE}}', { payload: { value: 'V' } })).toBe('DONE');
 
-    expect(seen).toEqual([0, false, null, [1, 2], 'INLINE']);
+    expect(seen).toEqual(['0', 'false', 'null', '[1,2]', 'INLINE']);
   });
   it('a payload default a modifier cannot turn into text still fails soft', () => {
     const { resolve } = defaultParser;
-    const raising = { toString: () => { throw new Error('NO TEXT'); } };
 
-    expect(resolve('{{value; 1:ONE}}', { payload: { value: 2, default: raising } })).toBe('');
-    expect(resolve('{{value}}', { payload: { default: raising } })).toBe('');
+    expect(resolve('{{value; 1:ONE}}', { payload: { value: 2, default: new Opaque() } })).toBe('');
+    expect(resolve('{{value}}', { payload: { default: circular } })).toBe('');
   });
   it('a modifier that raises resolves to the fallback chain', () => {
     const throwing = createParser({ customModifiers: { test: () => { throw new Error('MODIFIER FAILURE'); } } });
@@ -299,21 +371,24 @@ describe('parser', () => {
   });
   it('a value that cannot become text resolves to the fallback chain', () => {
     const { resolve } = defaultParser;
-    const opaque = Object.create(null);
-    const raising = { toString: () => { throw new Error('TO STRING FAILURE'); } };
+    const raising = { get a() { throw new Error('TO STRING FAILURE'); } };
+    const nothing = { toJSON: () => undefined };
 
-    expect(resolve(opaque)).toBe('');
+    expect(resolve(circular)).toBe('');
+    expect(resolve(new Opaque())).toBe('');
     expect(resolve(raising)).toBe('');
+    expect(resolve(nothing)).toBe('');
 
-    expect(resolve('{{value}}', { payload: { value: opaque } })).toBe('');
+    expect(resolve('{{value}}', { payload: { value: circular } })).toBe('');
     expect(resolve('{{value}}', { payload: { value: raising, default: 'FALLBACK' } })).toBe('FALLBACK');
-    expect(resolve('{{value}}', { payload: { value: 'TEST_STRING', default: opaque } })).toBe('TEST_STRING');
+    expect(resolve('{{value}}', { payload: { value: nothing, default: 'FALLBACK' } })).toBe('FALLBACK');
+    expect(resolve('{{value}}', { payload: { value: 'TEST_STRING', default: circular } })).toBe('TEST_STRING');
 
     const { resolve: resolveThrowing } = createParser({ customModifiers: { test: () => { throw new Error('MODIFIER FAILURE'); } } });
 
-    expect(resolveThrowing('{{value:test}}', { payload: { value: 'TEST_STRING', default: opaque } })).toBe('');
+    expect(resolveThrowing('{{value:test}}', { payload: { value: 'TEST_STRING', default: new Opaque() } })).toBe('');
 
-    const { resolve: resolveOpaque } = createParser({ customModifiers: { test: () => opaque } });
+    const { resolve: resolveOpaque } = createParser({ customModifiers: { test: () => new Opaque() } });
 
     expect(resolveOpaque('{{value:test; default:FALLBACK}}', { payload: { value: 'TEST_STRING' } })).toBe('FALLBACK');
   });
@@ -356,6 +431,34 @@ describe('parser', () => {
     expect(resolve('common.modifier_date', { value: 'not a number', default: 'FALLBACK' })).toBe('FALLBACK');
     expect(resolve('common.modifier_ago', { value: 'not a number', default: 'FALLBACK' })).toBe('FALLBACK');
     expect(resolve('common.modifier_date', { value: 'not a number' })).toBe('');
+  });
+  it('blank text is not a number a formatting modifier can format', () => {
+    const { resolve } = defaultParser;
+    const props = { currency: { currency: 'USD', ratio: 21.4 } };
+
+    for (const value of ['', '   ']) {
+      expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: value }, locale: defaultLocale })).toBe('FALLBACK');
+      expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: value }, locale: defaultLocale })).toBe('FALLBACK');
+      expect(resolve('{{v:ago; default:FALLBACK}}', { payload: { v: value }, locale: defaultLocale })).toBe('FALLBACK');
+      expect(resolve('{{v:currency; default:FALLBACK}}', { payload: { v: value }, props, locale: defaultLocale })).toBe('FALLBACK');
+    }
+  });
+  it('`date` reads a date string, not only a timestamp', () => {
+    const { resolve } = defaultParser;
+    const stamp = Date.parse('2024-03-05T10:00:00.000Z');
+    const formatted = new Intl.DateTimeFormat(defaultLocale, {}).format(stamp);
+
+    expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: `${stamp}` }, locale: defaultLocale })).toBe(formatted);
+    expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: '2024-03-05T10:00:00.000Z' }, locale: defaultLocale })).toBe(formatted);
+    expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: String(new Date(stamp)) }, locale: defaultLocale })).toBe(formatted);
+    expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: new Date(stamp) }, locale: defaultLocale })).toBe(formatted);
+
+    expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: 'tomorrow' }, locale: defaultLocale })).toBe('FALLBACK');
+    expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: '' }, locale: defaultLocale })).toBe('FALLBACK');
+
+    expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: '2024-03-05T10:00:00.000Z' }, locale: defaultLocale })).toBe('FALLBACK');
+    expect(resolve('{{v:ago; default:FALLBACK}}', { payload: { v: '2024-03-05T10:00:00.000Z' }, locale: defaultLocale })).toBe('FALLBACK');
+    expect(resolve('{{v:currency; default:FALLBACK}}', { payload: { v: '2024-03-05T10:00:00.000Z' }, props: { currency: { currency: 'USD' } }, locale: defaultLocale })).toBe('FALLBACK');
   });
   it('a formatting modifier formats zero rather than falling back', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -664,5 +767,21 @@ describe('parser', () => {
     };
 
     expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);
+  }, 30000);
+  it('a default nobody reads is never serialized', () => {
+    const { resolve } = defaultParser;
+
+    const runWith = (payloadDefault: unknown) => {
+      const payload = { v: 'A', default: payloadDefault };
+      const placeholders = '{{v}}'.repeat(200);
+
+      return () => { resolve(placeholders, { payload }); };
+    };
+
+    const large = Object.fromEntries(Array.from({ length: 20000 }, (_, index) => [`k${index}`, index]));
+
+    // Serializing that default once per placeholder puts the ratio in the
+    // hundreds; the budget is loose enough to absorb a slow CI leg.
+    expect(timePerOp(runWith(large)) / timePerOp(runWith('S'))).toBeLessThan(5);
   }, 30000);
 });

@@ -49,7 +49,25 @@ export const getModifierDefaults = <T>(key: keyof T, parserOptions: Parser.Optio
  * resolves it to the fallback chain instead.
  */
 export const getModifierInput = (value: any) => {
+  // `+''` is `0`, so blank text would otherwise format as a number nobody wrote.
+  if (typeof value === 'string' && !value.trim()) return undefined;
+
   const input = +value;
 
   return Number.isFinite(input) ? input : undefined;
+};
+
+/**
+ * The timestamp the `date` modifier will format. Numeric text is a timestamp
+ * already; anything else is left to the host's own `Date` parsing, so an ISO
+ * string and the form `String(new Date())` writes both read as dates.
+ */
+export const getDateInput = (value: any) => {
+  const timestamp = getModifierInput(value);
+
+  if (timestamp !== undefined) return timestamp;
+
+  const parsed = Date.parse(value);
+
+  return Number.isNaN(parsed) ? undefined : parsed;
 };

@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { getModifierDefaults, getModifierInput, mergeLayer } from './utils';
+import { getDateInput, getModifierDefaults, getModifierInput, mergeLayer } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back.
@@ -49,7 +49,7 @@ export const number: Modifier.T<Modifier.NumberProps> = ({ value, props, default
 export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValue = '', locale = '', parserOptions }) => {
   if (!locale) return '';
 
-  const input = getModifierInput(value);
+  const input = getDateInput(value);
 
   if (input === undefined) return defaultValue;
 
@@ -103,10 +103,14 @@ export const ago: Modifier.T<Modifier.AgoProps> = ({ value, defaultValue = '', l
 export const currency: Modifier.T<Modifier.CurrencyProps> = ({ value, defaultValue = '', locale = '', props, parserOptions }) => {
   if (!locale) return '';
 
+  const amount = getModifierInput(value);
+
+  if (amount === undefined) return defaultValue;
+
   const { ratio: ratioDefault, currency: currencyDefault, ...defaults } = getModifierDefaults<Modifier.CurrencyProps>('currency', parserOptions);
   const { ratio = ratioDefault || 1, currency = currencyDefault, ...rest } = props?.currency || {};
 
-  const input = getModifierInput(value * ratio);
+  const input = getModifierInput(amount * ratio);
 
   if (input === undefined) return defaultValue;
 

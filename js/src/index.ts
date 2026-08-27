@@ -48,16 +48,48 @@ const split = (value: string, separator: string) => {
   return [...parts, value.slice(from)];
 };
 
-// Fail soft: a value that cannot become text resolves to the fallback chain, never out of `resolve`.
-const stringify = (value: any, fallback = '') => {
+// A `Date`, a `RegExp` and a `Map` all say what they are through `toString`; a
+// plain object says `[object Object]`, so it is the one shape JSON describes
+// better.
+const isPlainObject = (value: any) => {
+  if (!value || typeof value !== 'object') return false;
+
+  // A value the host will not describe is not a shape this can read.
   try {
-    return String(value);
+    const prototype = Object.getPrototypeOf(value);
+
+    return prototype === Object.prototype || prototype === null;
   } catch {
-    return fallback;
+    return false;
   }
 };
 
-const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale, key: messageKey }) => {
+/**
+ * The text a value resolves to. Everything the format carries is text: a plain
+ * object and an array become JSON, so a custom modifier can read them back,
+ * and every other value becomes what the host makes of it.
+ *
+ * `undefined` answers "this is not a value" — for a value nobody passed, and
+ * for one no conversion can describe. Both fall through to the fallback chain,
+ * so nothing raises out of `resolve`.
+ */
+const text = (value: any): string | undefined => {
+  if (value === undefined) return undefined;
+
+  try {
+    if (isPlainObject(value) || Array.isArray(value)) {
+      const json = JSON.stringify(value);
+
+      return typeof json === 'string' ? json : undefined;
+    }
+
+    return String(value);
+  } catch {
+    return undefined;
+  }
+};
+
+const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey }) => {
   const { customModifiers, onReport } = parserOptions || {};
   const modifiers = mergeLayer(defaultModifiers, customModifiers);
   const modifierKeys = Object.keys(modifiers);
@@ -88,10 +120,26 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
       if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
     });
 
-    const payloadDefault = ownValue(payload, 'default');
-    const declaredDefault = payloadDefault === undefined ? inlineDefault : payloadDefault;
-    const defaultValue = declaredDefault === undefined ? '' : declaredDefault;
-    const defaultText = stringify(defaultValue);
+    // A value nobody passed is not a defect; a value that cannot become text is.
+    const payloadText = (declared: any) => {
+      const output = text(declared);
+
+      if (declared !== undefined && output === undefined) report('unserializable-value', placeholder, messageKey, onReport);
+
+      return output;
+    };
+
+    const valueText = payloadText(value);
+
+    let resolvedDefault: string | undefined;
+
+    // Converting a default costs a full serialization, so the chain waits for a
+    // reader rather than resolving a fallback nothing asks for.
+    const defaultText = () => {
+      resolvedDefault ??= payloadText(ownValue(payload, 'default')) ?? inlineDefault ?? '';
+
+      return resolvedDefault;
+    };
 
     const modifierKey = trim(declaredModifier.join(':'));
     const hasModifier = !!modifierKey;
@@ -102,20 +150,20 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
     if (hasModifier && !modifierKeys.includes(modifierKey)) {
       report('unknown-modifier', placeholder, messageKey, onReport);
 
-      return defaultText;
+      return defaultText();
     }
 
-    if (value === undefined && modifierKey !== 'ne') return defaultText;
+    if (valueText === undefined && modifierKey !== 'ne') return defaultText();
 
-    if (!hasModifier && !options.length) return stringify(value, defaultText);
+    if (!hasModifier && !options.length) return valueText ?? defaultText();
 
     const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
 
     // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
     try {
-      return String(modifier({ value, options, props, defaultValue, locale, parserOptions }));
+      return String(modifier({ value: valueText, options, props, defaultValue: defaultText(), locale, parserOptions }));
     } catch {
-      return defaultText;
+      return defaultText();
     }
   };
 
@@ -125,7 +173,7 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
   // text no string can hold.
   let growth = 0;
 
-  return `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder: string, offset: number) => {
+  return `${message}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder: string, offset: number) => {
     if (offset + growth > MAX_INTERPOLATION_LENGTH) return placeholder;
 
     const resolved = resolvePlaceholder(placeholder);
@@ -147,6 +195,7 @@ const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LE
 
 const REPORT_MESSAGES: Record<Report['code'], string> = {
   'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
+  'unserializable-value': 'A payload value could not become text, so resolution read it as missing.',
   'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
   'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
 };
@@ -156,10 +205,10 @@ const REPORT_LIMITS: Partial<Record<Report['code'], number>> = {
   'output-limit': MAX_INTERPOLATION_LENGTH,
 };
 
-const report = (code: Report['code'], text: string, key: Parser.Key | undefined, onReport: Parser.OnReport | undefined) => {
+const report = (code: Report['code'], reported: string, key: Parser.Key | undefined, onReport: Parser.OnReport | undefined) => {
   if (!onReport) return;
 
-  onReport({ code, message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(text) });
+  onReport({ code, message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(reported) });
 };
 
 const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key }) => {
@@ -185,7 +234,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
     output = next;
   }
 
-  return stringify(unesc(output));
+  return text(unesc(output)) ?? '';
 };
 
 export const createParser: Parser.Factory = (parserOptions) => ({

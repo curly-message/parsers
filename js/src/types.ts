@@ -24,7 +24,7 @@ export type Interpolation = Interpolate;
  */
 export type Report = {
   /** What stopped resolution. */
-  code: 'unknown-modifier' | 'pass-limit' | 'output-limit';
+  code: 'unknown-modifier' | 'unserializable-value' | 'pass-limit' | 'output-limit';
   /**
    * The same in English. It is self-contained and carries nothing from the
    * payload, so writing it anywhere is safe without further thought.
@@ -61,9 +61,9 @@ export module Modifier {
   export type ModifierOption = Record<'key' | 'value', string>;
 
   /**
-   * What a placeholder falls back to. A default declared in the message is
-   * text by nature; one taken from the payload arrives at the type the caller
-   * put there, the same way a value does.
+   * What a placeholder falls back to. It reaches a modifier as text whether
+   * the message declared it or the payload carried it — a payload default is
+   * coerced exactly like a value.
    */
   export type DefaultValue = any;
 
@@ -92,6 +92,14 @@ export module Parser {
   /**
    * The values a message's placeholders name, plus `default` — the fallback
    * for every key the payload does not carry.
+   *
+   * A value reaches a modifier as text: a plain object and an array become
+   * JSON, and anything else becomes what the host makes of it.
+   *
+   * A `Date` loses its sub-second precision to that conversion, and the text
+   * `String` writes for one is not numeric, so `number`, `currency`, `ago`,
+   * `lt` and `gt` over a `Date` resolve to the fallback chain. A timestamp or
+   * an ISO string keeps both.
    *
    * A value passes through the same unescaping as the message around it: a
    * backslash before a character the syntax reserves — `:`, `;`, `{`, `}`, a
