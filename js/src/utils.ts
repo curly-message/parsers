@@ -1,10 +1,10 @@
 import type { Parser } from './types';
 
 /**
- * Whether text carries nothing outside the format's whitespace class. That
- * class is enumerated rather than delegated, because the host's own notion is
- * defined over a live Unicode general category and has changed membership
- * before.
+ * Whether text carries nothing outside the whitespace class SPEC.md section 6
+ * enumerates and forbids substituting. The host's own notion is no substitute
+ * anyway: it is defined over a live Unicode general category and has changed
+ * membership before.
  */
 export const isBlank = (value: string) => !/[^\t\n\v\f\r\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/.test(value);
 
