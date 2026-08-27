@@ -62,7 +62,7 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
   const modifiers = mergeLayer(defaultModifiers, customModifiers);
   const modifierKeys = Object.keys(modifiers);
 
-  return `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder) => {
+  const resolvePlaceholder = (placeholder: string) => {
     const [declaration, ...declaredOptions] = split(placeholder.slice(2, -2), ';');
     const [declaredKey, ...declaredModifier] = split(declaration, ':');
 
@@ -117,6 +117,22 @@ const placeholders: Interpolate = ({ value: text, props, payload, parserOptions,
     } catch {
       return defaultText;
     }
+  };
+
+  // A pass already past the output limit is discarded whole, and what follows
+  // it can shrink to nothing but no further, so resolving the rest only builds
+  // text nobody reads — and a value that multiplies its own placeholder builds
+  // text no string can hold.
+  let growth = 0;
+
+  return `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder: string, offset: number) => {
+    if (offset + growth > MAX_INTERPOLATION_LENGTH) return placeholder;
+
+    const resolved = resolvePlaceholder(placeholder);
+
+    growth += resolved.length - placeholder.length;
+
+    return resolved;
   });
 };
 

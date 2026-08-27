@@ -560,6 +560,18 @@ describe('parser', () => {
     expect(reports[0]).toMatchObject({ code: 'output-limit', limit: 100000, key: 'common.placeholder_chain' });
     expect(reports[0].text.length).toBeLessThan(300);
   });
+  it('a pass is bounded as it is built, so it cannot outgrow what a string can hold', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    const multiplied = '{{b}}'.repeat(10400);
+    const output = resolve('{{a}}', { payload: { a: multiplied, b: 'x'.repeat(52000) }, key: 'common.placeholder_chain' });
+
+    expect(output).toBe(multiplied);
+
+    expect(reports).toHaveLength(1);
+    expect(reports[0]).toMatchObject({ code: 'output-limit', limit: 100000, key: 'common.placeholder_chain' });
+  });
   it('without `onReport` a parser reports nowhere and still fails soft', () => {
     const { warn } = console;
     const warnings: unknown[] = [];
