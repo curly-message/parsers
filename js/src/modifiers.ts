@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { getModifierDefaults, getModifierInput } from './utils';
+import { getModifierDefaults, getModifierInput, mergeLayer } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back.
@@ -43,7 +43,7 @@ export const number: Modifier.T<Modifier.NumberProps> = ({ value, props, default
   const { maximumFractionDigits: maximumFractionDigitsDefault, ...defaults } = getModifierDefaults<Modifier.NumberProps>('number', parserOptions);
   const { maximumFractionDigits = maximumFractionDigitsDefault || 2, ...rest } = props?.number || {};
 
-  return new Intl.NumberFormat(locale, { ...defaults, maximumFractionDigits, ...rest }).format(input);
+  return new Intl.NumberFormat(locale, { ...mergeLayer(defaults, rest), maximumFractionDigits }).format(input);
 };
 
 export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValue = '', locale = '', parserOptions }) => {
@@ -56,7 +56,7 @@ export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValu
   const { ...defaults } = getModifierDefaults<Modifier.DateProps>('date', parserOptions);
   const { ...rest } = props?.date || {};
 
-  return new Intl.DateTimeFormat(locale, { ...defaults, ...rest }).format(input);
+  return new Intl.DateTimeFormat(locale, mergeLayer(defaults, rest)).format(input);
 };
 
 const agoMap = [
@@ -97,7 +97,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = ({ value, defaultValue = '', l
 
   const formatParams = agoFormat(input, format);
 
-  return new Intl.RelativeTimeFormat(locale, { ...defaults, numeric, ...rest }).format(...formatParams);
+  return new Intl.RelativeTimeFormat(locale, { ...mergeLayer(defaults, rest), numeric }).format(...formatParams);
 };
 
 export const currency: Modifier.T<Modifier.CurrencyProps> = ({ value, defaultValue = '', locale = '', props, parserOptions }) => {
@@ -110,5 +110,5 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = ({ value, defaultVal
 
   if (input === undefined) return defaultValue;
 
-  return new Intl.NumberFormat(locale, { ...defaults, style: 'currency', currency, ...rest }).format(input);
+  return new Intl.NumberFormat(locale, { ...mergeLayer({ ...defaults, style: 'currency' }, rest), currency }).format(input);
 };

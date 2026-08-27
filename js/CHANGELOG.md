@@ -36,6 +36,13 @@ Initial version line for `@curly-message/parser`.
   both now arrive as they were written. A default declared in the message is
   text by nature and is unaffected, and what a placeholder resolves to is
   unchanged — the parser converts it on the way out, as it always did.
+* A layer of formatting options cannot reset the layer beneath it. The parser's
+  `modifierDefaults` and the `props` a call passes keep the same modifier-keyed
+  shape and compose per property: each layer overrides only the properties it
+  names, so a property set to `undefined` leaves the layer beneath it standing
+  rather than erasing it. A `customModifiers` table composes with the built-in
+  one the same way, and one the host will not describe reads as no custom
+  modifiers at all rather than raising.
 * Resolution never raises. A modifier that cannot produce a result now resolves
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any

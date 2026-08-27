@@ -150,6 +150,12 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_number', { value })).toBe(new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 4 }).format(value));
   });
+  it('a call prop set to `undefined` leaves `modifierDefaults` standing', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
+    const value = 1234.56789;
+
+    expect(resolve('{{v:number}}', { payload: { v: value }, props: { number: { useGrouping: undefined, maximumFractionDigits: undefined } }, locale: defaultLocale })).toBe('1234.5679');
+  });
   it('`date` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
     const resolveAlt = resolverFor<{ value?: any }>(altLocale);
@@ -310,6 +316,29 @@ describe('parser', () => {
     const { resolve: resolveOpaque } = createParser({ customModifiers: { test: () => opaque } });
 
     expect(resolveOpaque('{{value:test; default:FALLBACK}}', { payload: { value: 'TEST_STRING' } })).toBe('FALLBACK');
+  });
+  it('a custom modifier map the host will not describe reads as no custom modifiers', () => {
+    const revocable = Proxy.revocable({}, {});
+
+    revocable.revoke();
+
+    const hostile = [
+      revocable.proxy,
+      new Proxy({}, { ownKeys() { throw new Error('CUSTOM MODIFIERS FAILURE'); } }),
+      Object.defineProperty({}, 'test', { enumerable: true, get() { throw new Error('CUSTOM MODIFIERS FAILURE'); } }),
+    ];
+
+    for (const customModifiers of hostile) {
+      const { resolve } = createParser({ customModifiers: customModifiers as NonNullable<Parser.Options>['customModifiers'] });
+
+      expect(resolve('{{value}}', { payload: { value: 'TEST_STRING' } })).toBe('TEST_STRING');
+      expect(resolve('{{value:test}}', { payload: { value: 'TEST_STRING', default: 'FALLBACK' } })).toBe('FALLBACK');
+    }
+  });
+  it('a custom modifier set to `undefined` leaves the modifier beneath it standing', () => {
+    const { resolve } = createParser({ customModifiers: { eq: undefined } as unknown as NonNullable<Parser.Options>['customModifiers'] });
+
+    expect(resolve('{{value; TEST_STRING:HIT}}', { payload: { value: 'TEST_STRING' } })).toBe('HIT');
   });
   it('a payload member that raises when read resolves to the fallback chain', () => {
     const { resolve } = defaultParser;

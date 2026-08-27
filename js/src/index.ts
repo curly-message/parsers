@@ -1,5 +1,6 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Interpolate, Interpolation, Locale, Report } from './types';
+import { mergeLayer, ownValue } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
@@ -47,14 +48,6 @@ const split = (value: string, separator: string) => {
   return [...parts, value.slice(from)];
 };
 
-const ownValue = (target: any, key?: PropertyKey) => {
-  try {
-    return key !== undefined && !!target && Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined;
-  } catch {
-    return undefined;
-  }
-};
-
 // Fail soft: a value that cannot become text resolves to the fallback chain, never out of `resolve`.
 const stringify = (value: any, fallback = '') => {
   try {
@@ -66,7 +59,7 @@ const stringify = (value: any, fallback = '') => {
 
 const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale, key: messageKey }) => {
   const { customModifiers, onReport } = parserOptions || {};
-  const modifiers = { ...defaultModifiers, ...(customModifiers || {}) };
+  const modifiers = mergeLayer(defaultModifiers, customModifiers);
   const modifierKeys = Object.keys(modifiers);
 
   return `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder) => {
