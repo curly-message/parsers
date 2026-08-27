@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createParser, Parser, Report } from '../../src';
+import { LINE_TERM } from '../../src/utils';
 import { MESSAGES } from '../data';
 
 const defaultLocale = 'en';
@@ -47,6 +48,10 @@ const WHITESPACE = [
 const LINE_TERMINATORS = ['\u000a', '\u000d', '\u2028', '\u2029'];
 
 const PLACEHOLDER_WHITESPACE = WHITESPACE.filter((character) => !LINE_TERMINATORS.includes(character));
+
+// A code point as the label a specification writes it under, so a failure
+// names the character instead of printing it invisibly.
+const codePoint = (character: string) => `U+${character.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
 
 // Code points some other notion of whitespace reaches for and this class does
 // not: U+0085, which Unicode's White_Space property holds; U+001C-U+001F, which
@@ -767,6 +772,9 @@ describe('parser', () => {
       expect(resolve(`{{v\\${terminator}x}}`, { payload: { [`v${terminator}x`]: 'HIT' } })).toBe(`{{v${terminator}x}}`);
     }
   });
+  it('the implementation reads `line-term` from the set spelled out above', () => {
+    expect([...LINE_TERM].map(codePoint).sort()).toEqual(LINE_TERMINATORS.map(codePoint).sort());
+  });
   it('escaped whitespace is text, not padding', () => {
     const { resolve } = defaultParser;
 
@@ -894,7 +902,6 @@ describe('parser', () => {
       '\u200a', '\u202f', '\u205f', '\u3000', '\ufeff',
     ];
     const reserved = [':', ';', '{', '}', '\\'];
-    const codePoint = (character: string) => `U+${character.charCodeAt(0).toString(16).toUpperCase().padStart(4, '0')}`;
     const expected = [...LINE_TERMINATORS, ...besideLineTerm].map(codePoint).sort();
     const measured: string[] = [];
 

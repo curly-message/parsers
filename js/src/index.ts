@@ -1,10 +1,14 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Interpolate, Interpolation, Locale, Report } from './types';
-import { isBlank, mergeLayer, ownKeys, ownValue } from './utils';
+import { isBlank, LINE_TERM, mergeLayer, ownKeys, ownValue, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
-const TERMINATOR = /[\n\r\u2028\u2029]/;
+const TERMINATOR_CLASS = `[${LINE_TERM.map(unicodeEscape).join('')}]`;
+
+const TERMINATOR = new RegExp(TERMINATOR_CLASS);
+
+const EVERY_TERMINATOR = new RegExp(TERMINATOR_CLASS, 'g');
 
 // A backslash consumes the character after it, so a brace an escape claimed
 // is text rather than half of a delimiter, and a placeholder holds no line
@@ -271,8 +275,10 @@ const MAX_INTERPOLATION_LENGTH = 100000;
 
 const MAX_REPORTED_LENGTH = 120;
 
-// `JSON.stringify` escapes every line terminator except these two.
-const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value).slice(1, -1).replace(/[\u2028\u2029]/g, (separator) => `\\u${separator.charCodeAt(0).toString(16)}`);
+// `JSON.stringify` leaves a terminator it has no short escape for raw, so
+// every terminator the format holds is escaped again on top of it. The ones
+// it did escape are two characters by then and no longer match.
+const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value).slice(1, -1).replace(EVERY_TERMINATOR, unicodeEscape);
 
 const REPORT_MESSAGES: Record<Report['code'], string> = {
   'unknown-modifier': 'A placeholder named a modifier this parser does not know.',

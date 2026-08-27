@@ -220,8 +220,11 @@ risks are **DoS / robustness / prototype-chain**, not RCE/XSS.
   is derived from the payload, so it leaves truncated and with every line
   terminator escaped — a consumer that writes a report somewhere must not be
   able to have a payload forge a line there. `JSON.stringify` is not enough on
-  its own: it passes U+2028 and U+2029 through raw. Anything new a `Report`
-  carries out of the payload takes the same treatment.
+  its own: it leaves raw every terminator it has no short escape for, U+2028
+  and U+2029 among them. The escaping reads its set from `LINE_TERM`, the one
+  list the scanner reads too, so amending `line-term` reaches both — never
+  spell the terminators out a second time. Anything new a `Report` carries out
+  of the payload takes the same treatment.
 - **Placeholder matching is regex over consumer-controlled text**, which makes
   it the ReDoS surface here. A new or widened pattern needs an explicit check
   for catastrophic backtracking before it lands; if you touch one and can't

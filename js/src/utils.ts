@@ -1,6 +1,21 @@
 import type { Parser } from './types';
 
 /**
+ * The format's `line-term` production (SPEC.md section 6, note 1): the four
+ * code points a placeholder holds in no position. Every rule that reads the
+ * set reads it from here, so an amendment moves one list rather than four.
+ * Written as escapes: a literal terminator is invisible to review and to a
+ * diff.
+ */
+export const LINE_TERM = ['\u000a', '\u000d', '\u2028', '\u2029'];
+
+/**
+ * A code point as the four-digit escape a JSON string carries, which is how
+ * both a regular expression source and a diagnostic excerpt name one.
+ */
+export const unicodeEscape = (character: string) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`;
+
+/**
  * Whether text carries nothing outside the whitespace class SPEC.md section 6
  * enumerates and forbids substituting. The host's own notion is no substitute
  * anyway: it is defined over a live Unicode general category and has changed
