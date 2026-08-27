@@ -120,6 +120,61 @@ describe('parser', () => {
     expect(resolve('{{v}}', { payload: { v: NaN } })).toBe('NaN');
     expect(resolve('{{v}}', { payload: { v: {} } })).toBe('{}');
   });
+  it('a payload entry owning only wrapper keys is a wrapper', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v}}', { payload: { v: { value: 1 } } })).toBe('1');
+    expect(resolve('{{v}}', { payload: { v: { value: 1, default: 'D' } } })).toBe('1');
+    expect(resolve('{{v}}', { payload: { v: { default: 'D' } } })).toBe('D');
+    expect(resolve('{{v:number; default:INLINE}}', { payload: { v: { props: { number: {} } } }, locale: defaultLocale })).toBe('INLINE');
+  });
+  it('a payload entry owning anything else is a value', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v}}', { payload: { v: { value: 1, unit: 'kg' } } })).toBe('{"value":1,"unit":"kg"}');
+    expect(resolve('{{v}}', { payload: { v: { valu: 'X' } } })).toBe('{"valu":"X"}');
+    expect(resolve('{{v}}', { payload: { v: {} } })).toBe('{}');
+    expect(resolve('{{v}}', { payload: { v: ['value'] } })).toBe('["value"]');
+  });
+  it('a payload entry is unwrapped exactly once', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v}}', { payload: { v: { value: { a: 1 } } } })).toBe('{"a":1}');
+    expect(resolve('{{v}}', { payload: { v: { value: { value: 2 } } } })).toBe('{"value":2}');
+    expect(resolve('{{v}}', { payload: { default: { value: 'X' } } })).toBe('{"value":"X"}');
+  });
+  it('a wrapper carries a value unless that value is `undefined`', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v}}', { payload: { v: { value: undefined, default: 'D' } } })).toBe('D');
+    expect(resolve('{{v}}', { payload: { v: { value: null, default: 'D' } } })).toBe('null');
+    expect(resolve('{{v}}', { payload: { v: { value: 0, default: 'D' } } })).toBe('0');
+    expect(resolve('{{v}}', { payload: { v: { value: false, default: 'D' } } })).toBe('false');
+    expect(resolve('{{v}}', { payload: { v: { value: '', default: 'D' } } })).toBe('');
+    expect(resolve('{{v}}', { payload: { v: { value: NaN, default: 'D' } } })).toBe('NaN');
+  });
+  it('the payload\'s root `default` is a value, never a wrapper', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{default}}', { payload: { default: { value: 'X' } } })).toBe('{"value":"X"}');
+    expect(resolve('{{v}}', { payload: { default: { value: 'X' } } })).toBe('{"value":"X"}');
+  });
+  it('a wrapper default outranks the payload default, which outranks the inline one', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: { default: 'WRAPPER' }, default: 'PAYLOAD' } })).toBe('WRAPPER');
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: { value: undefined }, default: 'PAYLOAD' } })).toBe('PAYLOAD');
+    expect(resolve('{{v; default:INLINE}}', { payload: { default: 'PAYLOAD' } })).toBe('PAYLOAD');
+    expect(resolve('{{v; default:INLINE}}', { payload: {} })).toBe('INLINE');
+    expect(resolve('{{v}}', { payload: {} })).toBe('');
+  });
+  it('a default link that cannot become text is skipped', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: { default: circular }, default: 'PAYLOAD' } })).toBe('PAYLOAD');
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: { default: circular }, default: new Opaque() } })).toBe('INLINE');
+    expect(resolve('{{v}}', { payload: { v: { default: circular }, default: new Opaque() } })).toBe('');
+  });
   it('placeholders containing escaped values work', () => {
     const resolve = resolverFor<{ 'pl:ace;holder'?: any }>(defaultLocale);
 
@@ -188,11 +243,66 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_number', { value })).toBe(new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 4 }).format(value));
   });
+  it('`props` compose per property over the parser defaults and the call', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
+    const value = 1234.56789;
+
+    expect(resolve('{{v:number}}', { payload: { v: value }, locale: defaultLocale })).toBe('1234.5679');
+    expect(resolve('{{v:number}}', { payload: { v: value }, props: { number: { useGrouping: true } }, locale: defaultLocale })).toBe('1,234.5679');
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { maximumFractionDigits: 1 } } } }, locale: defaultLocale })).toBe('1234.6');
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { maximumFractionDigits: 1 } } } }, props: { number: { useGrouping: true } }, locale: defaultLocale })).toBe('1,234.6');
+  });
+  it('a wrapper leaves every prop it does not name alone', () => {
+    const seen: unknown[] = [];
+    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { number: { maximumFractionDigits: 1 } } } }, props: { number: { useGrouping: true }, date: { timeStyle: 'full' } } })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: 1 }, props: { number: { useGrouping: true } } })).toBe('DONE');
+
+    expect(seen).toEqual([
+      { number: { useGrouping: true, maximumFractionDigits: 1 }, date: { timeStyle: 'full' } },
+      { number: { useGrouping: true } },
+    ]);
+  });
+  it('a wrapper prop set to `undefined` leaves the layer beneath it standing', () => {
+    const { resolve } = createParser();
+    const value = 1234.56789;
+
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: undefined } } }, props: { number: { useGrouping: true } }, locale: defaultLocale })).toBe('1,234.57');
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { useGrouping: undefined } } } }, props: { number: { useGrouping: true, maximumFractionDigits: 3 } }, locale: defaultLocale })).toBe('1,234.568');
+  });
+  it('a wrapper prop set to `undefined` leaves `modifierDefaults` standing', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
+    const value = 1234.56789;
+
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: undefined } } }, locale: defaultLocale })).toBe('1234.5679');
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { useGrouping: undefined } } } }, locale: defaultLocale })).toBe('1234.5679');
+  });
   it('a call prop set to `undefined` leaves `modifierDefaults` standing', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
     const value = 1234.56789;
 
     expect(resolve('{{v:number}}', { payload: { v: value }, props: { number: { useGrouping: undefined, maximumFractionDigits: undefined } }, locale: defaultLocale })).toBe('1234.5679');
+  });
+  it('a modifier never receives a payload-supplied object by reference', () => {
+    const seen: any[] = [];
+    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+    const wrapperProps = { number: { maximumFractionDigits: 1 } };
+
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: wrapperProps } } })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: wrapperProps } }, props: { date: { timeStyle: 'full' } } })).toBe('DONE');
+
+    seen.forEach((props) => {
+      expect(props).not.toBe(wrapperProps);
+      expect(props.number).not.toBe(wrapperProps.number);
+    });
+  });
+  it('merging a wrapper\'s `props` cannot reach a prototype', () => {
+    const { resolve } = createParser({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
+    const polluting = JSON.parse('{"__proto__":{"polluted":true}}');
+
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: polluting } }, props: { number: {} } })).toBe('{"number":{},"__proto__":{"polluted":true}}');
+    expect(({} as any).polluted).toBe(undefined);
   });
   it('`date` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -312,6 +422,7 @@ describe('parser', () => {
     expect(reports.map(({ code }) => code)).toEqual(['unserializable-value', 'unserializable-value', 'unserializable-value']);
 
     expect(resolve('{{v; default:INLINE}}', { payload: {} })).toBe('INLINE');
+    expect(resolve('{{v}}', { payload: { v: { value: undefined } } })).toBe('');
     expect(resolve('{{v}}', { payload: { v: 'TEXT' } })).toBe('TEXT');
 
     expect(reports).toHaveLength(3);
@@ -422,6 +533,25 @@ describe('parser', () => {
     expect(resolve('{{value}}', { payload: { get value() { return raise(); }, default: 'FALLBACK' } })).toBe('FALLBACK');
     expect(resolve('{{value}}', { payload: { get default() { return raise(); } } })).toBe('');
     expect(resolve(undefined, { payload: { get default() { return raise(); } }, key: 'KEY' })).toBe('KEY');
+  });
+  it('a payload entry the host will not describe resolves to the fallback chain', () => {
+    const { resolve } = defaultParser;
+    const { proxy, revoke } = Proxy.revocable({}, {});
+
+    revoke();
+
+    expect(resolve('{{v; default:FALLBACK}}', { payload: { v: proxy } })).toBe('FALLBACK');
+    expect(resolve('{{v; default:FALLBACK}}', { payload: { v: new Proxy({}, { ownKeys: () => { throw new Error('OWN KEYS FAILURE'); } }) } })).toBe('FALLBACK');
+  });
+  it('a wrapper prop that raises when read reads as missing', () => {
+    const { resolve } = defaultParser;
+    const value = 1234.56;
+
+    expect(resolve('{{v:number}}', {
+      payload: { v: { value, props: { number: { get maximumFractionDigits(): number { throw new Error('WRAPPER PROP FAILURE'); } } } } },
+      props: { number: { useGrouping: true } },
+      locale: defaultLocale,
+    })).toBe(new Intl.NumberFormat(defaultLocale, { useGrouping: true }).format(value));
   });
   it('a formatting modifier that cannot format its input resolves to the fallback chain', () => {
     const resolve = resolverFor<{ value?: any, default?: string }>(defaultLocale);
@@ -764,6 +894,18 @@ describe('parser', () => {
       const payload = { value: `{{a; ${'x'.repeat(size)}:v}}`, a: 'A' };
 
       return () => { resolve('common.placeholder', payload); };
+    };
+
+    expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);
+  }, 30000);
+  it('merging a large wrapper `props` costs linear time', () => {
+    const { resolve } = defaultParser;
+
+    const runAt = (size: number) => {
+      const props = Object.fromEntries(Array.from({ length: size }, (_, index) => [`p${index}`, {}]));
+      const payload = { v: { value: 'A', props } };
+
+      return () => { resolve('{{v:test}}', { payload, props: {} }); };
     };
 
     expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);

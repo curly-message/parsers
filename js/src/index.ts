@@ -1,6 +1,6 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Interpolate, Interpolation, Locale, Report } from './types';
-import { mergeLayer, ownValue } from './utils';
+import { mergeLayer, ownKeys, ownValue } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
@@ -89,6 +89,25 @@ const text = (value: any): string | undefined => {
   }
 };
 
+// Reserved by the payload for a value's own configuration.
+const WRAPPED = ['value', 'default', 'props'];
+
+const isWrapped = (value: any) => {
+  if (!isPlainObject(value)) return false;
+
+  const keys = ownKeys(value);
+
+  return !!keys.length && keys.every((key) => WRAPPED.includes(key));
+};
+
+// Layers of `props` compose the way the parser's own defaults and the call's
+// already do: each names what it overrides and leaves the rest standing.
+const mergeProps = (base: any, override: any) => {
+  if (!isPlainObject(override)) return base;
+
+  return mergeLayer(base, override, (from, to) => isPlainObject(to) ? mergeLayer(from, to) : to);
+};
+
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey }) => {
   const { customModifiers, onReport } = parserOptions || {};
   const modifiers = mergeLayer(defaultModifiers, customModifiers);
@@ -100,7 +119,10 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
     const declaredName = trim(declaredKey);
     const key = declaredName ? unesc(declaredName) as keyof Parser.Payload : undefined;
-    const value = ownValue(payload, key);
+    const entry = ownValue(payload, key);
+    // The payload's root `default` is the fallback itself, never configuration.
+    const wrapper = key !== 'default' && isWrapped(entry) ? entry : undefined;
+    const value = wrapper ? ownValue(wrapper, 'value') : entry;
 
     const options: Modifier.ModifierOption[] = [];
     let inlineDefault: string | undefined;
@@ -133,10 +155,13 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
     let resolvedDefault: string | undefined;
 
-    // Converting a default costs a full serialization, so the chain waits for a
-    // reader rather than resolving a fallback nothing asks for.
+    // The wrapper speaks for its own value, the payload for every key it does
+    // not carry, and the message only for what neither of them says. Converting
+    // one costs a full serialization, so a link waits for the one before it to
+    // come back empty, and the chain waits for a reader.
     const defaultText = () => {
-      resolvedDefault ??= payloadText(ownValue(payload, 'default')) ?? inlineDefault ?? '';
+      resolvedDefault ??= [ownValue(wrapper, 'default'), ownValue(payload, 'default')]
+        .reduce<string | undefined>((output, candidate) => output ?? payloadText(candidate), undefined) ?? inlineDefault ?? '';
 
       return resolvedDefault;
     };
@@ -161,7 +186,9 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
     // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
     try {
-      return String(modifier({ value: valueText, options, props, defaultValue: defaultText(), locale, parserOptions }));
+      const modifierProps = mergeProps(props, ownValue(wrapper, 'props'));
+
+      return String(modifier({ value: valueText, options, props: modifierProps, defaultValue: defaultText(), locale, parserOptions }));
     } catch {
       return defaultText();
     }

@@ -24,12 +24,6 @@ Initial version line for `@curly-message/parser`.
   Registering the name through `customModifiers` makes it known — a caller's
   table overrides the built-in one, so a host can supply what its messages
   need.
-* A payload's own `default` outranks the `default` a placeholder declares.
-  The message carries the fallback a translator wrote; the payload is where a
-  caller overrides it for one call, so `{{count; default:no}}` under
-  `{ default: '-' }` now resolves to `'-'` rather than `'no'`. The inline
-  default still applies wherever the payload does not own a `default`, and a
-  present value still outranks both.
 * Everything a modifier reads is text. A value used to reach a modifier at the
   type the payload gave it while a default arrived as text; both are converted
   the same way now, so a modifier has one kind of input to read. A plain object
@@ -51,6 +45,24 @@ Initial version line for `@curly-message/parser`.
   a placeholder's value and for each default link the chain reads and cannot
   convert, never for a key nobody passed or a default nothing consulted —
   neither is a defect.
+* A payload entry may carry the value's own configuration instead of the value.
+  An entry is that configuration — a wrapper — when it is a plain object owning
+  at least one key, every one of them among `value`, `default` and `props`, so
+  `{ count: { value: 1, default: 'none' } }` resolves `{{count}}` to `'1'` and
+  falls back to `'none'` wherever it carries no value. An entry owning anything
+  else is a value, wrapper-shaped or not: `{ value: 1, unit: 'kg' }` and `{}`
+  are data and become JSON. Unwrapping happens once, so a wrapper's `value` is
+  never read as a wrapper of its own, and the payload's own `default` is always
+  a value.
+* A placeholder falls back through the payload before it falls back to the
+  message. The first link that yields text answers: the wrapper's `default`,
+  then the payload's `default`, then the `default` the placeholder declares,
+  then the empty string. The message carries the fallback a translator wrote
+  and the payload is where a caller overrides it for one call, so
+  `{{count; default:no}}` under `{ default: '-' }` now resolves to `'-'` rather
+  than `'no'`, and under `{ count: { default: 'none' }, default: '-' }` to
+  `'none'`. A link that is missing, or that no conversion turns into text, is
+  skipped, and a present value still outranks the whole chain.
 * A layer of formatting options cannot reset the layer beneath it. The parser's
   `modifierDefaults` and the `props` a call passes keep the same modifier-keyed
   shape and compose per property: each layer overrides only the properties it
@@ -58,6 +70,14 @@ Initial version line for `@curly-message/parser`.
   rather than erasing it. A `customModifiers` table composes with the built-in
   one the same way, and one the host will not describe reads as no custom
   modifiers at all rather than raising.
+* A wrapper's `props` layer over the `props` the call passes, property by
+  property. They keep the same modifier-keyed shape and compose the way the
+  parser's `modifierDefaults` and a call's `props` already do: each layer
+  overrides only the properties it names and cannot reset an earlier one.
+  Under `modifierDefaults` of `{ number: { maximumFractionDigits: 4 } }`, a
+  call's `props` of `{ number: { useGrouping: false } }` and a wrapper's
+  `props` of `{ number: { maximumFractionDigits: 1 } }`, `{{v:number}}` over
+  `1234.56` renders `'1234.6'`.
 * Resolution never raises. A modifier that cannot produce a result now resolves
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any

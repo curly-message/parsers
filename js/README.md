@@ -44,8 +44,8 @@ takes the four inputs resolution is defined over, plus the message's own key:
 
 | Context | Meaning |
 | --- | --- |
-| `payload` | The values the placeholders name. Its `default` key is the message-wide fallback, and it overrides the `default` a placeholder declares. |
-| `props` | Per-call formatting options handed to the modifiers, keyed by modifier name. |
+| `payload` | The values the placeholders name, or the configuration of one — see [Payload](#payload). Its `default` key is the message-wide fallback. |
+| `props` | Per-call formatting options handed to the modifiers, keyed by modifier name. A payload entry layers over them. |
 | `locale` | The locale the locale-dependent modifiers format for. |
 | `key` | The message's identifier. A missing message resolves to it. |
 
@@ -81,6 +81,53 @@ renders the same instant with its milliseconds zeroed. The text is not numeric
 either, so `{{v:number}}`, `{{v:currency}}`, `{{v:ago}}`, `{{v:lt}}` and
 `{{v:gt}}` over a `Date` resolve to the fallback chain. Pass a timestamp or an
 ISO string where a placeholder needs either.
+
+A payload entry may carry the value's own configuration — a wrapper — instead
+of the value itself:
+
+```js
+resolve('You have {{count:number}} points.', {
+  payload: {
+    count: { value: 1234.56, props: { number: { maximumFractionDigits: 1 } } },
+  },
+  locale: 'en',
+});
+// -> 'You have 1,234.6 points.'
+```
+
+An entry is a wrapper when it is a plain object that owns at least one key and
+every key it owns is `value`, `default` or `props`. An entry owning anything
+else is a value, wrapper-shaped or not: `{ value: 1, unit: 'kg' }` and `{}` are
+data and become JSON. Unwrapping happens once, so a wrapper's `value` is never
+read as a wrapper of its own, and a wrapper carrying no `value` falls back like
+a key the payload does not carry. The payload's own `default` is always a
+value.
+
+A placeholder resolves to its value wherever the payload carries one, and
+otherwise to the first of these that yields text:
+
+1. the wrapper's `default`
+2. the payload's `default`
+3. the `default` the placeholder declares
+4. the empty string
+
+A value no conversion describes — a structure that references itself, a getter
+that raises — is read as missing and falls through this chain, and so does any
+link in it. Anything the chain reads and could not convert is reported as
+`unserializable-value`; a link nothing reaches is never read, so it is never
+reported either.
+
+Formatting options are keyed by modifier name, and their layers compose per
+property: the parser's `modifierDefaults`, then the `props` the call passes,
+then the wrapper's own `props`. Each layer overrides only the properties it
+names, so a layer cannot reset an earlier one.
+
+```
+modifierDefaults  { number: { maximumFractionDigits: 4, useGrouping: false } }
+call props        { number: { useGrouping: true } }
+wrapper props     { number: { maximumFractionDigits: 1 } }
+effective         { maximumFractionDigits: 1, useGrouping: true }  ->  1,234.6
+```
 
 ## Escaping
 

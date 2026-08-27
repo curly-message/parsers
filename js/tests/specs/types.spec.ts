@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createParser } from '../../src';
+import type { Modifier, Parser } from '../../src';
 
 const GREETING = 'Hi {{applicationName}}!';
 
@@ -46,6 +47,38 @@ describe('payload typing', () => {
     expect(resolve('Hi!')).toBe('Hi!');
   });
 
+  it('accepts a wrapper where a declared payload type names a value', () => {
+    const { resolve } = createParser<Payload>();
+
+    expect(resolve(GREETING, { payload: { applicationName: { value: 'App' } } })).toBe('Hi App!');
+  });
+
+  it('accepts a wrapper where no payload type is declared', () => {
+    const { resolve } = createParser();
+
+    expect(resolve(GREETING, { payload: { applicationName: { value: 'App' } } })).toBe('Hi App!');
+  });
+
+  it('accepts a wrapper carrying a default and no value', () => {
+    const { resolve } = createParser<Payload>();
+
+    expect(resolve(GREETING, { payload: { applicationName: { default: 'Guest' } } })).toBe('Hi Guest!');
+  });
+
+  it('accepts a payload entry declared apart from the call', () => {
+    const { resolve } = createParser<Payload>();
+    const applicationName: Parser.PayloadEntry<string> = { value: 'App', default: 'Guest' };
+
+    expect(resolve(GREETING, { payload: { applicationName } })).toBe('Hi App!');
+  });
+
+  it('accepts a wrapper declaring the props its modifier reads', () => {
+    const { resolve } = createParser<{ count: number }>();
+    const count: Modifier.Wrapper<number> = { value: 1234.56, props: { number: { maximumFractionDigits: 1 } } };
+
+    expect(resolve('You have {{count:number}}.', { payload: { count }, locale: 'en' })).toBe('You have 1,234.6.');
+  });
+
   it('rejects a typo against a declared payload type', () => {
     const { resolve } = createParser<Payload>();
 
@@ -58,5 +91,19 @@ describe('payload typing', () => {
 
     // @ts-expect-error resolution reads the payload, the props, the locale and the key
     expect(resolve(GREETING, { payload: { applicationName: 'App' }, extra: true })).toBe('Hi App!');
+  });
+
+  it('rejects a wrapper value of a type the payload does not declare', () => {
+    const { resolve } = createParser<Payload>();
+
+    // @ts-expect-error a wrapper carries the value its key declares, and that is a `string`
+    expect(resolve(GREETING, { payload: { applicationName: { value: 42 } } })).toBe('Hi 42!');
+  });
+
+  it('rejects an entry owning a key no wrapper declares', () => {
+    const { resolve } = createParser<Payload>();
+
+    // @ts-expect-error `unit` is no wrapper key, which leaves the declared `string`
+    expect(resolve(GREETING, { payload: { applicationName: { value: 'App', unit: 'kg' } } })).toBe('Hi {"value":"App","unit":"kg"}!');
   });
 });

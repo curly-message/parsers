@@ -67,6 +67,20 @@ export module Modifier {
    */
   export type DefaultValue = any;
 
+  /**
+   * A value's own configuration, standing in the payload where the value
+   * would. An entry is a wrapper only when every key it owns is one of these;
+   * an entry owning anything else is a value, wrapper-shaped or not.
+   */
+  export type Wrapper<Value = any, CustomModifierProps = any> = {
+    /** The value itself. A wrapper carrying none falls back like a missing key. */
+    value?: Value;
+    /** Tried before the payload's own `default` and before the inline one. */
+    default?: DefaultValue;
+    /** Layered over the `props` the call passes, property by property. */
+    props?: Props<CustomModifierProps>;
+  };
+
   export type T<CustomModifierProps = any> = (config: CommonProps<CustomModifierProps> & { options: ModifierOption[]; defaultValue?: DefaultValue }) => any;
 
   export type DefaultModifiers = typeof modifiers;
@@ -89,12 +103,16 @@ export module Parser {
 
   export type PayloadDefault = { [key in 'default']?: any };
 
+  /** What a payload carries under a key: the value, or its configuration. */
+  export type PayloadEntry<Value = any> = Value | Modifier.Wrapper<Value>;
+
   /**
    * The values a message's placeholders name, plus `default` — the fallback
    * for every key the payload does not carry.
    *
    * A value reaches a modifier as text: a plain object and an array become
-   * JSON, and anything else becomes what the host makes of it.
+   * JSON, and anything else becomes what the host makes of it. An entry may
+   * instead be a `Modifier.Wrapper`, which configures the value it carries.
    *
    * A `Date` loses its sub-second precision to that conversion, and the text
    * `String` writes for one is not numeric, so `number`, `currency`, `ago`,
@@ -108,7 +126,7 @@ export module Parser {
    * value holding `\d+` arrives as typed, and one holding `\\server\share`
    * resolves to `\server\share` unless each consumed backslash is doubled.
    */
-  export type Payload<T = any> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, any> & PayloadDefault : T & PayloadDefault;
+  export type Payload<T = any> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, PayloadEntry> & PayloadDefault : { [Key in keyof T]: PayloadEntry<T[Key]> } & PayloadDefault;
 
   export type Key = string;
 
