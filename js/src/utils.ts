@@ -39,10 +39,18 @@ export const unicodeEscape = (character: string) => `\\u${character.charCodeAt(0
  */
 export const isBlank = (value: string) => !/[^\t\n\v\f\r\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/.test(value);
 
-export const ownValue = (target: any, key?: PropertyKey) => {
+/**
+ * A target's own entry under a key, or nothing. A read that raises answers
+ * nothing too — resolution must not throw — but a caller that can tell the
+ * difference between an entry nobody passed and one that refused to be read
+ * says so through `onRaise`.
+ */
+export const ownValue = (target: any, key?: PropertyKey, onRaise?: () => void) => {
   try {
     return key !== undefined && !!target && Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined;
   } catch {
+    onRaise?.();
+
     return undefined;
   }
 };

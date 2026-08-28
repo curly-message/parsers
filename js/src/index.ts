@@ -193,10 +193,14 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
     const declaredName = trim(declaredKey);
     const key = declaredName ? unesc(declaredName) as keyof Parser.Payload : undefined;
-    const entry = ownValue(payload, key);
+    // A link that refuses to be read is not a link nobody passed. `ownValue`
+    // answers nothing either way, because resolution must not throw; the
+    // difference between the two is what a report is for.
+    const raised = () => report('unserializable-value', placeholder, messageKey, onReport);
+    const entry = ownValue(payload, key, raised);
     // The payload's root `default` is the fallback itself, never configuration.
     const wrapper = key !== 'default' && isWrapped(entry) ? entry : undefined;
-    const value = wrapper ? ownValue(wrapper, 'value') : entry;
+    const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
 
     const options: Modifier.ModifierOption[] = [];
     let inlineDefault: string | undefined;
@@ -235,14 +239,14 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // link is the entry it has already read as its value. One entry converts
     // once: reading it again would pay for the same serialization twice and
     // describe a single value that cannot become text as two.
-    const payloadDefault = key === 'default' ? () => valueText : () => payloadText(ownValue(payload, 'default'));
+    const payloadDefault = key === 'default' ? () => valueText : () => payloadText(ownValue(payload, 'default', raised));
 
     // The wrapper speaks for its own value, the payload for every key it does
     // not carry, and the message only for what neither of them says. Converting
     // one costs a full serialization, so a link waits for the one before it to
     // come back empty, and the chain waits for a reader.
     const defaultText = () => {
-      resolvedDefault ??= [() => payloadText(ownValue(wrapper, 'default')), payloadDefault]
+      resolvedDefault ??= [() => payloadText(ownValue(wrapper, 'default', raised)), payloadDefault]
         .reduce<string | undefined>((output, read) => output ?? read(), undefined) ?? inlineDefault ?? '';
 
       return resolvedDefault;

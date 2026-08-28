@@ -714,6 +714,25 @@ describe('parser', () => {
 
     expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
   });
+  it('a chain link whose read raises is reported like a value that could not become text', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const raise = () => { throw new Error('NO READ'); };
+
+    expect(resolve('{{v; default:INLINE}}', { payload: { get v() { return raise(); } } })).toBe('INLINE');
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: { get value() { return raise(); } } } })).toBe('INLINE');
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: { value: undefined, get default() { return raise(); } } } })).toBe('INLINE');
+    expect(resolve('{{v; default:INLINE}}', { payload: { get default() { return raise(); } } })).toBe('INLINE');
+
+    expect(reports.map(({ code }) => code)).toEqual(Array(4).fill('unserializable-value'));
+
+    // A link that raises is read once, like any other link: the chain behind it
+    // resolves from the report, not from a second read of the same entry.
+    expect(resolve('{{default}}', { payload: { get default() { return raise(); } } })).toBe('');
+    expect(resolve('{{v}}', { payload: { v: { get value() { return raise(); }, get default() { return raise(); } } } })).toBe('');
+
+    expect(reports).toHaveLength(7);
+  });
   it('a modifier reads a payload default as text, whatever type the payload gave it', () => {
     const seen: unknown[] = [];
     const { resolve } = createParser({ customModifiers: { test: ({ defaultValue }) => { seen.push(defaultValue); return 'DONE'; } } });
