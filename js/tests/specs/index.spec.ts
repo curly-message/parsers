@@ -1154,7 +1154,7 @@ describe('parser', () => {
     expect(resolve(`{{v; 1:${run}ONE${run}}}`, { payload: { v: 1 } })).toBe('ONE');
     expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: WHITESPACE.join('') }, locale: defaultLocale })).toBe('FALLBACK');
   });
-  it('the whitespace class is `line-term` and twenty-one more, and nothing else in the plane', () => {
+  it('the whitespace class is exactly what it enumerates, and nothing else in the plane', () => {
     const { resolve } = defaultParser;
     // Spelled out, not filtered from `WHITESPACE`: that constant would absorb
     // whatever `line-term` gave up, and the expectation would never move.
