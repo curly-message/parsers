@@ -225,6 +225,36 @@ Initial version line for `@curly-message/parser`.
   same thing silently. The accepted units are now read off the ladder itself,
   so the two cannot drift and an unclimbable unit is a compile error rather
   than a wrong answer.
+* Turning a value into text is bounded. A plain object or an array became
+  JSON with nothing watching the walk, and both interpolation guards measure a
+  string that already exists, so they could not see the cost of building one: a
+  payload of twenty-five objects, each of twenty-four levels naming the same
+  child twice, holds no cycle for `JSON.stringify` to refuse and describes
+  sixteen million leaves. Named by a placeholder it spent over a second before
+  reporting `output-limit`; passed as the message itself it never reached the
+  interpolation loop at all, because the eighty-eight-megabyte result carries no
+  placeholder, and the caller got every character of it with no report. The walk
+  now has a node budget of its own, the output limit's own number because the
+  two bound the same thing from two ends, and a value that exhausts it is a
+  value no conversion can describe: the placeholder takes the fallback chain and
+  reports `unserializable-value`.
+* The call's own inputs are read as own properties. `payload`, `props`,
+  `locale` and `key` were read off the context by plain member access, so a
+  polluted `Object.prototype` supplied a payload to a call that passed none —
+  the own-property rule that protects every payload key, undone one level above
+  the payload. They are read like the payload now, and a context of `null` is a
+  context nobody passed rather than a `TypeError`: `resolve('a{{v}}b', null)`
+  renders `ab`.
+* A `props` layer is composed by its own entries, not by its prototype. The
+  layer test asked whether an object's prototype was `Object.prototype`, so a
+  `props` carried by a class instance — or by anything else with a prototype of
+  its own — was discarded whole and the layer beneath it stood alone. A layer is
+  now anything carrying entries to read, and its own entries are what compose.
+* A fallback chain link that refuses to be read is reported. A payload entry, a
+  wrapper's `value` or `default`, or the payload's own `default` could be an
+  accessor that raises; the read answered "absent" and moved on silently, while
+  a raise one level deeper — inside the conversion — reported. Every link now
+  reports `unserializable-value`, so a chain that ends early says why.
 * A host-defined modifier can be given implementation defaults.
   `modifierDefaults` named only the built-in modifiers, so an `x-` modifier the
   factory declares could be handed props per call but never configured at the
