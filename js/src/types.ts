@@ -43,8 +43,9 @@ export type Report = {
   /** The limit that was reached, where the report is about one. */
   limit?: number;
   /**
-   * The text that never settled. Truncated, and with its line terminators
-   * escaped, so payload content cannot forge a line wherever this is written.
+   * The text that never settled. Truncated — a cut is marked with a trailing
+   * `...` of the parser's own — and with its line terminators escaped, so
+   * payload content cannot forge a line wherever this is written.
    */
   text: string;
 };
