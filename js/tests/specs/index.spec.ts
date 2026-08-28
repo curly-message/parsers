@@ -357,8 +357,8 @@ describe('parser', () => {
     const { resolve } = createParser();
     const value = 1234.56789;
 
-    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: undefined } } }, props: { number: { useGrouping: true } }, locale: defaultLocale })).toBe('1,234.57');
-    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { useGrouping: undefined } } } }, props: { number: { useGrouping: true, maximumFractionDigits: 3 } }, locale: defaultLocale })).toBe('1,234.568');
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: undefined } } }, props: { number: { useGrouping: false } }, locale: defaultLocale })).toBe('1234.57');
+    expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { useGrouping: undefined } } } }, props: { number: { useGrouping: false, maximumFractionDigits: 3 } }, locale: defaultLocale })).toBe('1234.568');
   });
   it('a wrapper prop set to `undefined` leaves `modifierDefaults` standing', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
