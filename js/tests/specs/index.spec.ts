@@ -225,6 +225,16 @@ describe('parser', () => {
     expect(resolve('common.modifier_ne', { value: 15 })).toBe('VALUE2');
     expect(resolve('common.modifier_ne')).toBe('DEFAULT VALUE');
   });
+  it('`eq` and `ne` compare an option key against a value case-insensitively', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v:eq; YES:A; default:D}}', { payload: { v: 'yes' } })).toBe('A');
+    expect(resolve('{{v:eq; yes:A; default:D}}', { payload: { v: 'YES' } })).toBe('A');
+    expect(resolve('{{v:eq; yEs:A; default:D}}', { payload: { v: 'YeS' } })).toBe('A');
+
+    expect(resolve('{{v:ne; YES:A; NO:B; default:D}}', { payload: { v: 'yes' } })).toBe('B');
+    expect(resolve('{{v:ne; yes:A; default:D}}', { payload: { v: 'YES' } })).toBe('D');
+  });
   it('an absent value takes the fallback chain under `ne` like every other modifier', () => {
     const { resolve } = defaultParser;
 
