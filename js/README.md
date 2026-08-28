@@ -32,7 +32,11 @@ no conversion turns into text. Neither is silent: containment keeps the failure
 out of the caller's render path, and a report is how the caller hears about it
 anyway. A placeholder naming a modifier the parser does not know resolves to
 its `default` and is reported as well; it is never run as a comparison instead.
-Given no locale at all, the formatting modifiers resolve to the empty string.
+Given no locale the formatting modifiers resolve to the empty string, not to
+the fallback chain: a declared default does not stand in for a locale nobody
+supplied. A caller that passes none and a caller that passes the empty string
+resolve alike; one that passes a locale the host then rejects has supplied one,
+and takes the fallback chain like any other formatting failure.
 
 Each formatting modifier reads its value as a particular kind of number, and a
 value that is not one resolves the placeholder to its `default`:
