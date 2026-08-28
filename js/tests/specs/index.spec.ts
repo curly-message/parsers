@@ -554,6 +554,21 @@ describe('parser', () => {
     expect(resolve('{{v:eq; 2:TWO}}', { payload, locale: defaultLocale })).toBe('');
     expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
   });
+  it('a placeholder that names `default` reads that entry once', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // The payload's root `default` is this placeholder's own value, and the
+    // chain link behind it is the same entry. One entry that cannot become
+    // text is one value that went missing, not two.
+    expect(resolve('{{default}}', { payload: { default: circular }, locale: defaultLocale })).toBe('');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+
+    // A modifier that cannot format it reads the chain, and lands back on the
+    // text the same entry already gave: the payload still speaks for the key
+    // it carries, whatever that key is called.
+    expect(resolve('{{default:number}}', { payload: { default: 'abc' }, locale: defaultLocale })).toBe('abc');
+  });
   it('a modifier the parser does not know resolves to the fallback chain and reports it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
