@@ -44,6 +44,11 @@ value that is not one resolves the placeholder to its `default`:
 | `ago` | a signed millisecond delta relative to now, negative for the past |
 | `currency` | a number, multiplied by the `ratio` property below |
 
+Empty text and text that is only whitespace are none of these, whatever the
+host's own numeric conversion makes of them: `{{v:number}}` over `{ v: '' }`
+takes the fallback chain rather than formatting a zero, and `{{v:date}}` over
+the same value takes it rather than formatting the epoch.
+
 ## Usage
 
 ```js
