@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { AGO_LADDER, getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer, ownValue } from './utils';
+import { AGO_LADDER, formatOptions, getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer, ownValue } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back, and the fallback is read off the
@@ -74,7 +74,7 @@ export const number: Modifier.T<Modifier.NumberProps> = (config) => {
   const minimum = Number(ownValue(layered, 'minimumFractionDigits')) || 0;
   const maximumFractionDigits = ownValue(layered, 'maximumFractionDigits') ?? Math.max(minimum, 2);
 
-  return new Intl.NumberFormat(locale, { ...layered, maximumFractionDigits }).format(input);
+  return new Intl.NumberFormat(locale, formatOptions(layered, { maximumFractionDigits })).format(input);
 };
 
 export const date: Modifier.T<Modifier.DateProps> = (config) => {
@@ -89,7 +89,7 @@ export const date: Modifier.T<Modifier.DateProps> = (config) => {
   const { ...defaults } = getModifierDefaults<Modifier.DateProps>('date', parserOptions);
   const { ...rest } = ownLayer(props, 'date');
 
-  return new Intl.DateTimeFormat(locale, mergeLayer(defaults, rest)).format(input);
+  return new Intl.DateTimeFormat(locale, formatOptions(mergeLayer(defaults, rest))).format(input);
 };
 
 const testResolution = (defKey: string = '', testKey: string = '') => new RegExp(`^${defKey}s?$`).test(testKey);
@@ -129,7 +129,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
 
   const formatParams = agoFormat(input, format);
 
-  return new Intl.RelativeTimeFormat(locale, { ...mergeLayer(defaults, rest), numeric }).format(...formatParams);
+  return new Intl.RelativeTimeFormat(locale, formatOptions(mergeLayer(defaults, rest), { numeric })).format(...formatParams);
 };
 
 export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
@@ -152,5 +152,5 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
   // layers: a layer naming another style asks it to stop being the modifier the
   // message named. Pinning it against the parser's defaults alone left the call
   // and the wrapper able to render `{{v:currency}}` as a percentage.
-  return new Intl.NumberFormat(locale, { ...mergeLayer(defaults, rest), style: 'currency', currency }).format(input);
+  return new Intl.NumberFormat(locale, formatOptions(mergeLayer(defaults, rest), { style: 'currency', currency })).format(input);
 };

@@ -489,6 +489,34 @@ describe('parser', () => {
     expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve('{{v:nosuch}}', { payload, locale: defaultLocale }))).toBe('');
     expect(seen).toEqual([]);
   });
+  it('a polluted prototype configures no formatter', () => {
+    const { resolve } = createParser({});
+
+    const stamp = Date.parse('2024-03-05T10:00:00.000Z');
+    const days = -2 * 24 * 60 * 60 * 1000;
+
+    const asNumber = () => resolve('{{v:number}}', { payload: { v: 1.23456789 }, locale: defaultLocale });
+    const asDate = () => resolve('{{v:date}}', { payload: { v: stamp }, locale: defaultLocale });
+    const asAgo = () => resolve('{{v:ago}}', { payload: { v: days }, locale: defaultLocale });
+    const asCurrency = () => resolve('{{v:currency}}', { payload: { v: 10 }, props: { currency: { currency: 'USD' } }, locale: defaultLocale });
+
+    // What each modifier renders with nothing on the prototype, read off `Intl`
+    // rather than spelled out: a date renders in the host's own zone.
+    const clean = [
+      new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 2 }).format(1.23456789),
+      new Intl.DateTimeFormat(defaultLocale).format(stamp),
+      new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-2, 'day'),
+      new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(10),
+    ];
+
+    expect([asNumber(), asDate(), asAgo(), asCurrency()]).toEqual(clean);
+
+    expect(polluted('style', 'percent', asNumber)).toBe(clean[0]);
+    expect(polluted('minimumFractionDigits', 4, asNumber)).toBe(clean[0]);
+    expect(polluted('dateStyle', 'full', asDate)).toBe(clean[1]);
+    expect(polluted('style', 'narrow', asAgo)).toBe(clean[2]);
+    expect(polluted('currencyDisplay', 'name', asCurrency)).toBe(clean[3]);
+  });
   it('the call context is read as own properties, never through a prototype', () => {
     const { resolve } = createParser({});
 

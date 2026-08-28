@@ -184,7 +184,9 @@ that a modifier taking the keys it needs by name leaves alone.
 Formatting options are keyed by modifier name, and their layers compose per
 property: the parser's `modifierDefaults`, then the `props` the call passes,
 then the wrapper's own `props`. Each layer overrides only the properties it
-names, so a layer cannot reset an earlier one.
+names, so a layer cannot reset an earlier one. Only what a layer owns composes,
+and the object the formatter is handed owns every entry it is configured with,
+so a prototype somebody else wrote to configures nothing.
 
 ```
 modifierDefaults  { number: { maximumFractionDigits: 4, useGrouping: false } }
