@@ -17,11 +17,12 @@
   "scripts": {
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "pretest": "npm run build && npm run typecheck",
+    "pretest": "npm run build && npm run typecheck && npm run lint",
     "test": "vitest run",
     "build": "tsup",
     "prepublishOnly": "npm run build",
-    "lint": "eslint --fix .",
+    "lint": "eslint .",
+    "lint:fix": "eslint --fix .",
     "prepare": "cd .. && simple-git-hooks js/.simple-git-hooks.json"
   },
   "files": [
