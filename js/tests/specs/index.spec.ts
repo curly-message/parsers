@@ -532,6 +532,9 @@ describe('parser', () => {
     expect(polluted('modifierDefaults', { number: { maximumFractionDigits: 5 } }, () => createParser({}).resolve('{{v:number}}', { payload, locale: defaultLocale }))).toBe('1.23');
     expect(polluted('number', { maximumFractionDigits: 5 }, () => createParser({ modifierDefaults: {} }).resolve('{{v:number}}', { payload, props: {}, locale: defaultLocale }))).toBe('1.23');
     expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve('{{v:nosuch}}', { payload, locale: defaultLocale }))).toBe('');
+    // The chain a message resolves through reads the channel for itself, one
+    // level above the placeholder, and reads it the same way.
+    expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve(undefined, { payload: { get default(): never { throw new Error('READ FAILURE'); } }, key: 'common.key' }))).toBe('common.key');
     expect(seen).toEqual([]);
   });
   it('a polluted prototype configures no formatter', () => {
