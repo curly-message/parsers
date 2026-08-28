@@ -103,15 +103,18 @@ stops, and the last output under the bound is what resolves. Both are what make
 a payload value that references or multiplies its own placeholder terminate
 rather than hang the caller.
 
-The same bound holds the conversion that feeds them. Turning a value into JSON
+A third bound holds the conversion that feeds them. Turning a value into JSON
 follows a shared reference again every time it meets one, so a value naming the
 same child twice at each of twenty-four levels holds twenty-five objects and
 describes sixteen million leaves — no cycle anywhere, and nothing an output
 bound measured after the fact can prevent. So the walk stops after **100000
 nodes**, and the value is read as one no conversion describes: it falls through
-its fallback chain and reports as `unserializable-value`. Every node owes the
-output at least a character, so a value the walk stops on could not have fit
-within the output bound anyway.
+its fallback chain and reports as `unserializable-value`. That is what a single
+conversion may spend, and a resolution converts one value once however many
+placeholders name it, so what a resolution spends converting is bounded by the
+values it reaches rather than by the reads it makes of them. A value built
+afresh on each read — by a payload getter, or by a custom modifier — is a new
+value every time and is converted every time.
 
 ## Payload
 

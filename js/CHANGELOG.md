@@ -247,10 +247,25 @@ Initial version line for `@curly-message/parser`.
   reporting `output-limit`; passed as the message itself it never reached the
   interpolation loop at all, because the eighty-eight-megabyte result carries no
   placeholder, and the caller got every character of it with no report. The walk
-  now has a node budget of its own, the output limit's own number because the
-  two bound the same thing from two ends, and a value that exhausts it is a
-  value no conversion can describe: the placeholder takes the fallback chain and
-  reports `unserializable-value`.
+  now has a node budget of its own — what one conversion may spend, written as
+  the output limit's own number — and a value that exhausts it is a value no
+  conversion can describe: the placeholder takes the fallback chain and reports
+  `unserializable-value`.
+* A value converts once per resolution, however many placeholders read it. Each
+  placeholder that named a key paid for its own walk of that key's value, and a
+  value whose text carries the placeholder that read it paid again on every pass
+  and twice as often on each. A payload object of twenty thousand keys valued
+  `undefined` — assembled in JavaScript, because `JSON.parse` carries no such
+  value — serializes to twenty-two characters after 20002 node visits, so the
+  output bound never saw it coming: named by `{{ v }}` while carrying
+  `{{ v }}{{ v }}` it was walked 1023 times and spent six seconds, and it still
+  ended in an ordinary `pass-limit` report. The text each value came out as is
+  now recorded for the length of the `resolve` call, the answer that a value has
+  no text included, so what a resolution spends converting is bounded by the
+  distinct values it reaches. A value built afresh on each read — by a payload
+  getter, or by a custom modifier — is a new value every time and is converted
+  every time. The report is not recorded with the text: each link that finds
+  none is a defect of its own and still reports.
 * The call's own inputs are read as own properties. `payload`, `props`,
   `locale` and `key` were read off the context by plain member access, so a
   polluted `Object.prototype` supplied a payload to a call that passed none —

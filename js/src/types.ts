@@ -17,10 +17,19 @@ type Given<T> = [T][T extends any ? 0 : never];
 export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options };
 
 /**
- * A single interpolation pass. It sees the message's key on top of what a pass
- * needs to substitute, because a report names the message it came from.
+ * The text every value a resolution has converted came out as, by identity, the
+ * answer that a value has no text included. Converting is the costly step, and
+ * a value is read once for every placeholder that names it, so one resolution
+ * converts one value once.
  */
-export type Interpolate = (config: CommonProps & { payload?: Parser.Payload, key?: Parser.Key }) => string;
+export type Conversions = Map<any, string | undefined>;
+
+/**
+ * A single interpolation pass. It sees the message's key on top of what a pass
+ * needs to substitute, because a report names the message it came from, and the
+ * conversions the resolution around it has already made.
+ */
+export type Interpolate = (config: CommonProps & { payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions }) => string;
 
 /** The interpolation loop. */
 export type Interpolation = Interpolate;

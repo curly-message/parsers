@@ -1484,6 +1484,49 @@ describe('parser', () => {
 
     expect(reports).toHaveLength(1);
   });
+  it('a value converts once, however many reads a resolution makes of it', () => {
+    const { resolve } = defaultParser;
+
+    let conversions = 0;
+    // An enumerable getter is read once per walk, so the count is the number of
+    // conversions the resolution made of the object carrying it.
+    const counted = (json: string) => ({ get read() { conversions += 1; return json; } });
+
+    expect(resolve('{{v}}'.repeat(50), { payload: { v: counted('A') } })).toBe('{"read":"A"}'.repeat(50));
+    expect(conversions).toBe(1);
+
+    // A value whose own text carries the placeholder that read it is read again
+    // on every pass and twice as often on each, so the ten passes reach this one
+    // 1023 times.
+    conversions = 0;
+
+    resolve('{{v}}', { payload: { v: counted('{{v}}{{v}}') } });
+
+    expect(conversions).toBe(1);
+
+    // Identity is what a conversion answers for. Two values that describe
+    // themselves alike are still two values.
+    conversions = 0;
+
+    resolve('{{v}}{{w}}', { payload: { v: counted('A'), w: counted('A') } });
+
+    expect(conversions).toBe(2);
+  });
+  it('converting a value once leaves what a message resolves to unchanged', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ customModifiers: { test: ({ value }) => value }, onReport: (report) => { reports.push(report); } });
+
+    const shared = { a: [1, 2] };
+
+    expect(resolve('{{v}} {{w}} {{v:test}}', { payload: { v: shared, w: shared } })).toBe('{"a":[1,2]} {"a":[1,2]} {"a":[1,2]}');
+    expect(resolve('{{v}}', { payload: { v: shared, default: shared } })).toBe('{"a":[1,2]}');
+    expect(reports).toHaveLength(0);
+
+    // A value that cannot become text is a defect wherever it is read, so the
+    // recorded answer spares the walk and not the report.
+    expect(resolve('{{v}} {{v}}', { payload: { v: circular } })).toBe(' ');
+    expect(reports.map(({ code }) => code)).toEqual(Array(2).fill('unserializable-value'));
+  });
   it('a reported excerpt is cut at the bound, not at whatever reached it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
