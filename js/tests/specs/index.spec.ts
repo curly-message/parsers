@@ -535,6 +535,10 @@ describe('parser', () => {
     // The chain a message resolves through reads the channel for itself, one
     // level above the placeholder, and reads it the same way.
     expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve(undefined, { payload: { get default(): never { throw new Error('READ FAILURE'); } }, key: 'common.key' }))).toBe('common.key');
+    // The interpolation guards read the channel for themselves too, between the
+    // two, and a payload value that references its own placeholder is what
+    // reaches one of them.
+    expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve('{{v}}', { payload: { v: '{{v}}' } }))).toBe('{{v}}');
     expect(seen).toEqual([]);
   });
   it('a polluted prototype configures no formatter', () => {
