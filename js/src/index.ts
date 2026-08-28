@@ -238,7 +238,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // host's own word for absence.
     if (valueText === undefined) return defaultText();
 
-    if (!hasModifier && !options.length) return valueText ?? defaultText();
+    if (!hasModifier && !options.length) return valueText;
 
     const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
 
