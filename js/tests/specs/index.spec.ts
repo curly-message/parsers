@@ -962,6 +962,22 @@ describe('parser', () => {
     expect(resolve('{{v:eq; X:HIT; default:D}}', { payload: { v: 'X' } })).toBe('HIT');
     expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
   });
+  it('the modifier registry is read as own properties, never through a prototype', () => {
+    const reports: Report[] = [];
+    // A registry is a caller's object like the payload and the props layers,
+    // and it is read the same way: what it inherits it does not hold. Types
+    // describe a table's shape, never whose object the entries sit on.
+    const inherited = Object.create({ 'x-inherited': () => 'INHERITED' });
+    const { resolve } = createParser({ customModifiers: inherited, onReport: (entry) => reports.push(entry) });
+
+    expect(resolve('{{v:x-inherited; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    // The prototype every object inherits from is the same story one step
+    // further out: a name written there registers no modifier, and one written
+    // over a built-in leaves the built-in answering.
+    expect(polluted('x-polluted', () => 'HIJACKED', () => createParser({ customModifiers: {} }).resolve('{{v:x-polluted; default:D}}', { payload: { v: 'X' } }))).toBe('D');
+    expect(polluted('number', () => 'HIJACKED', () => createParser({ customModifiers: {} }).resolve('{{v:number}}', { payload: { v: 1.5 }, locale: defaultLocale }))).toBe('1.5');
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
+  });
   it('a modifier registered under a prototype name answers to it', () => {
     const reports: Report[] = [];
     // A registry reaches the parser from JavaScript, where a name a prototype
