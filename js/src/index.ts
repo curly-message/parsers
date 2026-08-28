@@ -1,6 +1,6 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Interpolate, Interpolation, Locale, Report } from './types';
-import { isBlank, LINE_TERM, mergeLayer, ownKeys, ownValue, unicodeEscape } from './utils';
+import { isBlank, LINE_TERM, mergeLayer, ownKeys, ownModifiers, ownValue, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
@@ -214,7 +214,12 @@ const mergeProps = (base: any, override: any) => {
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey }) => {
   const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers');
   const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
-  const modifiers = mergeLayer(defaultModifiers, customModifiers);
+  // The modifier module's exports are the registry a host's table composes
+  // with, and each layer contributes the modifiers it holds and nothing else:
+  // an entry that cannot be called is not one a message can name and not one
+  // that shadows the name it would replace. Filtered after the merge instead,
+  // a host's bad entry would take the built-in down with it.
+  const modifiers = mergeLayer(ownModifiers(defaultModifiers), ownModifiers(customModifiers));
   const modifierKeys = Object.keys(modifiers);
 
   const resolvePlaceholder = (placeholder: string) => {

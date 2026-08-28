@@ -112,6 +112,12 @@ export module Parser {
   export type OnReport = (report: Report) => void;
 
   export type Options<Key extends string = Modifier.Key, Props = any> = {
+    /**
+     * Modifiers registered by name, over the built-in ones. Registration is
+     * what makes a name one a message may write, so an entry that is not a
+     * modifier registers none: it takes no name of its own and shadows no
+     * built-in, and the name reads as one nobody registered.
+     */
     customModifiers?: Modifier.CustomModifiers<Key, Props>;
     /**
      * The bottom formatting layer, keyed by modifier name. It carries the same

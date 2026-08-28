@@ -83,6 +83,25 @@ export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any
   return { ...output };
 };
 
+/**
+ * The modifiers a registry holds. Registration is what makes a name a modifier
+ * a message may write, so an entry that is not one registers nothing: it takes
+ * no name of its own and shadows no modifier already answering to that name.
+ * A message writing a name registered to something else reads it as a name
+ * nobody registered, which is what it is.
+ */
+export const ownModifiers = (registry: any) => {
+  const output: Record<string, any> = Object.create(null);
+
+  ownKeys(registry).forEach((name) => {
+    const entry = ownValue(registry, name);
+
+    if (typeof entry === 'function') output[name] = entry;
+  });
+
+  return { ...output };
+};
+
 // A configuration layer is read the way the payload is: own properties only,
 // one level at a time. Nobody writes configuration onto a prototype, so
 // anything a prototype offers here was put there by someone else.
