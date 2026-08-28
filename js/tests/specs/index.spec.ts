@@ -1141,11 +1141,16 @@ describe('parser', () => {
     expect(answering.resolve('{{v:number; default:D}}', { payload: { v: 1 } })).toBe('');
     expect(reports).toEqual([]);
   });
-  it('a formatting modifier resolves to the empty string with no locale', () => {
+  it('a formatting modifier resolves to the empty string where no locale is available', () => {
     const { resolve } = defaultParser;
 
+    // A locale is not available where the caller supplied none and where what
+    // it supplied is empty. A locale the caller did supply and the host then
+    // rejects is available but unusable, which is a formatting failure and
+    // takes the chain like any other.
     for (const modifier of ['number', 'date', 'ago', 'currency']) {
       expect(resolve(`{{value:${modifier}; default:FALLBACK;}}`, { payload: { value: 10 } })).toBe('');
+      expect(resolve(`{{value:${modifier}; default:FALLBACK;}}`, { payload: { value: 10 }, locale: '' })).toBe('');
     }
 
     expect(resolve(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 } })).toBe('');
