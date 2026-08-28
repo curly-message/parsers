@@ -219,3 +219,9 @@ Initial version line for `@curly-message/parser`.
   application-level exception. Reporting is an observation, not a step of the
   resolution: the callback is dispatched inside a guard and the message still
   comes back.
+* `ago` accepts the units it can actually resolve to. `format` was typed as the
+  whole `Intl` vocabulary, so `quarter` — a unit `Intl` knows and this ladder
+  does not climb — compiled and then rendered as `year`, and a typo did the
+  same thing silently. The accepted units are now read off the ladder itself,
+  so the two cannot drift and an unclimbable unit is a compile error rather
+  than a wrong answer.

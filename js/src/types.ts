@@ -46,7 +46,17 @@ export module Modifier {
 
   export type DefaultKeys = keyof typeof modifiers;
 
-  export type AgoProps = { ago?: Intl.RelativeTimeFormatOptions & { format?: Intl.RelativeTimeFormatUnit | 'auto' } };
+  type AgoStep = (typeof modifiers.agoMap)[number]['key'];
+
+  /**
+   * A unit `ago` can resolve to, read off the ladder it climbs rather than off
+   * `Intl`'s whole vocabulary: a unit the ladder does not climb is never
+   * selected, it just leaves the climb running out at its largest step. Every
+   * step is accepted in the plural too, which is how a message spells it.
+   */
+  export type AgoUnit = AgoStep | `${AgoStep}s`;
+
+  export type AgoProps = { ago?: Intl.RelativeTimeFormatOptions & { format?: AgoUnit | 'auto' } };
 
   export type DateProps = { date?: Intl.DateTimeFormatOptions };
 
