@@ -220,6 +220,13 @@ describe('parser', () => {
     expect(resolve('{{v; default:INLINE}}', { payload: { v: { default: circular }, default: new Opaque() } })).toBe('INLINE');
     expect(resolve('{{v}}', { payload: { v: { default: circular }, default: new Opaque() } })).toBe('');
   });
+  it('a resolved default is text the next pass reads, placeholders included', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v}}', { payload: { v: { default: 'W-{{n}}' }, n: 'N' } })).toBe('W-N');
+    expect(resolve('{{v}}', { payload: { default: 'P-{{n}}', n: 'N' } })).toBe('P-N');
+    expect(resolve('{{v:eq; z:Z}}', { payload: { v: { value: 'q', default: 'W-{{n}}' }, n: 'N' } })).toBe('W-N');
+  });
   it('placeholders containing escaped values work', () => {
     const resolve = resolverFor<{ 'pl:ace;holder'?: any }>(defaultLocale);
 
