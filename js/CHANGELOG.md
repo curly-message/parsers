@@ -316,3 +316,10 @@ Initial version line for `@curly-message/parser`.
   `props` does. The position does not decide the factory's props parameter —
   `customModifiers` and the explicit argument do — so a parser configured only
   through `modifierDefaults` keeps the context type it had.
+* The published types ship the documentation written against them. The build's
+  tsconfig asked for comments to be removed and tsup's declaration build reads
+  that tsconfig, so all 22 JSDoc blocks were stripped from `dist/index.d.ts`,
+  and `dist` is the whole published package: a consumer installing
+  `@curly-message/parser` got a type surface with nothing written on it. The
+  option never reached the runtime bundle, which esbuild writes and which comes
+  out byte-identical either way — it only deleted documentation.
