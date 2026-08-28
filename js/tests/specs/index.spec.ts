@@ -91,7 +91,7 @@ describe('parser', () => {
     expect(resolve(true)).toBe('true');
     expect(resolve(undefined)).toBe('');
   });
-  it('key returns proper value', () => {
+  it('a message carrying no placeholder resolves to its own text', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
     expect(resolve('common.no_placeholder')).toBe('NO_PLACEHOLDER');
@@ -106,12 +106,12 @@ describe('parser', () => {
 
     expect(resolve('common.placeholder', { value: 'TEST_{{another}}', another: 'VALUE' })).toBe('VALUES: TEST_VALUE, TEST_VALUE, TEST_VALUE, TEST_VALUE');
   });
-  it('default value works for placeholders', () => {
+  it('an inline default fills a placeholder whose key the payload does not carry', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
     expect(resolve('common.placeholder_default')).toBe('VALUES: DEFAULT_VALUE, DEFAULT_VALUE, DEFAULT_VALUE, DEFAULT_VALUE');
   });
-  it('dynamic default works for placeholders', () => {
+  it('the payload\'s `default` fills a placeholder whose key it does not carry', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
     expect(resolve('common.placeholder', { default: 'DYNAMIC_DEFAULT_VALUE' })).toBe('VALUES: DYNAMIC_DEFAULT_VALUE, DYNAMIC_DEFAULT_VALUE, DYNAMIC_DEFAULT_VALUE, DYNAMIC_DEFAULT_VALUE');
