@@ -255,6 +255,16 @@ Initial version line for `@curly-message/parser`.
   accessor that raises; the read answered "absent" and moved on silently, while
   a raise one level deeper — inside the conversion — reported. Every link now
   reports `unserializable-value`, so a chain that ends early says why.
+* The chain a message resolves through reports like the one a placeholder
+  resolves through. A message no conversion describes steps to the payload's
+  `default` and then to the key, and that step read the payload entry with
+  nothing watching: an entry that could not become text, or a getter that
+  raised, passed for an entry nobody wrote, and the caller saw its key echoed
+  with no report. The link is a payload value like any other and now reports
+  `unserializable-value`; the report names no placeholder, because at this level
+  there is none, so its `text` is empty and its `key` is what says which message
+  went looking. Stepping past the message itself stays unreported: a message
+  nothing describes is one nobody wrote, not a defect in the payload.
 * A host-defined modifier can be given implementation defaults.
   `modifierDefaults` named only the built-in modifiers, so an `x-` modifier the
   factory declares could be handed props per call but never configured at the

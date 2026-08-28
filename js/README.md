@@ -54,6 +54,12 @@ takes the four inputs resolution is defined over, plus the message's own key:
 | `locale` | The locale the locale-dependent modifiers format for. |
 | `key` | The message's identifier. A missing message resolves to the payload's `default`, and to this where the payload carries none. |
 
+A message that no conversion describes is a message that does not exist:
+resolution steps past it to the payload's `default` and then to the key, and
+reports nothing, because a message nobody wrote is not a defect. The link it
+steps to is a payload value like any other, so one that is read and cannot be
+described is reported.
+
 `options` carries `customModifiers`, `modifierDefaults` and `onReport`. Nothing
 else is read, and the package has no runtime dependencies — locale-dependent
 formatting is delegated to `Intl`.
@@ -65,11 +71,13 @@ silently. It is called with a `Report` describing what the parser could not do
 reached where the report is about one, the message's `key` where one was
 passed, and `text`, the source of the trouble: the placeholder that named it
 for `unknown-modifier` and `unserializable-value`, the output that would not
-settle for `pass-limit` and `output-limit`. Only `text` derives from the
-payload. It is cut to 120 characters of what reached it and escaped after that
-— quotes, backslashes, and every line terminator — so what arrives is longer
-than 120 wherever the cut carried something to escape, and no payload can forge
-a line where a report is written.
+settle for `pass-limit` and `output-limit`, and nothing at all where what could
+not be described is the chain the message itself resolves through, which names
+no placeholder. Only `text` derives from the payload. It is cut to 120
+characters of what reached it and escaped after that — quotes, backslashes, and
+every line terminator — so what arrives is longer than 120 wherever the cut
+carried something to escape, and no payload can forge a line where a report is
+written.
 
 Two guards bound resolution, and reaching either is what the two limit codes
 report. A payload value may name another placeholder, so interpolation runs
