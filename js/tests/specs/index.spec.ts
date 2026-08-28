@@ -291,6 +291,12 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_number', { value })).toBe(new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 4 }).format(value));
   });
+  it('a zero in `modifierDefaults` is a value, not an absence', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 0 }, currency: { ratio: 0, currency: 'EUR' } } });
+
+    expect(resolve('{{v:number}}', { payload: { v: 1234.56 }, locale: defaultLocale })).toBe('1,235');
+    expect(resolve('{{v:currency}}', { payload: { v: 1234.56 }, locale: defaultLocale })).toBe('€0.00');
+  });
   it('`props` compose per property over the parser defaults and the call', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
     const value = 1234.56789;
