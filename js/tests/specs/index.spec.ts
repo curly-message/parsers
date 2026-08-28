@@ -431,6 +431,23 @@ describe('parser', () => {
       expect(props.number).not.toBe(callProps.number);
     });
   });
+  it('a modifier receives its `props` as ordinary objects', () => {
+    const seen: any[] = [];
+    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+
+    // Every layer is accumulated onto a null prototype, so a name a message or
+    // a payload supplies cannot reach one, and each is finished with a spread
+    // before it leaves. What a modifier holds is an object like any other,
+    // not one whose prototype went missing on the way.
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { number: { maximumFractionDigits: 1 } } } }, props: { date: { timeStyle: 'full' } } })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: 1 }, props: { number: { useGrouping: true } } })).toBe('DONE');
+
+    seen.forEach((props) => {
+      expect(Object.getPrototypeOf(props)).toBe(Object.prototype);
+
+      Object.values(props).forEach((layer) => { expect(Object.getPrototypeOf(layer)).toBe(Object.prototype); });
+    });
+  });
   it('merging a wrapper\'s `props` cannot reach a prototype', () => {
     const { resolve } = createParser({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
     const polluting = JSON.parse('{"__proto__":{"polluted":true}}');
