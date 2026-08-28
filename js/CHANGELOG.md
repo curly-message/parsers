@@ -329,3 +329,10 @@ Initial version line for `@curly-message/parser`.
   `@curly-message/parser` got a type surface with nothing written on it. The
   option never reached the runtime bundle, which esbuild writes and which comes
   out byte-identical either way — it only deleted documentation.
+* `Parser.Options` is the option bag, not the bag or nothing. The published
+  type closed with `| undefined`, a union the `?` on the factory's own
+  parameter already carried, so a consumer who indexed the type for one option
+  — `Parser.Options['onReport']` — or took the bag as a parameter got errors
+  about a type that might be absent. Assigning a bag to it and intersecting it
+  were unaffected, and whether the factory takes an argument at all is
+  unchanged.

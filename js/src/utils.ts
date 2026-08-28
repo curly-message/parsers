@@ -114,7 +114,7 @@ export const ownLayer = (target: any, key: PropertyKey) => {
   return output;
 };
 
-export const getModifierDefaults = <T>(key: keyof T, parserOptions: Parser.Options) => ownLayer(ownValue(parserOptions, 'modifierDefaults'), key) as Required<T>[keyof T];
+export const getModifierDefaults = <T>(key: keyof T, parserOptions?: Parser.Options) => ownLayer(ownValue(parserOptions, 'modifierDefaults'), key) as Required<T>[keyof T];
 
 /**
  * The number a formatting modifier will format, by the host's own conversion.
