@@ -384,6 +384,21 @@ describe('parser', () => {
     expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { maximumFractionDigits: 1 } } } }, locale: defaultLocale })).toBe('1234.6');
     expect(resolve('{{v:number}}', { payload: { v: { value, props: { number: { maximumFractionDigits: 1 } } } }, props: { number: { useGrouping: true } }, locale: defaultLocale })).toBe('1,234.6');
   });
+  it('every formatting modifier layers its `props` over its own defaults', () => {
+    const stamp = Date.parse('2024-03-05T10:00:00.000Z');
+    const days = -2 * 24 * 60 * 60 * 1000;
+
+    const dates = createParser({ modifierDefaults: { date: { dateStyle: 'full' } } });
+    const agos = createParser({ modifierDefaults: { ago: { style: 'long' } } });
+    const currencies = createParser({ modifierDefaults: { currency: { currency: 'USD', currencyDisplay: 'name' } } });
+
+    expect(dates.resolve('{{v:date}}', { payload: { v: stamp }, props: { date: { dateStyle: 'short' } }, locale: defaultLocale }))
+      .toBe(new Intl.DateTimeFormat(defaultLocale, { dateStyle: 'short' }).format(stamp));
+    expect(agos.resolve('{{v:ago}}', { payload: { v: days }, props: { ago: { style: 'narrow' } }, locale: defaultLocale }))
+      .toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto', style: 'narrow' }).format(-2, 'day'));
+    expect(currencies.resolve('{{v:currency}}', { payload: { v: 10 }, props: { currency: { currencyDisplay: 'code' } }, locale: defaultLocale }))
+      .toBe(new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD', currencyDisplay: 'code' }).format(10));
+  });
   it('a wrapper leaves every prop it does not name alone', () => {
     const seen: unknown[] = [];
     const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
