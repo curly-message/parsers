@@ -1698,6 +1698,30 @@ describe('parser', () => {
       expect(report.message).not.toContain('FORGED');
     }
   });
+  it('a report escapes every terminator its excerpt carries, not only the first', () => {
+    const reports: Report[] = [];
+    const resolve = resolverFor<{ v1?: string }>(defaultLocale, createParser({ onReport: (report) => { reports.push(report); } }));
+
+    // `JSON.stringify` writes a short escape for two of the four terminators
+    // and leaves U+2028 and U+2029 raw, so an excerpt carrying more than one of
+    // those is what an escaping pass stopping at its first match lets through.
+    const run = LINE_TERMINATORS.join('');
+    const output = resolve('common.placeholder_chain', { v1: `{{v1}}${run}` });
+
+    expect(reports).toHaveLength(1);
+    // Short of the cut, so the excerpt carries every terminator the output did.
+    expect(output.length).toBeLessThanOrEqual(120);
+
+    for (const terminator of LINE_TERMINATORS) {
+      expect(output.split(terminator)).toHaveLength(11);
+      expect(reports[0].text).not.toContain(terminator);
+    }
+
+    // The two `JSON.stringify` leaves raw are the ones this pass rewrites, and
+    // it rewrites each of them.
+    expect(reports[0].text.split('\\u2028')).toHaveLength(11);
+    expect(reports[0].text.split('\\u2029')).toHaveLength(11);
+  });
   it('exceeding the output budget stops interpolation and reports it', () => {
     const reports: Report[] = [];
     const resolve = resolverFor<{ v1?: string }>(defaultLocale, createParser({ onReport: (report) => { reports.push(report); } }));
