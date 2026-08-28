@@ -110,9 +110,10 @@ export module Modifier {
 
   /**
    * A value's own configuration, standing in the payload where the value
-   * would. An entry is a wrapper only when it owns at least one key and every
-   * key it owns is one of these; an entry owning anything else, or owning
-   * nothing at all, is a value, wrapper-shaped or not.
+   * would. An entry is a wrapper only when it is a plain object that owns at
+   * least one key and every key it owns is one of these; an entry with a
+   * prototype of its own, one owning anything else, or one owning nothing at
+   * all, is a value, wrapper-shaped or not.
    */
   export type Wrapper<Value = any, CustomModifierProps = DefaultProps> = AtLeastOne<{
     /** The value itself. A wrapper carrying none falls back like a missing key. */

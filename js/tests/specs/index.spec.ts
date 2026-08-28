@@ -181,6 +181,17 @@ describe('parser', () => {
     expect(resolve('{{v}}', { payload: { v: {} } })).toBe('{}');
     expect(resolve('{{v}}', { payload: { v: ['value'] } })).toBe('["value"]');
   });
+  it('an entry that is not a plain object is a value, wrapper-shaped or not', () => {
+    class Wrapped {
+      value = 'V';
+    }
+
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v}}', { payload: { v: new Wrapped() } })).toBe('[object Object]');
+    expect(resolve('{{v}}', { payload: { v: Object.assign(Object.create({ inherited: 1 }), { value: 'V' }) } })).toBe('[object Object]');
+    expect(resolve('{{v}}', { payload: { v: Object.assign(Object.create(null), { value: 'V' }) } })).toBe('V');
+  });
   it('a payload entry is unwrapped exactly once', () => {
     const { resolve } = defaultParser;
 
