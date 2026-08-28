@@ -255,7 +255,12 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // An answer no conversion can describe is not an answer, and neither is
       // nothing, so the placeholder takes the fallback chain — the way it does
       // for a value that is not a value.
-      return text(modifier({ value: valueText, options, props: modifierProps, defaultValue: defaultText(), locale, parserOptions })) ?? defaultText();
+      // The default reaches the modifier as a property it reads, not as work
+      // done before it was called: a modifier that never asks leaves the chain
+      // unresolved, so a link nobody consulted is never described as missing.
+      const input = { value: valueText, options, props: modifierProps, get defaultValue() { return defaultText(); }, locale, parserOptions };
+
+      return text(modifier(input)) ?? defaultText();
     } catch {
       return defaultText();
     }
