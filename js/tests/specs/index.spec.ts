@@ -733,14 +733,20 @@ describe('parser', () => {
     const { resolve } = defaultParser;
     const usd = (amount: number) => new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(amount);
     const digits = (amount: number, maximumFractionDigits: number) => new Intl.NumberFormat(defaultLocale, { maximumFractionDigits }).format(amount);
+    const relative = (delta: number, unit: Intl.RelativeTimeFormatUnit) => new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(delta, unit);
+    const week = -7 * 24 * 60 * 60 * 1000;
 
     // A placeholder segment spelled like a property is an option, and an
-    // option reaches no layer: the ratio stays 1 and the maximum stays two.
+    // option reaches no layer: the ratio stays 1, the maximum stays two, and
+    // the unit stays the one the climb selects.
     expect(resolve('{{v:currency; ratio:100}}', { payload: { v: 2 }, props: { currency: { currency: 'USD' } }, locale: defaultLocale })).toBe(usd(2));
     expect(resolve('{{v:currency}}', { payload: { v: 2 }, props: { currency: { currency: 'USD', ratio: 100 } }, locale: defaultLocale })).toBe(usd(200));
 
     expect(resolve('{{v:number; maximumFractionDigits:4}}', { payload: { v: 1.23456 }, locale: defaultLocale })).toBe(digits(1.23456, 2));
     expect(resolve('{{v:number}}', { payload: { v: 1.23456 }, props: { number: { maximumFractionDigits: 4 } }, locale: defaultLocale })).toBe(digits(1.23456, 4));
+
+    expect(resolve('{{v:ago; format:day}}', { payload: { v: week }, locale: defaultLocale })).toBe(relative(-1, 'week'));
+    expect(resolve('{{v:ago}}', { payload: { v: week }, props: { ago: { format: 'day' } }, locale: defaultLocale })).toBe(relative(-7, 'day'));
   });
   it('custom modifier works', () => {
     const resolve = resolverFor<{ data?: any }>(defaultLocale, createParser({
