@@ -52,13 +52,18 @@ takes the four inputs resolution is defined over, plus the message's own key:
 | `payload` | The values the placeholders name, or the configuration of one — see [Payload](#payload). Its `default` key is the message-wide fallback. |
 | `props` | Per-call formatting options handed to the modifiers, keyed by modifier name. A payload entry layers over them. |
 | `locale` | The locale the locale-dependent modifiers format for. |
-| `key` | The message's identifier. A missing message resolves to the payload's `default`, and to this where the payload carries none. |
+| `key` | The message's identifier. A missing message resolves to the payload's `default`, and to this where the payload carries none, echoed as the caller spelled it. |
 
 A message that no conversion describes is a message that does not exist:
 resolution steps past it to the payload's `default` and then to the key, and
 reports nothing, because a message nobody wrote is not a defect. The link it
 steps to is a payload value like any other, so one that is read and cannot be
 described is reported.
+
+The key is where that chain ends, and it is not text the format resolves over.
+A key shaped like a placeholder is echoed rather than resolved, an escape
+sequence inside one stays as it was spelled, and nothing behind the key is read
+a second time. It still becomes text, because `resolve` answers with text.
 
 `options` carries `customModifiers`, `modifierDefaults` and `onReport`. Nothing
 else is read, and the package has no runtime dependencies — locale-dependent
