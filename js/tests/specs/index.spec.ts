@@ -1778,6 +1778,27 @@ describe('parser', () => {
     expect(reports[0]).toMatchObject({ code: 'output-limit', limit: 100000, key: 'common.placeholder_chain' });
     expect(reports[0].text.length).toBeLessThan(300);
   });
+  it('the output budget is a length a pass may reach, not one it may not', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    // The bound is spelled out here rather than read from the source: a length
+    // derived from the constant it is meant to pin would move along with it.
+    const limit = 100000;
+    const at = (length: number) => {
+      reports.length = 0;
+
+      return resolve('{{v}}', { payload: { v: 'x'.repeat(length) }, key: 'common.key' });
+    };
+
+    // A pass that lands exactly on the bound has not exceeded it, so what it
+    // built is what resolves; one character further is a pass discarded whole,
+    // and the last output under the bound is the message as it arrived.
+    expect(at(limit)).toHaveLength(limit);
+    expect(reports).toHaveLength(0);
+
+    expect(at(limit + 1)).toBe('{{v}}');
+    expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
+  });
   it('a pass is bounded as it is built, so it cannot outgrow what a string can hold', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
