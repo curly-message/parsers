@@ -20,9 +20,10 @@ const defaultParser = createParser({
 
 const resolverFor = <P = Parser.PayloadDefault>(locale: string, { resolve }: Parser.T = defaultParser) => (key: string, payload?: Parser.Payload<P>, props?: Parser.Context['props']): string => resolve(message(locale, key), { payload, props, locale, key });
 
-// Two values no conversion can describe: `JSON.stringify` raises on the
-// circular one, and `String` on the class instance, which its prototype keeps
-// off the JSON path.
+// Four values no conversion can describe: `JSON.stringify` raises on the
+// circular one and on the one whose own read raises, `String` raises on the
+// class instance, which its prototype keeps off the JSON path, and the last
+// serializes to nothing at all.
 const circular: Record<string, unknown> = {};
 
 circular.self = circular;
@@ -32,6 +33,9 @@ class Opaque {
     throw new Error('NO TEXT');
   }
 }
+
+const raisingRead = { get a(): never { throw new Error('TO STRING FAILURE'); } };
+const noDescription = { toJSON: () => undefined };
 
 // What a caller reads when somebody else has written to the prototype every
 // object inherits from. The name is removed again whatever the read does, so
@@ -1157,17 +1161,10 @@ describe('parser', () => {
   });
   it('a value that cannot become text resolves to the fallback chain', () => {
     const { resolve } = defaultParser;
-    const raising = { get a() { throw new Error('TO STRING FAILURE'); } };
-    const nothing = { toJSON: () => undefined };
-
-    expect(resolve(circular)).toBe('');
-    expect(resolve(new Opaque())).toBe('');
-    expect(resolve(raising)).toBe('');
-    expect(resolve(nothing)).toBe('');
 
     expect(resolve('{{value}}', { payload: { value: circular } })).toBe('');
-    expect(resolve('{{value}}', { payload: { value: raising, default: 'FALLBACK' } })).toBe('FALLBACK');
-    expect(resolve('{{value}}', { payload: { value: nothing, default: 'FALLBACK' } })).toBe('FALLBACK');
+    expect(resolve('{{value}}', { payload: { value: raisingRead, default: 'FALLBACK' } })).toBe('FALLBACK');
+    expect(resolve('{{value}}', { payload: { value: noDescription, default: 'FALLBACK' } })).toBe('FALLBACK');
     expect(resolve('{{value}}', { payload: { value: 'TEST_STRING', default: circular } })).toBe('TEST_STRING');
 
     const { resolve: resolveThrowing } = createParser({ customModifiers: { test: () => { throw new Error('MODIFIER FAILURE'); } } });
@@ -1186,6 +1183,14 @@ describe('parser', () => {
     expect(resolve(new Opaque(), { payload, key: 'common.key' })).toBe('DEFAULT VALUE');
     expect(resolve(circular, { key: 'common.key' })).toBe('common.key');
     expect(resolve(new Opaque(), { key: 'common.key' })).toBe('common.key');
+
+    // A caller that named neither has nothing left to fall back to, whichever
+    // way the conversion failed: a read that raises and a value that serializes
+    // to nothing are as absent as a message that raises on the way to text.
+    expect(resolve(circular)).toBe('');
+    expect(resolve(new Opaque())).toBe('');
+    expect(resolve(raisingRead)).toBe('');
+    expect(resolve(noDescription)).toBe('');
 
     // A message a conversion does describe is still the message.
     expect(resolve({ a: 1 }, { payload, key: 'common.key' })).toBe('{"a":1}');
