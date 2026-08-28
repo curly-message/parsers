@@ -544,6 +544,11 @@ describe('parser', () => {
     expect(at(2 * week)).toBe(relative.format(2, 'week'));
     expect(at(2 * month)).toBe(relative.format(2, 'month'));
     expect(at(2 * year)).toBe(relative.format(2, 'year'));
+
+    // A doubled step rounds to the same answer for any factor near twelve, so
+    // the top rung is pinned where that rounding parts instead.
+    expect(at(17 * month)).toBe(relative.format(1, 'year'));
+    expect(at(18 * month)).toBe(relative.format(2, 'year'));
   });
   it('`currency` modifier works', () => {
     const resolve = resolverFor<{ value?: number }>(defaultLocale);
