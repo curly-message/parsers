@@ -713,6 +713,18 @@ describe('parser', () => {
     expect(resolve('{{v:eq; X:HIT; default:D}}', { payload: { v: 'X' } })).toBe('HIT');
     expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
   });
+  it('a modifier registered under a prototype name answers to it', () => {
+    const reports: Report[] = [];
+    // A registry reaches the parser from JavaScript, where a name a prototype
+    // already answers to is a name like any other. The table is built onto a
+    // null prototype and finished with a spread, which defines rather than
+    // assigns, so the name stays the table's own.
+    const registry: Parser.Options['customModifiers'] = { ['__proto__']: ({ value }) => `HIT:${value}` };
+    const { resolve } = createParser({ customModifiers: registry, onReport: (entry) => reports.push(entry) });
+
+    expect(resolve('{{v:__proto__; default:D}}', { payload: { v: 'X' } })).toBe('HIT:X');
+    expect(reports).toHaveLength(0);
+  });
   it('a modifier the caller registers is one the parser knows', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({
