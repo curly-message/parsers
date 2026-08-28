@@ -112,7 +112,10 @@ nodes**, and the value is read as one no conversion describes: it falls through
 its fallback chain and reports as `unserializable-value`. That is what a single
 conversion may spend, and a resolution converts one value once however many
 placeholders name it, so what a resolution spends converting is bounded by the
-values it reaches rather than by the reads it makes of them. A value built
+values it reaches rather than by the reads it makes of them. That covers the
+host's own conversion as well as the JSON walk, so a class instance whose
+`toString` runs host code runs it once for the resolution rather than once for
+each placeholder, and one that raises is not asked a second time. A value built
 afresh on each read — by a payload getter, or by a custom modifier — is a new
 value every time and is converted every time.
 
