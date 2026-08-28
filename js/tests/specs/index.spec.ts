@@ -1712,6 +1712,33 @@ describe('parser', () => {
     expect(resolve('{{v}}{{v}}{{v}}', { payload: { v: carrier } })).toBe('FNFNFN');
     expect(coercions).toBe(1);
   });
+  it('a conversion is recorded for the call that made it, not for the parser', () => {
+    const { resolve } = defaultParser;
+
+    let coercions = 0;
+
+    class Counted {
+      toString() { coercions += 1; return `T${coercions}`; }
+    }
+
+    const value = new Counted();
+
+    // One call is the scope. Inside it the first read answers every later one;
+    // the next call converts afresh, however many calls the parser has served.
+    expect(resolve('{{v}}{{v}}', { payload: { v: value } })).toBe('T1T1');
+    expect(resolve('{{v}}{{v}}', { payload: { v: value } })).toBe('T2T2');
+    expect(coercions).toBe(2);
+
+    // So a payload the host mutates between two calls is answered with what it
+    // says now, not with the text an earlier call came out with.
+    const mutated = { a: 1 };
+
+    expect(resolve('{{v}}', { payload: { v: mutated } })).toBe('{"a":1}');
+
+    mutated.a = 2;
+
+    expect(resolve('{{v}}', { payload: { v: mutated } })).toBe('{"a":2}');
+  });
   it('converting a value once leaves what a message resolves to unchanged', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ customModifiers: { test: ({ value }) => value }, onReport: (report) => { reports.push(report); } });
