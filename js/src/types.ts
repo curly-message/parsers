@@ -87,8 +87,9 @@ export module Modifier {
 
   /**
    * A value's own configuration, standing in the payload where the value
-   * would. An entry is a wrapper only when every key it owns is one of these;
-   * an entry owning anything else is a value, wrapper-shaped or not.
+   * would. An entry is a wrapper only when it owns at least one key and every
+   * key it owns is one of these; an entry owning anything else, or owning
+   * nothing at all, is a value, wrapper-shaped or not.
    */
   export type Wrapper<Value = any, CustomModifierProps = any> = {
     /** The value itself. A wrapper carrying none falls back like a missing key. */
