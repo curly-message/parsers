@@ -172,6 +172,12 @@ link in it. Anything the chain reads and could not convert is reported as
 `unserializable-value`; a link nothing reaches is never read, so it is never
 reported either.
 
+A modifier reaches the chain by reading its own `defaultValue`, which resolves
+at the moment of that read — running whatever host code the chain carries and
+reporting a link it cannot describe. A generic copy of a modifier's config is
+such a read, so a rest destructure, a spread or `JSON.stringify` walks a chain
+that a modifier taking the keys it needs by name leaves alone.
+
 Formatting options are keyed by modifier name, and their layers compose per
 property: the parser's `modifierDefaults`, then the `props` the call passes,
 then the wrapper's own `props`. Each layer overrides only the properties it

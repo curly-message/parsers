@@ -787,6 +787,33 @@ describe('parser', () => {
 
     expect(seen).toEqual(['0', 'false', 'null', '[1,2]', 'INLINE']);
   });
+  it('a modifier reads its default through an accessor, so the read is what walks the chain', () => {
+    const reports: Report[] = [];
+    const descriptors: (PropertyDescriptor | undefined)[] = [];
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-descriptor': (config) => { descriptors.push(Object.getOwnPropertyDescriptor(config, 'defaultValue')); return 'DONE'; },
+        'x-named': ({ value }) => value,
+        'x-copy': (config) => ({ ...config }).value,
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+    const payload = { v: 'V', default: circular };
+
+    expect(resolve('{{v:x-descriptor}}', { payload: { v: 'V', default: 'D' } })).toBe('DONE');
+    expect(typeof descriptors[0]?.get).toBe('function');
+    expect(descriptors[0]).toMatchObject({ enumerable: true, configurable: true });
+    expect(descriptors[0]).not.toHaveProperty('value');
+
+    // The chain is work the read does, so a modifier taking the keys it needs
+    // by name never reaches the link nothing can describe, and one copying the
+    // config generically reads the accessor and does.
+    expect(resolve('{{v:x-named}}', { payload })).toBe('V');
+    expect(reports).toHaveLength(0);
+
+    expect(resolve('{{v:x-copy}}', { payload })).toBe('V');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
   it('a payload default a modifier cannot turn into text still fails soft', () => {
     const { resolve } = defaultParser;
 

@@ -110,7 +110,19 @@ export module Modifier {
     props?: Props<CustomModifierProps>;
   };
 
-  export type T<CustomModifierProps = any> = (config: CommonProps<CustomModifierProps> & { options: ModifierOption[]; defaultValue?: DefaultValue }) => any;
+  export type T<CustomModifierProps = any> = (config: CommonProps<CustomModifierProps> & {
+    options: ModifierOption[];
+    /**
+     * The fallback chain, resolved by the read rather than before the modifier
+     * was called: reading it walks the wrapper's `default`, then the payload's,
+     * then the one the placeholder declared, runs whatever host code those
+     * links carry, and reports one no conversion describes. A generic copy of
+     * the config is such a read — a rest destructure, a spread,
+     * `JSON.stringify` — so a modifier with no use for the default takes the
+     * keys it needs by name.
+     */
+    defaultValue?: DefaultValue;
+  }) => any;
 
   export type DefaultModifiers = typeof modifiers;
 

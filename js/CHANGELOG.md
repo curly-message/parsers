@@ -76,6 +76,12 @@ Initial version line for `@curly-message/parser`.
   than `'no'`, and under `{ count: { default: 'none' }, default: '-' }` to
   `'none'`. A link that is missing, or that no conversion turns into text, is
   skipped, and a present value still outranks the whole chain.
+* A modifier reads that chain rather than being handed it. Its `defaultValue`
+  resolves at the moment of the read, so a modifier that never asks leaves the
+  chain unresolved and a link nobody consulted is never reported. A generic
+  copy of the config is such a read — a rest destructure, a spread,
+  `JSON.stringify` — so a modifier with no use for the default takes the keys
+  it needs by name.
 * A layer of formatting options cannot reset the layer beneath it. The parser's
   `modifierDefaults` and the `props` a call passes keep the same modifier-keyed
   shape and compose per property: each layer overrides only the properties it
