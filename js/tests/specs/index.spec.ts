@@ -843,6 +843,38 @@ describe('parser', () => {
     expect(resolve({ a: 1 }, { payload, key: 'common.key' })).toBe('{"a":1}');
     expect(resolve(42, { payload, key: 'common.key' })).toBe('42');
   });
+  it('the chain a message resolves through reports what it read and could not describe', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // The message resolved, so nothing read the payload's link behind it.
+    expect(resolve('MESSAGE', { payload: { default: circular }, key: 'common.key' })).toBe('MESSAGE');
+    expect(reports).toHaveLength(0);
+
+    // The message did not, so the link is read — and a link that is present
+    // and cannot be described is a payload value that went missing, the same
+    // one a placeholder would report. The report names no placeholder, because
+    // there is none: the key is what says which message went looking.
+    expect(resolve(circular, { payload: { default: circular }, key: 'common.key' })).toBe('common.key');
+    expect(reports).toEqual([{
+      code: 'unserializable-value',
+      message: 'A payload value could not become text, so resolution read it as missing.',
+      key: 'common.key',
+      limit: undefined,
+      text: '',
+    }]);
+
+    // A link that refuses to be read reports too, like one that cannot become
+    // text: both are entries the payload carries and resolution could not use.
+    expect(resolve(circular, { payload: { get default() { throw new Error('READ FAILURE'); } }, key: 'common.key' })).toBe('common.key');
+    expect(reports.map(({ code }) => code)).toEqual(Array(2).fill('unserializable-value'));
+
+    // A link nobody passed is not a defect, and neither is a message nothing
+    // describes: that message is one nobody wrote, so it echoes its key alone.
+    expect(resolve(circular, { payload: {}, key: 'common.key' })).toBe('common.key');
+    expect(resolve(circular, { key: 'common.key' })).toBe('common.key');
+    expect(reports).toHaveLength(2);
+  });
   it('a message default no conversion can describe is skipped, not resolved', () => {
     const { resolve } = defaultParser;
 

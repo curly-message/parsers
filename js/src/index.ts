@@ -160,6 +160,17 @@ const text = (value: any): string | undefined => {
   }
 };
 
+// A value nobody passed is not a defect; a value that cannot become text is.
+// Both answer nothing, so the one that is a defect has to say so on the way
+// past, and every chain the format resolves reads its links through here.
+const describedText = (declared: any, onUndescribed: () => void) => {
+  const output = text(declared);
+
+  if (declared !== undefined && output === undefined) onUndescribed();
+
+  return output;
+};
+
 // Reserved by the payload for a value's own configuration.
 const WRAPPED = ['value', 'default', 'props'];
 
@@ -241,14 +252,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
     });
 
-    // A value nobody passed is not a defect; a value that cannot become text is.
-    const payloadText = (declared: any) => {
-      const output = text(declared);
-
-      if (declared !== undefined && output === undefined) report('unserializable-value', placeholder, messageKey, onReport);
-
-      return output;
-    };
+    const payloadText = (declared: any) => describedText(declared, raised);
 
     const valueText = payloadText(value);
 
@@ -410,13 +414,22 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     const locale: Locale | undefined = ownValue(context, 'locale');
     const key: Parser.Key | undefined = ownValue(context, 'key');
 
+    const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
+    // A report about the chain a message resolves through names no placeholder,
+    // and the link it is about is one nothing describes, so it carries no
+    // excerpt: the key is what says which message went looking.
+    const raised = () => report('unserializable-value', '', key, onReport);
+
     // Everything the format carries is text, and the message becomes text
     // before anything reads it rather than after everything has: a host that
     // wrote its message as something else gets it interpolated and unescaped
     // like any other. A link no conversion can describe does not exist, the
     // same way such a value is not a value, so the chain steps past it — a
     // message default that cannot become text must not swallow the key echo.
-    const value = text(message) ?? text(ownValue(payload, 'default')) ?? (key === undefined ? '' : key);
+    // Stepping past the payload's link is reported, because that link is a
+    // payload value like any other; stepping past the message is not, because
+    // a message nothing describes is a message nobody wrote.
+    const value = text(message) ?? describedText(ownValue(payload, 'default', raised), raised) ?? (key === undefined ? '' : key);
 
     return interpolate({ value, payload, props, parserOptions, locale, key });
   },
