@@ -782,6 +782,22 @@ describe('parser', () => {
 
     expect(reports).toHaveLength(0);
   });
+  it('a modifier the caller registers under a built-in name answers in its place', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({
+      customModifiers: { eq: ({ value }) => `CUSTOM:${value}`, number: () => 'CUSTOM NUMBER' },
+      onReport: (report) => { reports.push(report); },
+    });
+
+    // A caller's table layers over the built-in one rather than under it, so a
+    // name it carries is the modifier a message writing that name reaches —
+    // the placeholder that names none and runs `eq` included.
+    expect(resolve('{{v:eq; X:HIT; default:D}}', { payload: { v: 'X' } })).toBe('CUSTOM:X');
+    expect(resolve('{{v; X:HIT; default:D}}', { payload: { v: 'X' } })).toBe('CUSTOM:X');
+    expect(resolve('{{v:number}}', { payload: { v: 1.5 }, locale: defaultLocale })).toBe('CUSTOM NUMBER');
+
+    expect(reports).toHaveLength(0);
+  });
   it('a value that cannot become text is reported, and one nobody passed is not', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
