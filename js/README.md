@@ -66,8 +66,10 @@ reached where the report is about one, the message's `key` where one was
 passed, and `text`, the source of the trouble: the placeholder that named it
 for `unknown-modifier` and `unserializable-value`, the output that would not
 settle for `pass-limit` and `output-limit`. Only `text` derives from the
-payload, and it arrives cut at 120 characters and with its line terminators
-escaped, so a report is safe to write anywhere as-is.
+payload. It is cut to 120 characters of what reached it and escaped after that
+— quotes, backslashes, and every line terminator — so what arrives is longer
+than 120 wherever the cut carried something to escape, and no payload can forge
+a line where a report is written.
 
 Two guards bound resolution, and reaching either is what the two limit codes
 report. A payload value may name another placeholder, so interpolation runs

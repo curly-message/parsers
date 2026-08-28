@@ -1341,6 +1341,28 @@ describe('parser', () => {
     expect(grow('x'.repeat(11))).toBe(`${'x'.repeat(110)}{{a}}`);
     expect(grow('x'.repeat(13))).toBe(`${'x'.repeat(limit)}...`);
   });
+  it('the cut counts what reached the report, and the escaping happens after it', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    const limit = 120;
+    // A placeholder naming a modifier nobody registered reports the placeholder
+    // itself, so the excerpt is exactly what the message spelled.
+    const named = (name: string) => {
+      reports.length = 0;
+      resolve(`{{v:${name}}}`, { payload: { v: 1 }, locale: defaultLocale });
+
+      return reports[0].text;
+    };
+
+    expect(named('x'.repeat(200))).toBe(`{{v:${'x'.repeat(limit - 4)}...`);
+
+    // Every backslash the cut carried leaves as two, so what arrives is longer
+    // than the bound. Cutting the escaped form instead would hold the bound and
+    // sever a sequence at it, which is the worse trade: the bound is there to
+    // keep a report small, and the escaping is there to keep it safe.
+    expect(named('\\'.repeat(200))).toBe(`{{v:${'\\\\'.repeat(limit - 4)}...`);
+  });
   it('a report never carries a line terminator out of the payload', () => {
     const reports: Report[] = [];
     const resolve = resolverFor<{ v1?: string }>(defaultLocale, createParser({ onReport: (report) => { reports.push(report); } }));
