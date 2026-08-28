@@ -311,6 +311,16 @@ describe('parser', () => {
     expect(resolve('{{v:lt; abc:ABC; default:D}}', { payload: { v: 1 } })).toBe('D');
     expect(resolve('{{v:gte; abc:ABC; 5:FIVE; default:D}}', { payload: { v: 7 } })).toBe('FIVE');
   });
+  it('a two-legged comparison runs equality over every option, numeric or not', () => {
+    const { resolve } = defaultParser;
+
+    // The equality leg reads the options as the message wrote them, so a key
+    // no numeric ordering could hold is still one it can select.
+    expect(resolve('{{v:lte; abc:X; default:D}}', { payload: { v: 'abc' } })).toBe('X');
+    expect(resolve('{{v:gte; abc:X; default:D}}', { payload: { v: 'abc' } })).toBe('X');
+    expect(resolve('{{v:lte; 10:TEN; abc:X; default:D}}', { payload: { v: 'abc' } })).toBe('X');
+    expect(resolve('{{v:gte; abc:X; 5:FIVE; default:D}}', { payload: { v: 'abc' } })).toBe('X');
+  });
   it('`number` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
     const resolveAlt = resolverFor<{ value?: any }>(altLocale);
