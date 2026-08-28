@@ -90,6 +90,22 @@ describe('payload typing', () => {
     expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'quarter' } }, locale: 'en' })).toBe('this year');
   });
 
+  it('accepts implementation defaults for a host-defined modifier', () => {
+    const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }>({
+      customModifiers: {
+        'x-temp': ({ value, props, parserOptions }) => {
+          const { unit } = { ...parserOptions?.modifierDefaults?.['x-temp'], ...props?.['x-temp'] };
+
+          return `${value}${unit}`;
+        },
+      },
+      modifierDefaults: { 'x-temp': { unit: 'C' } },
+    });
+
+    expect(resolve('{{v:x-temp}}', { payload: { v: '21' } })).toBe('21C');
+    expect(resolve('{{v:x-temp}}', { payload: { v: '21' }, props: { 'x-temp': { unit: 'F' } } })).toBe('21F');
+  });
+
   it('rejects a typo against a declared payload type', () => {
     const { resolve } = createParser<Payload>();
 
