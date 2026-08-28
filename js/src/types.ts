@@ -21,7 +21,7 @@ type Given<T> = [T][T extends any ? 0 : never];
  */
 type AtLeastOne<T> = { [Key in keyof T]-?: Record<Key, T[Key]> & Omit<T, Key> }[keyof T];
 
-export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options };
+export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, CustomModifierProps> };
 
 /**
  * The text every value a resolution has converted came out as, by identity, the
@@ -34,9 +34,10 @@ export type Conversions = Map<any, string | undefined>;
 /**
  * A single interpolation pass. It sees the message's key on top of what a pass
  * needs to substitute, because a report names the message it came from, and the
- * conversions the resolution around it has already made.
+ * conversions the resolution around it has already made. A pass carries the
+ * host's props without reading one, so it names no props type of its own.
  */
-export type Interpolate = (config: CommonProps & { payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions }) => string;
+export type Interpolate = (config: CommonProps<any> & { payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions }) => string;
 
 /** The interpolation loop. */
 export type Interpolation = Interpolate;
@@ -139,7 +140,7 @@ export module Modifier {
 export module Parser {
   export type OnReport = (report: Report) => void;
 
-  export type Options<Key extends string = Modifier.Key, Props = any> = {
+  export type Options<Key extends string = Modifier.Key, Props = Modifier.DefaultProps> = {
     /**
      * Modifiers registered by name, over the built-in ones. Registration is
      * what makes a name one a message may write, so an entry that is not a

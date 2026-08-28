@@ -994,7 +994,7 @@ describe('parser', () => {
     ];
 
     for (const customModifiers of hostile) {
-      const { resolve } = createParser({ customModifiers: customModifiers as Parser.Options['customModifiers'] });
+      const { resolve } = createParser({ customModifiers });
 
       expect(resolve('{{value}}', { payload: { value: 'TEST_STRING' } })).toBe('TEST_STRING');
       expect(resolve('{{value:test}}', { payload: { value: 'TEST_STRING', default: 'FALLBACK' } })).toBe('FALLBACK');

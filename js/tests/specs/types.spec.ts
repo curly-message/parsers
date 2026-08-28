@@ -238,6 +238,18 @@ describe('parser option typing', () => {
 
     expect(resolve('Hi!')).toBe('Hi!');
   });
+
+  it('rejects props names a bag declaring none cannot read', () => {
+    const options: Parser.Options = {
+      // @ts-expect-error a bag declaring no props holds modifiers reading the built-in table, which names no `x-own`
+      customModifiers: { 'x-own': ({ value, props }) => `${value}@${props?.['x-own']?.width}` },
+      // @ts-expect-error and carries defaults for that same table, which names no `x-own` either
+      modifierDefaults: { 'x-own': { width: 3 } },
+    };
+    const { resolve } = createParser(options);
+
+    expect(resolve('{{v:x-own}}', { payload: { v: '1' } })).toBe('1@undefined');
+  });
 });
 
 // `Modifier.DefaultKeys` is `keyof typeof modifiers`, so the modifier module's
