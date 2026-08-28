@@ -134,6 +134,11 @@ wrapper props     { number: { maximumFractionDigits: 1 } }
 effective         { maximumFractionDigits: 1, useGrouping: true }  ->  1,234.6
 ```
 
+`number` formats at most two fraction digits when no layer names a maximum.
+That two is a default rather than a cap: a layer naming a
+`minimumFractionDigits` above it widens the default to reach it, the way
+`Intl.NumberFormat` widens its own.
+
 ## Escaping
 
 The syntax reserves a colon, a semicolon, either brace, a backslash and

@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { AGO_LADDER, getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer } from './utils';
+import { AGO_LADDER, getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer, ownValue } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back.
@@ -41,10 +41,16 @@ export const number: Modifier.T<Modifier.NumberProps> = ({ value, props, default
 
   if (input === undefined) return defaultValue;
 
-  const { maximumFractionDigits: maximumFractionDigitsDefault, ...defaults } = getModifierDefaults<Modifier.NumberProps>('number', parserOptions);
-  const { maximumFractionDigits = maximumFractionDigitsDefault ?? 2, ...rest } = ownLayer(props, 'number');
+  const layered = mergeLayer(getModifierDefaults<Modifier.NumberProps>('number', parserOptions), ownLayer(props, 'number'));
+  // Two fraction digits is what this modifier formats when nobody named a
+  // maximum: a default, not a cap. `Intl` widens its own default maximum to
+  // reach a larger minimum, and this default widens the same way — held at two
+  // over a layer's `minimumFractionDigits`, it would contradict it, `Intl`
+  // would raise, and the number would resolve to a fallback nobody asked for.
+  const minimum = Number(ownValue(layered, 'minimumFractionDigits')) || 0;
+  const maximumFractionDigits = ownValue(layered, 'maximumFractionDigits') ?? Math.max(minimum, 2);
 
-  return new Intl.NumberFormat(locale, { ...mergeLayer(defaults, rest), maximumFractionDigits }).format(input);
+  return new Intl.NumberFormat(locale, { ...layered, maximumFractionDigits }).format(input);
 };
 
 export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValue = '', locale = '', parserOptions }) => {

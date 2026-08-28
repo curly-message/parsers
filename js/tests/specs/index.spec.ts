@@ -301,6 +301,16 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_number', { value })).toBe(new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 4 }).format(value));
   });
+  it('the two-digit maximum widens to reach a minimum a layer names', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { minimumFractionDigits: 4 } } });
+
+    expect(resolve('{{v:number; default:D}}', { payload: { v: 1.5 }, locale: defaultLocale })).toBe('1.5000');
+    expect(resolve('{{v:number; default:D}}', { payload: { v: 1.5 }, props: { number: { minimumFractionDigits: 6 } }, locale: defaultLocale })).toBe('1.500000');
+    // A minimum under the default leaves the default in place, and a named
+    // maximum is used as named.
+    expect(resolve('{{v:number}}', { payload: { v: { value: 1.23456, props: { number: { minimumFractionDigits: 1 } } } }, locale: defaultLocale })).toBe('1.23');
+    expect(resolve('{{v:number}}', { payload: { v: { value: 1.23456, props: { number: { maximumFractionDigits: 5 } } } }, locale: defaultLocale })).toBe('1.23456');
+  });
   it('a zero in `modifierDefaults` is a value, not an absence', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 0 }, currency: { ratio: 0, currency: 'EUR' } } });
 
