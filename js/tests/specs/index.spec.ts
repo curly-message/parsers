@@ -474,6 +474,14 @@ describe('parser', () => {
     expect(resolveUsd('common.modifier_currency', { value })).toBe(new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(value));
     expect(resolveCzk('common.modifier_currency', { value })).toBe(new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'CZK' }).format(value * ratio));
   });
+  it('`currency` formats as currency, whatever a layer names as the style', () => {
+    const { resolve } = createParser({ modifierDefaults: { currency: { currency: 'USD', style: 'percent' } } });
+    const expected = new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(0.5);
+
+    expect(resolve('{{v:currency}}', { payload: { v: 0.5 }, locale: defaultLocale })).toBe(expected);
+    expect(resolve('{{v:currency}}', { payload: { v: 0.5 }, props: { currency: { style: 'percent' } }, locale: defaultLocale })).toBe(expected);
+    expect(resolve('{{v:currency}}', { payload: { v: { value: 0.5, props: { currency: { style: 'decimal' } } } }, locale: defaultLocale })).toBe(expected);
+  });
   it('custom modifier works', () => {
     const resolve = resolverFor<{ data?: any }>(defaultLocale, createParser({
       customModifiers: {

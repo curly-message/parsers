@@ -139,6 +139,9 @@ That two is a default rather than a cap: a layer naming a
 `minimumFractionDigits` above it widens the default to reach it, the way
 `Intl.NumberFormat` widens its own.
 
+`currency` formats in the currency style whatever a layer names as the style:
+that style is the modifier rather than one of the options it layers.
+
 ## Escaping
 
 The syntax reserves a colon, a semicolon, either brace, a backslash and

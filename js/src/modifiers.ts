@@ -111,5 +111,9 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = ({ value, defaultVal
 
   if (input === undefined) return defaultValue;
 
-  return new Intl.NumberFormat(locale, { ...mergeLayer({ ...defaults, style: 'currency' }, rest), currency }).format(input);
+  // The currency style is what this modifier is, not one of the options it
+  // layers: a layer naming another style asks it to stop being the modifier the
+  // message named. Pinning it against the parser's defaults alone left the call
+  // and the wrapper able to render `{{v:currency}}` as a percentage.
+  return new Intl.NumberFormat(locale, { ...mergeLayer(defaults, rest), style: 'currency', currency }).format(input);
 };
