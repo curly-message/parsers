@@ -648,6 +648,32 @@ describe('parser', () => {
     // it carries, whatever that key is called.
     expect(resolve('{{default:number}}', { payload: { default: 'abc' }, locale: defaultLocale })).toBe('abc');
   });
+  it('a placeholder that asks its fallback chain twice converts it once', () => {
+    const reports: Report[] = [];
+    const seen: unknown[] = [];
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-void': ({ defaultValue }) => { seen.push(defaultValue); },
+        'x-raise': ({ defaultValue }) => { seen.push(defaultValue); throw new Error('MODIFIER FAILURE'); },
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+    const payload = { v: 1, default: circular };
+
+    // Only a custom modifier asks twice: every built-in that reads the chain
+    // returns what it read, so its answer converts and the placeholder never
+    // comes back. One entry that cannot become text is one value that went
+    // missing, however many times the placeholder asked for it.
+    expect(resolve('{{v:x-void}}', { payload, locale: defaultLocale })).toBe('');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+
+    // And a modifier that raises after reading lands on the same chain, not on
+    // a second walk of it.
+    expect(resolve('{{v:x-raise; default:INLINE}}', { payload, locale: defaultLocale })).toBe('INLINE');
+    expect(reports.map(({ code }) => code)).toEqual(Array(2).fill('unserializable-value'));
+
+    expect(seen).toEqual(['', 'INLINE']);
+  });
   it('a modifier the parser does not know resolves to the fallback chain and reports it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
