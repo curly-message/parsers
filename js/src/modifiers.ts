@@ -42,7 +42,7 @@ export const number: Modifier.T<Modifier.NumberProps> = ({ value, props, default
   if (input === undefined) return defaultValue;
 
   const { maximumFractionDigits: maximumFractionDigitsDefault, ...defaults } = getModifierDefaults<Modifier.NumberProps>('number', parserOptions);
-  const { maximumFractionDigits = maximumFractionDigitsDefault || 2, ...rest } = props?.number || {};
+  const { maximumFractionDigits = maximumFractionDigitsDefault ?? 2, ...rest } = props?.number || {};
 
   return new Intl.NumberFormat(locale, { ...mergeLayer(defaults, rest), maximumFractionDigits }).format(input);
 };
@@ -94,7 +94,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = ({ value, defaultValue = '', l
   if (input === undefined) return defaultValue;
 
   const { format: formatDefault, numeric: numericDefault, ...defaults } = getModifierDefaults<Modifier.AgoProps>('ago', parserOptions);
-  const { format = formatDefault || 'auto', numeric = numericDefault || 'auto', ...rest } = props?.ago || {};
+  const { format = formatDefault ?? 'auto', numeric = numericDefault ?? 'auto', ...rest } = props?.ago || {};
 
   const formatParams = agoFormat(input, format);
 
@@ -109,7 +109,7 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = ({ value, defaultVal
   if (amount === undefined) return defaultValue;
 
   const { ratio: ratioDefault, currency: currencyDefault, ...defaults } = getModifierDefaults<Modifier.CurrencyProps>('currency', parserOptions);
-  const { ratio = ratioDefault || 1, currency = currencyDefault, ...rest } = props?.currency || {};
+  const { ratio = ratioDefault ?? 1, currency = currencyDefault, ...rest } = props?.currency || {};
 
   const input = getModifierInput(amount * ratio);
 

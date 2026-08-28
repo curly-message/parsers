@@ -206,3 +206,10 @@ Initial version line for `@curly-message/parser`.
   out of the ordering entirely, which is also the rule that keeps them
   unselectable, and the ordering runs on a copy, so the list `lte` and `gte`
   hand to their `eq` leg keeps the order the message wrote.
+* A zero in `modifierDefaults` is a value, not an absence. The built-in
+  formatting defaults were read with `||`, so a parser-level
+  `{ number: { maximumFractionDigits: 0 } }` or `{ currency: { ratio: 0 } }`
+  was discarded and the built-in `2` and `1` won — the bottom layer resetting a
+  property the layer above it named, which is exactly what the layering rule
+  forbids. The defaults layer is now read for presence, so `0` composes like
+  any other value.
