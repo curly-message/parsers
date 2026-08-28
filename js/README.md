@@ -188,8 +188,8 @@ specification disagree, this implementation is wrong.
 
 ```bash
 npm install
-npm test        # builds, typechecks, then runs vitest
-npm run lint
+npm test         # builds, typechecks, lints, then runs vitest
+npm run lint:fix # applies what the lint step only reports
 ```
 
 Requires Node.js 22 or newer.

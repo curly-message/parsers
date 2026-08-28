@@ -88,9 +88,9 @@ differently.**
 
 - There is no root manifest: run the checks from inside the implementation
   directory (`cd js`), and run them for every directory your change touches.
-- Before each code commit: `npm test` and `npm run lint` pass. `pretest` builds
-  and typechecks first, so a green `npm test` covers all three. Report real
-  output — never claim done without running them.
+- Before each code commit: `npm test` passes. `pretest` builds, typechecks and
+  lints first, so that one command covers all four, and it is the one CI runs.
+  Report real output — never claim done without running it.
 - Type/lint/build errors never reach a commit, not even WIP.
 - Doc-only changes skip the build but still verify links resolve and markdown
   renders.
@@ -167,8 +167,8 @@ repository, not just these docs.
 - Formatting contract (the `@stylistic` block in each implementation's
   `eslint.config.js` — for `js/`: 2-space indent, single quotes, semicolons,
   trailing commas on multiline, spaced object braces, no trailing whitespace,
-  at most one consecutive blank line, newline at EOF). Let `npm run lint`
-  handle it.
+  at most one consecutive blank line, newline at EOF). `npm run lint` reports
+  what breaks it; let `npm run lint:fix` handle it.
 - Prefer the **functional, immutable** style for shared state (computed-key
   spread `{ ...acc, [k]: v }`, `reduce`). That spread form has `DefineProperty`
   semantics — it can't pollute `Object.prototype`. On a **measured hot path** a
