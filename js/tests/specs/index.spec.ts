@@ -371,6 +371,19 @@ describe('parser', () => {
       expect(props.number).not.toBe(wrapperProps.number);
     });
   });
+  it('a modifier receives the call\'s `props` copied one level down', () => {
+    const seen: any[] = [];
+    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+    const callProps = { number: { maximumFractionDigits: 1 } };
+
+    expect(resolve('{{v:test}}', { payload: { v: 1 }, props: callProps })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1 } }, props: callProps })).toBe('DONE');
+
+    seen.forEach((props) => {
+      expect(props).not.toBe(callProps);
+      expect(props.number).not.toBe(callProps.number);
+    });
+  });
   it('merging a wrapper\'s `props` cannot reach a prototype', () => {
     const { resolve } = createParser({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
     const polluting = JSON.parse('{"__proto__":{"polluted":true}}');
