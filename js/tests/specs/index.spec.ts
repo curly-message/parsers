@@ -329,6 +329,17 @@ describe('parser', () => {
     expect(resolve('{{v:lt; abc:ABC; default:D}}', { payload: { v: 1 } })).toBe('D');
     expect(resolve('{{v:gte; abc:ABC; 5:FIVE; default:D}}', { payload: { v: 7 } })).toBe('FIVE');
   });
+  it('a numeric comparison breaks a tie by source order', () => {
+    const { resolve } = defaultParser;
+
+    // Two keys spelled differently that carry the same numeric value tie, and
+    // the ordering leaves them as the message wrote them: whichever of the two
+    // the message wrote first is the one selected, in either direction.
+    expect(resolve('{{v:lt; 2:FIRST; 2.0:SECOND; default:D}}', { payload: { v: 1 } })).toBe('FIRST');
+    expect(resolve('{{v:lt; 2.0:FIRST; 2:SECOND; default:D}}', { payload: { v: 1 } })).toBe('FIRST');
+    expect(resolve('{{v:gt; 2:FIRST; 2.0:SECOND; default:D}}', { payload: { v: 3 } })).toBe('FIRST');
+    expect(resolve('{{v:gt; 2.0:FIRST; 2:SECOND; default:D}}', { payload: { v: 3 } })).toBe('FIRST');
+  });
   it('a two-legged comparison runs equality over every option, numeric or not', () => {
     const { resolve } = defaultParser;
 
