@@ -213,3 +213,9 @@ Initial version line for `@curly-message/parser`.
   property the layer above it named, which is exactly what the layering rule
   forbids. The defaults layer is now read for presence, so `0` composes like
   any other value.
+* A failing `onReport` no longer fails the resolution. The diagnostic callback
+  ran unguarded, so a host whose logger raises — a full disk, a structured
+  logger that cannot serialize a field — turned every reported message into an
+  application-level exception. Reporting is an observation, not a step of the
+  resolution: the callback is dispatched inside a guard and the message still
+  comes back.
