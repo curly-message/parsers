@@ -1849,6 +1849,28 @@ describe('parser', () => {
     expect(grow('x'.repeat(11))).toBe(`${'x'.repeat(110)}{{a}}`);
     expect(grow('x'.repeat(13))).toBe(`${'x'.repeat(limit)}...`);
   });
+  it('the report bound is a length an excerpt may reach, not one it may not', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // A placeholder naming a modifier nobody registered reports the placeholder
+    // itself, which is the one excerpt whose length a message spells exactly.
+    // The bound is spelled out here rather than read from the source.
+    const limit = 120;
+    const named = (name: string) => {
+      reports.length = 0;
+      resolve(`{{v:${name}}}`, { payload: { v: 1 }, locale: defaultLocale });
+
+      return reports[0].text;
+    };
+    const name = 'x'.repeat(limit - '{{v:}}'.length);
+    // One character longer, the cut takes the first 120 and stops inside the
+    // closing pair, so what the marker is appended to ends at a single brace.
+    const cut = `{{v:${'x'.repeat(limit - '{{v:}'.length)}}`;
+
+    expect(named(name)).toBe(`{{v:${name}}}`);
+    expect(named(`${name}x`)).toBe(`${cut}...`);
+  });
   it('the cut counts what reached the report, and the escaping happens after it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
