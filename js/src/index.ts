@@ -152,12 +152,27 @@ const isWrapped = (value: any) => {
   return !!keys.length && keys.every((key) => WRAPPED.includes(key));
 };
 
+// A `props` layer copied down to the objects it names. What a modifier
+// receives is the parser's own object, so a modifier that writes into what it
+// was handed reaches neither the next placeholder nor the caller.
+const ownProps = (layer: any) => {
+  const output: Record<string, any> = Object.create(null);
+
+  ownKeys(layer).forEach((name) => {
+    const value = ownValue(layer, name);
+
+    output[name] = isPlainObject(value) ? mergeLayer(value, undefined) : value;
+  });
+
+  return { ...output };
+};
+
 // Layers of `props` compose the way the parser's own defaults and the call's
 // already do: each names what it overrides and leaves the rest standing.
 const mergeProps = (base: any, override: any) => {
-  if (!isPlainObject(override)) return base;
+  if (!isPlainObject(override)) return isPlainObject(base) ? ownProps(base) : base;
 
-  return mergeLayer(base, override, (from, to) => isPlainObject(to) ? mergeLayer(from, to) : to);
+  return ownProps(mergeLayer(base, override, (from, to) => isPlainObject(to) ? mergeLayer(from, to) : to));
 };
 
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey }) => {
