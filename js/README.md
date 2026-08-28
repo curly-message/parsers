@@ -38,8 +38,9 @@ supplied. A caller that passes none and a caller that passes the empty string
 resolve alike; one that passes a locale the host then rejects has supplied one,
 and takes the fallback chain like any other formatting failure.
 
-Each formatting modifier reads its value as a particular kind of number, and a
-value that is not one resolves the placeholder to its `default`:
+Given a locale, each formatting modifier reads its value as a particular kind
+of number, and a value that is not one resolves the placeholder to its
+`default`:
 
 | Modifier | Value |
 | --- | --- |
