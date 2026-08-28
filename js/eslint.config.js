@@ -59,8 +59,8 @@ export default tseslint.config(
     },
   },
   {
-    // The public types (Parser, Modifier, Config) are namespace-shaped since
-    // v1, spelled with the `module` keyword of that era.
+    // The public types (Parser, Modifier) are namespace-shaped since v1,
+    // spelled with the `module` keyword of that era.
     files: ['src/types.ts'],
     rules: {
       '@typescript-eslint/no-namespace': 'off',
