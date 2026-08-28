@@ -106,6 +106,16 @@ describe('payload typing', () => {
     expect(resolve('{{v:x-temp}}', { payload: { v: '21' }, props: { 'x-temp': { unit: 'F' } } })).toBe('21F');
   });
 
+  it('accepts a wrapper declaring props for a host-defined modifier', () => {
+    const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }>({
+      customModifiers: {
+        'x-temp': ({ value, props }) => `${value}${props?.['x-temp']?.unit}`,
+      },
+    });
+
+    expect(resolve('{{v:x-temp}}', { payload: { v: { value: '21', props: { 'x-temp': { unit: 'F' } } } }, props: { 'x-temp': { unit: 'C' } } })).toBe('21F');
+  });
+
   it('rejects a typo against a declared payload type', () => {
     const { resolve } = createParser<Payload>();
 
@@ -132,6 +142,30 @@ describe('payload typing', () => {
 
     // @ts-expect-error `unit` is no wrapper key, which leaves the declared `string`
     expect(resolve(GREETING, { payload: { applicationName: { value: 'App', unit: 'kg' } } })).toBe('Hi {"value":"App","unit":"kg"}!');
+  });
+
+  it('rejects wrapper props that are not a table of modifier props', () => {
+    const { resolve } = createParser<{ count: number }>();
+    // @ts-expect-error a wrapper's `props` is keyed by modifier name, like every other layer
+    const count: Modifier.Wrapper<number> = { value: 1234.56, props: 42 };
+
+    expect(resolve('You have {{count:number}}.', { payload: { count }, locale: 'en' })).toBe('You have 1,234.56.');
+  });
+
+  it('rejects a wrapper prop option of a type its modifier does not take', () => {
+    const { resolve } = createParser<{ count: number }>();
+    // @ts-expect-error `maximumFractionDigits` is a number, and a modifier that throws takes its fallback
+    const count: Modifier.Wrapper<number> = { value: 1234.56, props: { number: { maximumFractionDigits: 'lots' } } };
+
+    expect(resolve('You have {{count:number}}.', { payload: { count }, locale: 'en' })).toBe('You have .');
+  });
+
+  it('rejects wrapper props naming a modifier nobody registered', () => {
+    const { resolve } = createParser<{ count: number }>();
+    // @ts-expect-error `nope` is no registered modifier, so no layer carries props for it
+    const count: Modifier.Wrapper<number> = { value: 1234.56, props: { nope: { a: 1 } } };
+
+    expect(resolve('You have {{count:number}}.', { payload: { count }, locale: 'en' })).toBe('You have 1,234.56.');
   });
 });
 

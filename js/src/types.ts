@@ -101,7 +101,7 @@ export module Modifier {
    * key it owns is one of these; an entry owning anything else, or owning
    * nothing at all, is a value, wrapper-shaped or not.
    */
-  export type Wrapper<Value = any, CustomModifierProps = any> = {
+  export type Wrapper<Value = any, CustomModifierProps = DefaultProps> = {
     /** The value itself. A wrapper carrying none falls back like a missing key. */
     value?: Value;
     /** Tried before the payload's own `default` and before the inline one. */
@@ -144,7 +144,7 @@ export module Parser {
   export type PayloadDefault = { [key in 'default']?: any };
 
   /** What a payload carries under a key: the value, or its configuration. */
-  export type PayloadEntry<Value = any> = Value | Modifier.Wrapper<Value>;
+  export type PayloadEntry<Value = any, Props = Modifier.DefaultProps> = Value | Modifier.Wrapper<Value, Props>;
 
   /**
    * The values a message's placeholders name, plus `default` — the fallback
@@ -166,7 +166,7 @@ export module Parser {
    * value holding `\d+` arrives as typed, and one holding `\\server\share`
    * resolves to `\server\share` unless each consumed backslash is doubled.
    */
-  export type Payload<T = any> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, PayloadEntry> & PayloadDefault : { [Key in keyof T]: PayloadEntry<T[Key]> } & PayloadDefault;
+  export type Payload<T = any, Props = Modifier.DefaultProps> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, PayloadEntry<any, Props>> & PayloadDefault : { [Key in keyof T]: PayloadEntry<T[Key], Props> } & PayloadDefault;
 
   export type Key = string;
 
@@ -179,7 +179,7 @@ export module Parser {
    * carries none — the same chain a placeholder falls through, one level up.
    */
   export type Context<P = PayloadDefault, M = Modifier.DefaultProps> = {
-    payload?: Payload<P>;
+    payload?: Payload<P, M>;
     props?: Modifier.Props<M>;
     locale?: Locale;
     key?: Key;
