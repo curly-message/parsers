@@ -14,5 +14,5 @@ Thumbs.db
 
 # Claude Code: user- and session-local only. Shared settings, skills, agents
 # and commands under .claude/ stay tracked.
-.claude/settings.local.json
-.claude/worktrees/
+**/.claude/settings.local.json
+**/.claude/worktrees/
