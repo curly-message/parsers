@@ -9,7 +9,7 @@ export default tseslint.config(
   // default. `.claude/worktrees/` is where the agent tooling checks the branch
   // out a second time, and linting a checkout of the repo from inside the
   // repo reports every dev dependency twice.
-  { ignores: ['**/dist/', '**/lib/', '**/.claude/'] },
+  { ignores: ['**/dist/', '**/.claude/'] },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
