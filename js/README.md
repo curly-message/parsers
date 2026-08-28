@@ -60,11 +60,23 @@ formatting is delegated to `Intl`.
 
 `onReport` is where diagnostics go. The parser writes to no channel of its own,
 so unset it reports nowhere; resolution still fails soft, it just does so
-silently. It is called with a `Report` describing what stopped resolution —
-`code`, an English `message` carrying nothing from the payload, the `limit`
+silently. It is called with a `Report` describing what the parser could not do
+— `code`, an English `message` carrying nothing from the payload, the `limit`
 reached where the report is about one, the message's `key` where one was
-passed, and `text`, the excerpt that never settled. Only `text` derives from the payload, and it arrives truncated
-with its line terminators escaped, so a report is safe to write anywhere as-is.
+passed, and `text`, the source of the trouble: the placeholder that named it
+for `unknown-modifier` and `unserializable-value`, the output that would not
+settle for `pass-limit` and `output-limit`. Only `text` derives from the
+payload, and it arrives cut at 120 characters and with its line terminators
+escaped, so a report is safe to write anywhere as-is.
+
+Two guards bound resolution, and reaching either is what the two limit codes
+report. A payload value may name another placeholder, so interpolation runs
+again over what the last pass produced — at most **10 passes**, after which the
+output is returned with its remaining placeholders unresolved. And the output
+may not exceed **100000 characters**; a pass that would carry it past that
+stops, and the last output under the bound is what resolves. Both are what make
+a payload value that references or multiplies its own placeholder terminate
+rather than hang the caller.
 
 ## Payload
 
