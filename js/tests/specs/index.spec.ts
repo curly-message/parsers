@@ -405,6 +405,16 @@ describe('parser', () => {
 
     expect(resolve('{{v:number}}', { payload: { v: value }, props: { number: { useGrouping: undefined, maximumFractionDigits: undefined } }, locale: defaultLocale })).toBe('1234.5679');
   });
+  it('a `modifierDefaults` prop set to `undefined` leaves the modifier\'s own default standing', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: undefined } } });
+
+    // `modifierDefaults` is the bottom layer a caller writes, and the layer
+    // under it is the modifier itself: a name it sets to `undefined` names
+    // nothing, so the two fraction digits `number` formats stand rather than
+    // giving way to what `Intl` would have chosen.
+    expect(resolve('{{v:number}}', { payload: { v: 1.23456 }, locale: defaultLocale })).toBe('1.23');
+    expect(resolve('{{v:number}}', { payload: { v: 1.23456 }, props: { number: { maximumFractionDigits: 4 } }, locale: defaultLocale })).toBe('1.2346');
+  });
   it('a modifier receives a payload-supplied `props` copied one level down', () => {
     const seen: any[] = [];
     const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
