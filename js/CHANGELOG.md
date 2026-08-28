@@ -123,9 +123,9 @@ Initial version line for `@curly-message/parser`.
   rendered `'0'` and `{{v:date}}` over `''` rendered the Unix epoch, formatting
   a value nobody wrote; text that is empty, or made only of the whitespace the
   specification enumerates, now resolves to the fallback chain in `number`,
-  `date`, `ago` and `currency`. `currency`
-  applied its `ratio` before it read the value, which turned blank text into a
-  `0` its guard never saw; it reads the value first, then applies the ratio.
+  `date`, `ago` and `currency`. `currency` applied its `ratio` before it read
+  the value, which turned blank text into a `0` its guard never saw; it reads
+  the value first, then applies the ratio.
 * `date` reads a date string, not only a timestamp. `+'2024-03-05T10:00:00Z'`
   is `NaN`, so a date written as text resolved to the fallback chain. Numeric
   text is still a timestamp, and anything else is now left to the host's own
