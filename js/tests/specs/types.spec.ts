@@ -79,6 +79,26 @@ describe('payload typing', () => {
     expect(resolve('You have {{count:number}}.', { payload: { count }, locale: 'en' })).toBe('You have 1,234.6.');
   });
 
+  it('accepts a wrapper carrying any one of its keys, and all three', () => {
+    const { resolve } = createParser<{ count: number }>();
+    const value: Modifier.Wrapper<number> = { value: 1234.56 };
+    const fallback: Modifier.Wrapper<number> = { default: 'none' };
+    const props: Modifier.Wrapper<number> = { props: { number: { maximumFractionDigits: 1 } } };
+    const every: Modifier.Wrapper<number> = { value: 1234.56, default: 'none', props: { number: { maximumFractionDigits: 1 } } };
+
+    expect(resolve('{{count:number}}', { payload: { count: value }, locale: 'en' })).toBe('1,234.56');
+    expect(resolve('{{count:number}}', { payload: { count: fallback }, locale: 'en' })).toBe('none');
+    expect(resolve('{{count:number}}', { payload: { count: props }, locale: 'en' })).toBe('');
+    expect(resolve('{{count:number}}', { payload: { count: every }, locale: 'en' })).toBe('1,234.6');
+  });
+
+  it('accepts a wrapper owning a key that holds no value', () => {
+    const { resolve } = createParser<{ count: number }>();
+    const count: Modifier.Wrapper<number> = { value: undefined };
+
+    expect(resolve('{{count; default:D}}', { payload: { count } })).toBe('D');
+  });
+
   it('rejects an `ago` format the resolution ladder does not walk', () => {
     const { resolve } = createParser<{ v: number }>();
     const payload = { v: -40 * 24 * 60 * 60 * 1000 };
@@ -142,6 +162,14 @@ describe('payload typing', () => {
 
     // @ts-expect-error `unit` is no wrapper key, which leaves the declared `string`
     expect(resolve(GREETING, { payload: { applicationName: { value: 'App', unit: 'kg' } } })).toBe('Hi {"value":"App","unit":"kg"}!');
+  });
+
+  it('rejects an entry owning no wrapper key at all', () => {
+    const { resolve } = createParser<Payload>();
+    // @ts-expect-error an entry owning nothing is a value, which leaves the declared `string`
+    const applicationName: Modifier.Wrapper<string> = {};
+
+    expect(resolve(GREETING, { payload: { applicationName } })).toBe('Hi {}!');
   });
 
   it('rejects wrapper props that are not a table of modifier props', () => {
