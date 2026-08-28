@@ -535,6 +535,25 @@ describe('parser', () => {
     expect(resolve('{{v:x-void}}', { payload, locale: defaultLocale })).toBe('');
     expect(resolve('{{v:x-circ; default:D}}', { payload, locale: defaultLocale })).toBe('D');
   });
+  it('the fallback chain waits for a reader, and reports only what one read', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const payload = { v: 1, default: circular };
+
+    // The value resolved, so nothing read the chain and nothing went missing.
+    expect(resolve('{{v:number}}', { payload, locale: defaultLocale })).toBe('1');
+    expect(reports).toHaveLength(0);
+
+    // A two-leg comparison reads the chain no earlier: the strict leg answers
+    // where the equality leg did not, and the default stays behind both.
+    expect(resolve('{{v:lte; 5:FIVE}}', { payload, locale: defaultLocale })).toBe('FIVE');
+    expect(reports).toHaveLength(0);
+
+    // A selection matching nothing does read it, and there the entry no
+    // conversion can describe is a value resolution read as missing.
+    expect(resolve('{{v:eq; 2:TWO}}', { payload, locale: defaultLocale })).toBe('');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
   it('a modifier the parser does not know resolves to the fallback chain and reports it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
