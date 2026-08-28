@@ -338,6 +338,13 @@ export const createParser: Parser.Factory = (parserOptions) => ({
   resolve: (message, { payload, props, locale, key } = {}) => {
     let value = message;
 
+    // A message no conversion can describe does not exist, the same way a value
+    // no conversion can describe is not a value. A string describes itself, so
+    // only anything else is worth the conversion this costs.
+    if (typeof value !== 'string' && text(value) === undefined) {
+      value = undefined;
+    }
+
     if (value === undefined) {
       value = ownValue(payload, 'default');
     }

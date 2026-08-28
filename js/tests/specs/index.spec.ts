@@ -583,6 +583,19 @@ describe('parser', () => {
 
     expect(resolveOpaque('{{value:test; default:FALLBACK}}', { payload: { value: 'TEST_STRING' } })).toBe('FALLBACK');
   });
+  it('a message no conversion can describe is a message that does not exist', () => {
+    const { resolve } = defaultParser;
+    const payload = { default: 'DEFAULT VALUE' };
+
+    expect(resolve(circular, { payload, key: 'common.key' })).toBe('DEFAULT VALUE');
+    expect(resolve(new Opaque(), { payload, key: 'common.key' })).toBe('DEFAULT VALUE');
+    expect(resolve(circular, { key: 'common.key' })).toBe('common.key');
+    expect(resolve(new Opaque(), { key: 'common.key' })).toBe('common.key');
+
+    // A message a conversion does describe is still the message.
+    expect(resolve({ a: 1 }, { payload, key: 'common.key' })).toBe('{"a":1}');
+    expect(resolve(42, { payload, key: 'common.key' })).toBe('42');
+  });
   it('a custom modifier map the host will not describe reads as no custom modifiers', () => {
     const revocable = Proxy.revocable({}, {});
 
