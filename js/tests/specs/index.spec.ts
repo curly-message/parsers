@@ -1064,6 +1064,19 @@ describe('parser', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ code: 'output-limit', limit: 100000, key: 'common.placeholder_chain' });
   });
+  it('an `onReport` that throws does not take the resolution down', () => {
+    const seen: string[] = [];
+    const { resolve } = createParser({
+      onReport: ({ code }) => {
+        seen.push(code);
+
+        throw new Error('the observer blew up');
+      },
+    });
+
+    expect(resolve('{{v:zz; default:D}}', { payload: { v: '1' }, locale: defaultLocale })).toBe('D');
+    expect(seen).toEqual(['unknown-modifier']);
+  });
   it('without `onReport` a parser reports nowhere and still fails soft', () => {
     const { warn } = console;
     const warnings: unknown[] = [];

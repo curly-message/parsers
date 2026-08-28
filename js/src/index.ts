@@ -300,7 +300,12 @@ const REPORT_LIMITS: Partial<Record<Report['code'], number>> = {
 const report = (code: Report['code'], reported: string, key: Parser.Key | undefined, onReport: Parser.OnReport | undefined) => {
   if (!onReport) return;
 
-  onReport({ code, message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(reported) });
+  try {
+    onReport({ code, message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(reported) });
+  } catch {
+    // Reporting is an observation, not a step of the resolution. A host whose
+    // logger fails must still get its message back.
+  }
 };
 
 const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key }) => {
