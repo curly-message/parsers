@@ -116,6 +116,12 @@ export const ownLayer = (target: any, key: PropertyKey) => {
 
 export const getModifierDefaults = <T>(key: keyof T, parserOptions?: Parser.Options) => ownLayer(ownValue(parserOptions, 'modifierDefaults'), key) as Required<T>[keyof T];
 
+// A host formatter reads its options by name off whatever object it is handed,
+// so that object owns every entry it is configured with and inherits none:
+// reading the layers as own entries buys nothing if the object carrying them to
+// the formatter answers for a prototype somebody else wrote to.
+export const formatOptions = (...layers: any[]) => Object.assign(Object.create(null), ...layers);
+
 /**
  * The number a formatting modifier will format, by the host's own conversion.
  * A value that does not convert is one the modifier cannot format — the caller

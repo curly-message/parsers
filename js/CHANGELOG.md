@@ -304,6 +304,16 @@ Initial version line for `@curly-message/parser`.
   `props` carried by a class instance — or by anything else with a prototype of
   its own — was discarded whole and the layer beneath it stood alone. A layer is
   now anything carrying entries to read, and its own entries are what compose.
+* A polluted prototype configures no formatter. The layers were read as own
+  entries and then handed to `Intl` on an ordinary object literal, and a
+  formatter reads its options by name — so through that object's prototype:
+  with `Object.prototype.style` set to `'percent'`, `{{v:number}}` over
+  `1.23456789` rendered `123.46%` instead of `1.23`, `{{v:date}}` took a
+  `dateStyle` nobody passed, `{{v:currency}}` took a `currencyDisplay`, and a
+  `minimumFractionDigits` above the modifier's own maximum made `Intl` raise, so
+  the placeholder reported `failed-modifier` and rendered its fallback. What
+  carries the composed layers to a formatter now owns every entry it is
+  configured with and answers for no prototype.
 * A fallback chain link that refuses to be read is reported. A payload entry, a
   wrapper's `value` or `default`, or the payload's own `default` could be an
   accessor that raises; the read answered "absent" and moved on silently, while
