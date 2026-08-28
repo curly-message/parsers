@@ -1694,6 +1694,24 @@ describe('parser', () => {
 
     expect(reports).toHaveLength(1);
   });
+  it('the conversion budget is a node count a walk may reach, not one it may not', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // The value itself is the first node the walk visits, so a bag of one key
+    // fewer than the bound is walked exactly to it. Every entry is `undefined`,
+    // which JSON omits, so what the walk costs is not what the text costs and
+    // the output bound never sees either bag. The bound is spelled out here
+    // rather than read from the source: a count derived from the constant it is
+    // meant to pin would move along with it.
+    const budget = 100000;
+    const bag = (keys: number) => Object.fromEntries(Array.from({ length: keys }, (_, index) => [`k${index}`, undefined]));
+
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: bag(budget - 1) } })).toBe('{}');
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: bag(budget) } })).toBe('INLINE');
+
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
   it('a value converts once, however many reads a resolution makes of it', () => {
     const { resolve } = defaultParser;
 
