@@ -473,6 +473,29 @@ describe('parser', () => {
     expect(at(500)).toBe(relative.format(1, 'second'));
     expect(at(-500)).toBe(relative.format(-1, 'second'));
   });
+  it('`ago` climbs every step of its unit ladder', () => {
+    const { resolve } = createParser({});
+    const relative = new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' });
+    const at = (value: number) => resolve('{{v:ago}}', { payload: { v: value }, locale: defaultLocale });
+
+    // The ladder is spelled out again rather than read from the source: a step
+    // derived from the table it is meant to pin would move along with it.
+    const second = 1000;
+    const minute = 60 * second;
+    const hour = 60 * minute;
+    const day = 24 * hour;
+    const week = 7 * day;
+    const month = 13 / 3 * week;
+    const year = 12 * month;
+
+    expect(at(2 * second)).toBe(relative.format(2, 'second'));
+    expect(at(2 * minute)).toBe(relative.format(2, 'minute'));
+    expect(at(2 * hour)).toBe(relative.format(2, 'hour'));
+    expect(at(2 * day)).toBe(relative.format(2, 'day'));
+    expect(at(2 * week)).toBe(relative.format(2, 'week'));
+    expect(at(2 * month)).toBe(relative.format(2, 'month'));
+    expect(at(2 * year)).toBe(relative.format(2, 'year'));
+  });
   it('`currency` modifier works', () => {
     const resolve = resolverFor<{ value?: number }>(defaultLocale);
     const value = 10;
@@ -819,6 +842,16 @@ describe('parser', () => {
       expect(resolve('{{v:currency; default:FALLBACK}}', { payload: { v: space }, props, locale: defaultLocale })).toBe('FALLBACK');
     }
   });
+  it('an infinite value is not a number a formatting modifier can format', () => {
+    const { resolve } = createParser({});
+
+    // The host's own conversion answers with infinity both for a value that
+    // spells it and for a decimal that overflows into it, and neither is a
+    // count a locale has a rendering for.
+    for (const value of [Infinity, -Infinity, 'Infinity', '1e400', '-1e400']) {
+      expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: value }, locale: defaultLocale })).toBe('FALLBACK');
+    }
+  });
   it('a numeric comparison converts a blank payload value like any other text', () => {
     const { resolve } = defaultParser;
 
@@ -1148,6 +1181,12 @@ describe('parser', () => {
     expect(resolve('{{v; default:10:30}}')).toBe('10:30');
     expect(resolve('{{v; default:https://example.com/a:b}}')).toBe('https://example.com/a:b');
   });
+  it('the first segment named `default` is the inline default', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; default:FIRST; default:SECOND}}')).toBe('FIRST');
+    expect(resolve('{{v; default:; default:SECOND}}')).toBe('');
+  });
   it('`default` is reserved in lowercase only', () => {
     const { resolve } = defaultParser;
 
@@ -1214,6 +1253,25 @@ describe('parser', () => {
       limit: 10,
       text: '{{v11}}',
     });
+  });
+  it('a reported excerpt is cut at the bound, not at whatever reached it', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // Ten passes each prepend the fill once, so the output the guard reports on
+    // is as long as the fill says. The bound is spelled out here rather than
+    // read from the source: a length derived from the constant it is meant to
+    // pin would move along with it.
+    const limit = 120;
+    const grow = (fill: string) => {
+      reports.length = 0;
+      resolve('{{a}}', { payload: { a: `${fill}{{a}}` }, locale: defaultLocale });
+
+      return reports[0].text;
+    };
+
+    expect(grow('x'.repeat(11))).toBe(`${'x'.repeat(110)}{{a}}`);
+    expect(grow('x'.repeat(13))).toBe(`${'x'.repeat(limit)}...`);
   });
   it('a report never carries a line terminator out of the payload', () => {
     const reports: Report[] = [];
