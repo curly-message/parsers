@@ -221,7 +221,10 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       return resolvedDefault;
     };
 
-    const modifierKey = trim(declaredModifier.join(':'));
+    // A modifier answers to its name, not to the spelling a message needed to
+    // write it: an escape is how a name carrying a reserved character reaches
+    // the parser, the way a key's and an option key's do.
+    const modifierKey = unesc(trim(declaredModifier.join(':')));
     const hasModifier = !!modifierKey;
 
     // A modifier nobody registered is a defect in the message, not a selection:
