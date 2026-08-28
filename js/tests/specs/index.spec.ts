@@ -1656,6 +1656,18 @@ describe('parser', () => {
 
     expect(resolve('{{v}}|{{v}}', { payload: { v: new Raising(), default: 'D' } })).toBe('D|D');
     expect(coercions).toBe(1);
+
+    // A function carries host code the same way an object does, so it is
+    // recorded the same way: it is a value the format converts, not a
+    // primitive whose conversion nobody can observe.
+    coercions = 0;
+
+    const carrier = () => 'UNCALLED';
+
+    carrier.toString = () => { coercions += 1; return 'FN'; };
+
+    expect(resolve('{{v}}{{v}}{{v}}', { payload: { v: carrier } })).toBe('FNFNFN');
+    expect(coercions).toBe(1);
   });
   it('converting a value once leaves what a message resolves to unchanged', () => {
     const reports: Report[] = [];
