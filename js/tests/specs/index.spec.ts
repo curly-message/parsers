@@ -465,6 +465,25 @@ describe('parser', () => {
     expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: polluting } }, props: { number: {} } })).toBe('{"number":{},"__proto__":{"polluted":true}}');
     expect(({} as any).polluted).toBe(undefined);
   });
+  it('a modifier\'s own layer cannot reach a prototype either', () => {
+    const { resolve } = createParser({});
+    // `JSON.parse` is how a `__proto__` arrives as an own key: an object
+    // literal spelling one sets the prototype instead of recording it.
+    const injected = (json: string) => JSON.parse(json);
+
+    expect(resolve('{{v:ago}}', {
+      payload: { v: -2 * 24 * 60 * 60 * 1000 },
+      props: { ago: injected('{"__proto__":{"format":"year","numeric":"always"}}') },
+      locale: defaultLocale,
+    })).toBe('2 days ago');
+    expect(resolve('{{v:currency}}', {
+      payload: { v: 10 },
+      props: { currency: injected('{"__proto__":{"ratio":100},"currency":"USD"}') },
+      locale: defaultLocale,
+    })).toBe('$10.00');
+
+    expect(({} as any).ratio).toBe(undefined);
+  });
   it('a `props` layer overrides only the names it carries, whatever its prototype', () => {
     const { resolve } = createParser({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
     const layer: any = Object.create({ inherited: 'INHERITED' });
