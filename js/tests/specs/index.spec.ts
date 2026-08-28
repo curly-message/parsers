@@ -250,6 +250,21 @@ describe('parser', () => {
     expect(resolve('{{v:ne; YES:A; NO:B; default:D}}', { payload: { v: 'yes' } })).toBe('B');
     expect(resolve('{{v:ne; yes:A; default:D}}', { payload: { v: 'YES' } })).toBe('D');
   });
+  it('the comparison lower-cases, so it folds nothing and reads no locale', () => {
+    const { resolve } = defaultParser;
+
+    // U+00DF written as an escape: a full case fold maps it to `ss` and would
+    // select the option, where a lower case mapping leaves it standing.
+    expect(resolve('{{v:eq; STRASSE:X; default:D}}', { payload: { v: 'stra\u00dfe' } })).toBe('D');
+    expect(resolve('{{v:ne; STRASSE:X; default:D}}', { payload: { v: 'stra\u00dfe' } })).toBe('X');
+
+    // A locale-tailored mapping takes `I` to a dotless `i` under Turkish and
+    // Azerbaijani, which would lose the selection every other locale makes.
+    ['en', 'cs', 'tr', 'tr-TR', 'az', 'lt'].forEach((locale) => {
+      expect(resolve('{{v:eq; I:X; default:D}}', { payload: { v: 'i' }, locale })).toBe('X');
+      expect(resolve('{{v:ne; I:X; default:D}}', { payload: { v: 'i' }, locale })).toBe('D');
+    });
+  });
   it('an absent value takes the fallback chain under `ne` like every other modifier', () => {
     const { resolve } = defaultParser;
 
