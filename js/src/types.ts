@@ -14,6 +14,13 @@ export type Locale = string;
  */
 type Given<T> = [T][T extends any ? 0 : never];
 
+/**
+ * The branches of an all-optional bag that owns at least one of its keys: one
+ * per key, each requiring that key be present and leaving the rest optional.
+ * A key holding `undefined` is owned; the empty object owns none.
+ */
+type AtLeastOne<T> = { [Key in keyof T]-?: Record<Key, T[Key]> & Omit<T, Key> }[keyof T];
+
 export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options };
 
 /**
@@ -101,14 +108,14 @@ export module Modifier {
    * key it owns is one of these; an entry owning anything else, or owning
    * nothing at all, is a value, wrapper-shaped or not.
    */
-  export type Wrapper<Value = any, CustomModifierProps = DefaultProps> = {
+  export type Wrapper<Value = any, CustomModifierProps = DefaultProps> = AtLeastOne<{
     /** The value itself. A wrapper carrying none falls back like a missing key. */
     value?: Value;
     /** Tried before the payload's own `default` and before the inline one. */
     default?: DefaultValue;
     /** Layered over the `props` the call passes, property by property. */
     props?: Props<CustomModifierProps>;
-  };
+  }>;
 
   export type T<CustomModifierProps = any> = (config: CommonProps<CustomModifierProps> & {
     options: ModifierOption[];

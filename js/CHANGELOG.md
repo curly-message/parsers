@@ -103,6 +103,13 @@ Initial version line for `@curly-message/parser`.
   carry — the built-in modifiers' options plus whatever the host registered.
   A wrapper's `props` of `{ number: { maximumFractionDigits: 'lots' } }` used
   to compile, and then resolved to the fallback chain at runtime.
+* A `Modifier.Wrapper` owns at least one wrapper key. All three of `value`,
+  `default` and `props` are optional, so the type admitted the empty object,
+  which resolution reads as a value and renders as the JSON text `{}` — the
+  opposite of what the annotation promised. It is now the union of its three
+  branches, each requiring one key and leaving the other two optional. The
+  constraint bites where a wrapper is written out or the payload is typed; an
+  entry of an untyped payload still collapses to `any`, as it always has.
 * Resolution never raises. A modifier that cannot produce a result now resolves
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any
