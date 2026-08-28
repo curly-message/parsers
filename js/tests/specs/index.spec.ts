@@ -621,6 +621,13 @@ describe('parser', () => {
     expect(resolve('{{v:lte; 5:FIVE}}', { payload, locale: defaultLocale })).toBe('FIVE');
     expect(reports).toHaveLength(0);
 
+    // And the equality leg answering does not pay for the strict one either:
+    // the strict leg is handed over unread, so a hit leaves the entry behind
+    // it unconverted rather than converting it for an answer nobody wanted.
+    expect(resolve('{{v:lte; 1:ONE}}', { payload, locale: defaultLocale })).toBe('ONE');
+    expect(resolve('{{v:gte; 1:ONE}}', { payload, locale: defaultLocale })).toBe('ONE');
+    expect(reports).toHaveLength(0);
+
     // A selection matching nothing does read it, and there the entry no
     // conversion can describe is a value resolution read as missing.
     expect(resolve('{{v:eq; 2:TWO}}', { payload, locale: defaultLocale })).toBe('');
