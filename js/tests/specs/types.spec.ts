@@ -136,6 +136,25 @@ describe('payload typing', () => {
     expect(resolve('{{v:x-temp}}', { payload: { v: { value: '21', props: { 'x-temp': { unit: 'F' } } } }, props: { 'x-temp': { unit: 'C' } } })).toBe('21F');
   });
 
+  it('rejects a props name a modifier declaring none cannot read', () => {
+    const digits: Modifier.T = ({ value, props }) => `${value}@${props?.number?.maximumFractionDigits ?? 0}`;
+    // @ts-expect-error a modifier that declares no props of its own reads the built-in table, which names no `x-own`
+    const own: Modifier.T = ({ value, props }) => `${value}@${props?.['x-own']?.width}`;
+    const { resolve } = createParser({ customModifiers: { 'x-digits': digits, 'x-own': own } });
+    const context = { payload: { v: '1' }, props: { number: { maximumFractionDigits: 3 } } };
+
+    expect(resolve('{{v:x-digits}}', context)).toBe('1@3');
+    expect(resolve('{{v:x-own}}', context)).toBe('1@undefined');
+  });
+
+  it('rejects a props name a modifier table declaring none cannot read', () => {
+    // @ts-expect-error a table declaring no props holds modifiers reading the built-in one, which names no `x-own`
+    const table: Modifier.CustomModifiers<'x-own'> = { 'x-own': ({ value, props }) => `${value}@${props?.['x-own']?.width}` };
+    const { resolve } = createParser({ customModifiers: table });
+
+    expect(resolve('{{v:x-own}}', { payload: { v: '1' } })).toBe('1@undefined');
+  });
+
   it('rejects a typo against a declared payload type', () => {
     const { resolve } = createParser<Payload>();
 

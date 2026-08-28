@@ -117,7 +117,7 @@ export module Modifier {
     props?: Props<CustomModifierProps>;
   }>;
 
-  export type T<CustomModifierProps = any> = (config: CommonProps<CustomModifierProps> & {
+  export type T<CustomModifierProps = DefaultProps> = (config: CommonProps<CustomModifierProps> & {
     options: ModifierOption[];
     /**
      * The fallback chain, resolved by the read rather than before the modifier
@@ -133,7 +133,7 @@ export module Modifier {
 
   export type DefaultModifiers = typeof modifiers;
 
-  export type CustomModifiers<K extends string = any, ModifierProps = any> = Record<K, Modifier.T<ModifierProps>>;
+  export type CustomModifiers<K extends string = any, ModifierProps = DefaultProps> = Record<K, Modifier.T<ModifierProps>>;
 }
 
 export module Parser {

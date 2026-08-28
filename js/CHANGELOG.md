@@ -343,3 +343,14 @@ Initial version line for `@curly-message/parser`.
   about a type that might be absent. Assigning a bag to it and intersecting it
   were unaffected, and whether the factory takes an argument at all is
   unchanged.
+* A modifier declares the props it reads. `Modifier.T` and
+  `Modifier.CustomModifiers` defaulted their props type parameter to `any`
+  where `CommonProps`, `Modifier.Wrapper`, `Parser.PayloadEntry`,
+  `Parser.Payload` and `Parser.Context` all default theirs to
+  `Modifier.DefaultProps`, so a modifier written down without one read its
+  `props` unchecked: `props?.['x-own']?.width` compiled against a layer
+  carrying no such name, in the modifier and in a table of them alike. Both
+  now default to that same table, and a modifier reading props of its own
+  names them — `Modifier.T<MyProps>`, `Modifier.CustomModifiers<Key, MyProps>`
+  — as the factory's own props parameter already had to. Nothing about
+  resolution changes; a parser that names its props type is unaffected.
