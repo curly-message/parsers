@@ -1154,6 +1154,21 @@ describe('parser', () => {
       expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: value }, locale: defaultLocale })).toBe('FALLBACK');
     }
   });
+  it('`currency` falls back where its ratio leaves no number to format', () => {
+    const { resolve } = defaultParser;
+    const at = (ratio: number, value: unknown = 2) => resolve('{{v:currency; default:FALLBACK}}', { payload: { v: value }, props: { currency: { currency: 'USD', ratio } }, locale: defaultLocale });
+
+    // The value is read as a number before the ratio is applied, so the
+    // product is a second place the pair stops being one: a ratio that is not
+    // finite, a ratio that turns a finite amount into infinity, and the zero
+    // times infinity that answers `NaN` all leave nothing to format.
+    expect(at(1)).toBe(new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(2));
+    expect(at(Infinity)).toBe('FALLBACK');
+    expect(at(-Infinity)).toBe('FALLBACK');
+    expect(at(NaN)).toBe('FALLBACK');
+    expect(at(10, 1e308)).toBe('FALLBACK');
+    expect(at(Infinity, 0)).toBe('FALLBACK');
+  });
   it('a numeric comparison converts a blank payload value like any other text', () => {
     const { resolve } = defaultParser;
 
