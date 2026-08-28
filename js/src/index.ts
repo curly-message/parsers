@@ -335,14 +335,15 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // by the conversion a payload entry does: an object it built stays
       // structured instead of collapsing to the host's own word for an object.
       // An answer no conversion can describe is not an answer, and neither is
-      // nothing, so the placeholder takes the fallback chain — the way it does
-      // for a value that is not a value.
+      // nothing, so the placeholder takes the fallback chain — the whole of the
+      // treatment a value that is not a value gets, the report included, and
+      // an answer that is nothing is absent rather than undescribable.
       // The default reaches the modifier as a property it reads, not as work
       // done before it was called: a modifier that never asks leaves the chain
       // unresolved, so a link nobody consulted is never described as missing.
       const input = { value: valueText, options, props: modifierProps, get defaultValue() { return defaultText(); }, locale, parserOptions };
 
-      return text(modifier(input), conversions) ?? defaultText();
+      return describedText(modifier(input), raised, conversions) ?? defaultText();
     } catch {
       report('failed-modifier', placeholder, messageKey, onReport);
 
@@ -387,7 +388,7 @@ const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LE
 const REPORT_MESSAGES: Record<Report['code'], string> = {
   'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
   'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
-  'unserializable-value': 'A payload value could not become text, so resolution read it as missing.',
+  'unserializable-value': 'A value could not become text, so resolution read it as missing.',
   'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
   'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
 };

@@ -175,6 +175,12 @@ link in it. Anything the chain reads and could not convert is reported as
 `unserializable-value`; a link nothing reaches is never read, so it is never
 reported either.
 
+A modifier's answer becomes text by that same conversion, so an answer no
+conversion describes is read as missing and reported the same way, and the
+placeholder takes the chain. An answer that is nothing at all is an absent
+answer rather than one that could not be described: it takes the chain too, and
+says nothing.
+
 A modifier reaches the chain by reading its own `defaultValue`, which resolves
 at the moment of that read — running whatever host code the chain carries and
 reporting a link it cannot describe. A generic copy of a modifier's config is
