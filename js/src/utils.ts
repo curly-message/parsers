@@ -59,12 +59,19 @@ export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any
   return { ...output };
 };
 
-export const getModifierDefaults = <T>(key: keyof T, parserOptions: Parser.Options) => {
-  const { modifierDefaults } = parserOptions || {};
-  const { [key]: output } = modifierDefaults || {};
+// A configuration layer is read the way the payload is: own properties only,
+// one level at a time. Nobody writes configuration onto a prototype, so
+// anything a prototype offers here was put there by someone else.
+export const ownLayer = (target: any, key: PropertyKey) => {
+  const layer = ownValue(target, key);
+  const output: Record<string, any> = Object.create(null);
 
-  return (output || {}) as Required<T>[keyof T];
+  ownKeys(layer).forEach((name) => { output[name] = ownValue(layer, name); });
+
+  return output;
 };
+
+export const getModifierDefaults = <T>(key: keyof T, parserOptions: Parser.Options) => ownLayer(ownValue(parserOptions, 'modifierDefaults'), key) as Required<T>[keyof T];
 
 /**
  * The number a formatting modifier will format, by the host's own conversion.

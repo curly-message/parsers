@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { getDateInput, getModifierDefaults, getModifierInput, mergeLayer } from './utils';
+import { getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back.
@@ -42,7 +42,7 @@ export const number: Modifier.T<Modifier.NumberProps> = ({ value, props, default
   if (input === undefined) return defaultValue;
 
   const { maximumFractionDigits: maximumFractionDigitsDefault, ...defaults } = getModifierDefaults<Modifier.NumberProps>('number', parserOptions);
-  const { maximumFractionDigits = maximumFractionDigitsDefault ?? 2, ...rest } = props?.number || {};
+  const { maximumFractionDigits = maximumFractionDigitsDefault ?? 2, ...rest } = ownLayer(props, 'number');
 
   return new Intl.NumberFormat(locale, { ...mergeLayer(defaults, rest), maximumFractionDigits }).format(input);
 };
@@ -55,7 +55,7 @@ export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValu
   if (input === undefined) return defaultValue;
 
   const { ...defaults } = getModifierDefaults<Modifier.DateProps>('date', parserOptions);
-  const { ...rest } = props?.date || {};
+  const { ...rest } = ownLayer(props, 'date');
 
   return new Intl.DateTimeFormat(locale, mergeLayer(defaults, rest)).format(input);
 };
@@ -98,7 +98,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = ({ value, defaultValue = '', l
   if (input === undefined) return defaultValue;
 
   const { format: formatDefault, numeric: numericDefault, ...defaults } = getModifierDefaults<Modifier.AgoProps>('ago', parserOptions);
-  const { format = formatDefault ?? 'auto', numeric = numericDefault ?? 'auto', ...rest } = props?.ago || {};
+  const { format = formatDefault ?? 'auto', numeric = numericDefault ?? 'auto', ...rest } = ownLayer(props, 'ago');
 
   const formatParams = agoFormat(input, format);
 
@@ -113,7 +113,7 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = ({ value, defaultVal
   if (amount === undefined) return defaultValue;
 
   const { ratio: ratioDefault, currency: currencyDefault, ...defaults } = getModifierDefaults<Modifier.CurrencyProps>('currency', parserOptions);
-  const { ratio = ratioDefault ?? 1, currency = currencyDefault, ...rest } = props?.currency || {};
+  const { ratio = ratioDefault ?? 1, currency = currencyDefault, ...rest } = ownLayer(props, 'currency');
 
   const input = getModifierInput(amount * ratio);
 

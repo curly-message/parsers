@@ -368,6 +368,26 @@ describe('parser', () => {
     expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: polluting } }, props: { number: {} } })).toBe('{"number":{},"__proto__":{"polluted":true}}');
     expect(({} as any).polluted).toBe(undefined);
   });
+  it('configuration is read as own properties, never through a prototype', () => {
+    const proto = Object.prototype as any;
+    const polluted = (name: string, value: any, read: () => string) => {
+      proto[name] = value;
+
+      try {
+        return read();
+      } finally {
+        delete proto[name];
+      }
+    };
+    const payload = { v: 1.23456789 };
+    const seen: Report[] = [];
+
+    expect(polluted('customModifiers', { number: () => 'HIJACKED' }, () => createParser({}).resolve('{{v:number}}', { payload, locale: defaultLocale }))).toBe('1.23');
+    expect(polluted('modifierDefaults', { number: { maximumFractionDigits: 5 } }, () => createParser({}).resolve('{{v:number}}', { payload, locale: defaultLocale }))).toBe('1.23');
+    expect(polluted('number', { maximumFractionDigits: 5 }, () => createParser({ modifierDefaults: {} }).resolve('{{v:number}}', { payload, props: {}, locale: defaultLocale }))).toBe('1.23');
+    expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve('{{v:nosuch}}', { payload, locale: defaultLocale }))).toBe('');
+    expect(seen).toEqual([]);
+  });
   it('`date` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
     const resolveAlt = resolverFor<{ value?: any }>(altLocale);
