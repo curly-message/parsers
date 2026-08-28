@@ -70,11 +70,18 @@ const testResolution = (defKey: string = '', testKey: string = '') => new RegExp
 
 const findIndex = (currentKey: string) => AGO_LADDER.indexOf(AGO_LADDER.find(({ key }) => testResolution(key, currentKey)) as any);
 
+// A step is rounded on its magnitude and given its sign back. The host's own
+// rounding takes a half toward positive infinity, which reads a delta and its
+// negation differently: half an hour out climbed to "in 1 hour" while half an
+// hour past stayed at "30 minutes ago", and 1.5 hours became "in 2 hours"
+// against "1 hour ago".
+const step = (value: number) => Math.sign(value) * Math.round(Math.abs(value));
+
 const agoFormat = (millis: number, resolution?: Intl.RelativeTimeFormatUnit | 'auto'): [number, Intl.RelativeTimeFormatUnit] => AGO_LADDER.reduce(([value, currentKey], { key, multiplier }, index) => {
   if (testResolution(currentKey, resolution)) return [value, currentKey];
 
   if (!currentKey || index === findIndex(currentKey) + 1) {
-    const output = Math.round(value / multiplier);
+    const output = step(value / multiplier);
 
     if (!currentKey || Math.abs(output) >= 1 || resolution !== 'auto') return [output, key];
   }

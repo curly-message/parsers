@@ -421,10 +421,11 @@ describe('parser', () => {
   it('`ago` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
     const resolveAlt = resolverFor<{ value?: any }>(altLocale);
-    const value = -1000 * 60 * 30;
+    // Under half an hour, so the automatic climb stops at the minute rung.
+    const value = -1000 * 60 * 20;
 
-    expect(resolve('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-30, 'minute'));
-    expect(resolveAlt('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(altLocale, { numeric: 'auto' }).format(-30, 'minute'));
+    expect(resolve('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-20, 'minute'));
+    expect(resolveAlt('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(altLocale, { numeric: 'auto' }).format(-20, 'minute'));
   });
   it('`ago` asks for the word a locale keeps, unless a caller asks for the count', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -456,6 +457,21 @@ describe('parser', () => {
 
     expect(resolveDays('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
     expect(resolveWeek('common.modifier_ago', { value })).not.toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
+  });
+  it('`ago` reads a delta and its negation the same way', () => {
+    const { resolve } = createParser({});
+    const relative = new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' });
+    const at = (value: number) => resolve('{{v:ago}}', { payload: { v: value }, locale: defaultLocale });
+    const hour = 1000 * 60 * 60;
+
+    // A half rounds away from zero on both sides, so the two directions choose
+    // the same unit and the same count.
+    expect(at(1.5 * hour)).toBe(relative.format(2, 'hour'));
+    expect(at(-1.5 * hour)).toBe(relative.format(-2, 'hour'));
+    expect(at(hour / 2)).toBe(relative.format(1, 'hour'));
+    expect(at(-hour / 2)).toBe(relative.format(-1, 'hour'));
+    expect(at(500)).toBe(relative.format(1, 'second'));
+    expect(at(-500)).toBe(relative.format(-1, 'second'));
   });
   it('`currency` modifier works', () => {
     const resolve = resolverFor<{ value?: number }>(defaultLocale);
