@@ -1,5 +1,5 @@
 import * as defaultModifiers from './modifiers';
-import type { Parser, Modifier, Interpolate, Interpolation, Locale, Report } from './types';
+import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report } from './types';
 import { isBlank, LINE_TERM, mergeLayer, ownKeys, ownModifiers, ownValue, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
@@ -119,20 +119,25 @@ const isPlainObject = (value: any) => {
 // Serialization follows a shared reference again every time it meets one, so a
 // value holding twenty-five objects — each of twenty-four levels naming the
 // same child twice — serializes to sixteen million leaves with no cycle for the
-// `catch` below to find. Every node the walk visits owes the output at least a
-// character, so a value past this budget could never have fit `resolve`'s own
-// output budget: the two are the same number because they bound the same thing
-// from two ends.
-const serialize = (value: any) => {
+// `catch` to find. The budget is what one conversion may spend: a value
+// visiting more nodes than a resolvable output can hold is one no conversion
+// describes, which is what a cycle and a `toJSON` answering nothing are too.
+const serialize = (value: any): string | undefined => {
   let budget = MAX_INTERPOLATION_LENGTH;
 
-  return JSON.stringify(value, (_, entry) => {
-    budget -= 1;
+  try {
+    const json = JSON.stringify(value, (_, entry) => {
+      budget -= 1;
 
-    if (budget < 0) throw new RangeError('The value visits more nodes than a resolvable output can hold.');
+      if (budget < 0) throw new RangeError('The value visits more nodes than a resolvable output can hold.');
 
-    return entry;
-  });
+      return entry;
+    });
+
+    return typeof json === 'string' ? json : undefined;
+  } catch {
+    return undefined;
+  }
 };
 
 /**
@@ -143,28 +148,34 @@ const serialize = (value: any) => {
  * `undefined` answers "this is not a value" — for a value nobody passed, and
  * for one no conversion can describe. Both fall through to the fallback chain,
  * so nothing raises out of `resolve`.
+ *
+ * The JSON walk is the costly conversion, so `conversions` records what each
+ * value it walked came out as, no text at all included, and one resolution
+ * walks one value once.
  */
-const text = (value: any): string | undefined => {
+const text = (value: any, conversions: Conversions): string | undefined => {
   if (value === undefined) return undefined;
 
+  // Classifying a value reads it, and a value the host will not describe raises
+  // at that read as readily as at its coercion.
   try {
-    if (isPlainObject(value) || Array.isArray(value)) {
-      const json = serialize(value);
-
-      return typeof json === 'string' ? json : undefined;
-    }
-
-    return String(value);
+    if (!isPlainObject(value) && !Array.isArray(value)) return String(value);
   } catch {
     return undefined;
   }
+
+  if (!conversions.has(value)) conversions.set(value, serialize(value));
+
+  return conversions.get(value);
 };
 
 // A value nobody passed is not a defect; a value that cannot become text is.
 // Both answer nothing, so the one that is a defect has to say so on the way
-// past, and every chain the format resolves reads its links through here.
-const describedText = (declared: any, onUndescribed: () => void) => {
-  const output = text(declared);
+// past, and every chain the format resolves reads its links through here. The
+// conversion behind it runs once for a value; the report does not, because each
+// link that finds nothing is a defect of its own.
+const describedText = (declared: any, onUndescribed: () => void, conversions: Conversions) => {
+  const output = text(declared, conversions);
 
   if (declared !== undefined && output === undefined) onUndescribed();
 
@@ -211,7 +222,7 @@ const mergeProps = (base: any, override: any) => {
   return ownProps(mergeLayer(base, override, (from, to) => isLayer(to) ? mergeLayer(from, to) : to));
 };
 
-const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey }) => {
+const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey, conversions }) => {
   const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers');
   const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
   // The modifier module's exports are the registry a host's table composes
@@ -257,16 +268,16 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
     });
 
-    const payloadText = (declared: any) => describedText(declared, raised);
+    const payloadText = (declared: any) => describedText(declared, raised, conversions);
 
     const valueText = payloadText(value);
 
     let resolvedDefault: string | undefined;
 
     // A placeholder can name `default` itself, and then the chain's payload
-    // link is the entry it has already read as its value. One entry converts
-    // once: reading it again would pay for the same serialization twice and
-    // describe a single value that cannot become text as two.
+    // link is the entry it has already read as its value. One entry is read
+    // once: reading it again would describe a single value that cannot become
+    // text as two.
     const payloadDefault = key === 'default' ? () => valueText : () => payloadText(ownValue(payload, 'default', raised));
 
     // The wrapper speaks for its own value, the payload for every key it does
@@ -321,7 +332,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // unresolved, so a link nobody consulted is never described as missing.
       const input = { value: valueText, options, props: modifierProps, get defaultValue() { return defaultText(); }, locale, parserOptions };
 
-      return text(modifier(input)) ?? defaultText();
+      return text(modifier(input), conversions) ?? defaultText();
     } catch {
       report('failed-modifier', placeholder, messageKey, onReport);
 
@@ -387,7 +398,7 @@ const report = (code: Report['code'], reported: string, key: Parser.Key | undefi
   }
 };
 
-const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key }) => {
+const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key, conversions }) => {
   const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
 
   let output = value;
@@ -399,7 +410,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
       break;
     }
 
-    const next = placeholders({ value: output, payload, props, parserOptions, locale, key });
+    const next = placeholders({ value: output, payload, props, parserOptions, locale, key, conversions });
 
     if (next.length > MAX_INTERPOLATION_LENGTH) {
       report('output-limit', output, key, onReport);
@@ -410,7 +421,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
     output = next;
   }
 
-  return text(unesc(output)) ?? '';
+  return text(unesc(output), conversions) ?? '';
 };
 
 export const createParser: Parser.Factory = (parserOptions) => ({
@@ -430,6 +441,11 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // excerpt: the key is what says which message went looking.
     const raised = () => report('unserializable-value', '', key, onReport);
 
+    // One value converts once, however many placeholders read it: the walk is
+    // the costly step. The call is the scope — a payload the host mutates
+    // between two of them must not be answered with the older text.
+    const conversions: Conversions = new Map();
+
     // Everything the format carries is text, and the message becomes text
     // before anything reads it rather than after everything has: a host that
     // wrote its message as something else gets it interpolated and unescaped
@@ -439,7 +455,7 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // Stepping past the payload's link is reported, because that link is a
     // payload value like any other; stepping past the message is not, because
     // a message nothing describes is a message nobody wrote.
-    const value = text(message) ?? describedText(ownValue(payload, 'default', raised), raised);
+    const value = text(message, conversions) ?? describedText(ownValue(payload, 'default', raised), raised, conversions);
 
     // What is left when the chain runs out is not a message the format resolves
     // over: it is the format naming the message that went looking. A value, an
@@ -448,8 +464,8 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // spelled it, neither resolved nor unescaped. It still becomes text,
     // because `resolve` answers with text, and a caller that named no key has
     // nothing to echo.
-    if (value === undefined) return text(key) ?? '';
+    if (value === undefined) return text(key, conversions) ?? '';
 
-    return interpolate({ value, payload, props, parserOptions, locale, key });
+    return interpolate({ value, payload, props, parserOptions, locale, key, conversions });
   },
 });
