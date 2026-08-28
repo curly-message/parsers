@@ -34,6 +34,16 @@ anyway. A placeholder naming a modifier the parser does not know resolves to
 its `default` and is reported as well; it is never run as a comparison instead.
 Given no locale at all, the formatting modifiers resolve to the empty string.
 
+Each formatting modifier reads its value as a particular kind of number, and a
+value that is not one resolves the placeholder to its `default`:
+
+| Modifier | Value |
+| --- | --- |
+| `number` | a number |
+| `date` | milliseconds since the Unix epoch, or text the host can parse as a date |
+| `ago` | a signed millisecond delta relative to now, negative for the past |
+| `currency` | a number, multiplied by the `ratio` property below |
+
 ## Usage
 
 ```js
@@ -207,7 +217,23 @@ That two is a default rather than a cap: a layer naming a
 `Intl.NumberFormat` widens its own.
 
 `currency` formats in the currency style whatever a layer names as the style:
-that style is the modifier rather than one of the options it layers.
+that style is the modifier rather than one of the options it layers. It
+multiplies its value by a `ratio` property first, defaulting to 1, so a payload
+carrying minor units renders as major ones.
+
+`ago` takes the unit to count in from a `format` property holding a unit name,
+in the singular or the plural. Its `auto`, which is what a layer naming none
+leaves in place, selects the unit from the magnitude of the delta instead.
+
+`ratio` and `format` are the format's own properties rather than `Intl`'s, and
+both are read from the layers like every other property — a message cannot
+write either as an option.
+
+```
+{ v: 2 }           { currency: { currency: 'USD', ratio: 100 } }  ->  $200.00
+{ v: -172800000 }  { ago: {} }                                    ->  2 days ago
+{ v: -172800000 }  { ago: { format: 'hour' } }                    ->  48 hours ago
+```
 
 ## Escaping
 
