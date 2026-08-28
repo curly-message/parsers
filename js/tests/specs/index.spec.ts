@@ -663,6 +663,22 @@ describe('parser', () => {
     expect(resolve({ a: 1 }, { payload, key: 'common.key' })).toBe('{"a":1}');
     expect(resolve(42, { payload, key: 'common.key' })).toBe('42');
   });
+  it('a message default no conversion can describe is skipped, not resolved', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve(undefined, { payload: { default: circular }, key: 'common.key' })).toBe('common.key');
+    expect(resolve(undefined, { payload: { default: new Opaque() }, key: 'common.key' })).toBe('common.key');
+    expect(resolve(undefined, { payload: { default: circular } })).toBe('');
+  });
+  it('a message becomes text before it is read, not after', () => {
+    const { resolve } = defaultParser;
+
+    // A host's own string object carries a message like any other: its
+    // placeholders resolve and its escape sequences are removed.
+    expect(resolve(new String('{{value}}'), { payload: { value: 'TEST_STRING' } })).toBe('TEST_STRING');
+    expect(resolve(new String('a\\;b'))).toBe('a;b');
+    expect(resolve({ a: '{{value}}' }, { payload: { value: 'TEST_STRING' } })).toBe('{"a":"TEST_STRING"}');
+  });
   it('a custom modifier map the host will not describe reads as no custom modifiers', () => {
     const revocable = Proxy.revocable({}, {});
 

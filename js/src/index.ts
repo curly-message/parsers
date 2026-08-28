@@ -340,22 +340,13 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
 
 export const createParser: Parser.Factory = (parserOptions) => ({
   resolve: (message, { payload, props, locale, key } = {}) => {
-    let value = message;
-
-    // A message no conversion can describe does not exist, the same way a value
-    // no conversion can describe is not a value. A string describes itself, so
-    // only anything else is worth the conversion this costs.
-    if (typeof value !== 'string' && text(value) === undefined) {
-      value = undefined;
-    }
-
-    if (value === undefined) {
-      value = ownValue(payload, 'default');
-    }
-
-    if (value === undefined) {
-      value = key === undefined ? '' : key;
-    }
+    // Everything the format carries is text, and the message becomes text
+    // before anything reads it rather than after everything has: a host that
+    // wrote its message as something else gets it interpolated and unescaped
+    // like any other. A link no conversion can describe does not exist, the
+    // same way such a value is not a value, so the chain steps past it — a
+    // message default that cannot become text must not swallow the key echo.
+    const value = text(message) ?? text(ownValue(payload, 'default')) ?? (key === undefined ? '' : key);
 
     return interpolate({ value, payload, props, parserOptions, locale, key });
   },
