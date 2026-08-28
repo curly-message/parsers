@@ -99,7 +99,7 @@ describe('parser', () => {
   it('dynamic default works for placeholders', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
-    expect(resolve('common.placeholder_unknown', { default: 'DYNAMIC_DEFAULT_VALUE' })).toBe('DYNAMIC_DEFAULT_VALUE');
+    expect(resolve('common.placeholder', { default: 'DYNAMIC_DEFAULT_VALUE' })).toBe('VALUES: DYNAMIC_DEFAULT_VALUE, DYNAMIC_DEFAULT_VALUE, DYNAMIC_DEFAULT_VALUE, DYNAMIC_DEFAULT_VALUE');
   });
   it('reads a falsy own `default` as present', () => {
     const { resolve } = defaultParser;
