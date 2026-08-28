@@ -1555,6 +1555,31 @@ describe('parser', () => {
     resolve('{{v}}{{w}}', { payload: { v: counted('A'), w: counted('A') } });
 
     expect(conversions).toBe(2);
+
+    // The ordinary string conversion is a conversion too. A value the host
+    // describes through its own `toString` answers every later read with the
+    // text the first one produced, so host code a value carries runs once for
+    // the resolution rather than once for each placeholder naming it.
+    let coercions = 0;
+
+    class Coerced {
+      toString() { coercions += 1; return 'T'; }
+    }
+
+    expect(resolve('{{v}}'.repeat(50), { payload: { v: new Coerced() } })).toBe('T'.repeat(50));
+    expect(coercions).toBe(1);
+
+    // The answer that no conversion describes it is recorded alike: a
+    // `toString` that raises is not asked a second time, so one value cannot be
+    // absent at one placeholder and present at the next.
+    coercions = 0;
+
+    class Raising {
+      toString(): string { coercions += 1; throw new Error('undescribable'); }
+    }
+
+    expect(resolve('{{v}}|{{v}}', { payload: { v: new Raising(), default: 'D' } })).toBe('D|D');
+    expect(coercions).toBe(1);
   });
   it('converting a value once leaves what a message resolves to unchanged', () => {
     const reports: Report[] = [];

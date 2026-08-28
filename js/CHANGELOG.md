@@ -281,10 +281,17 @@ Initial version line for `@curly-message/parser`.
   ended in an ordinary `pass-limit` report. The text each value came out as is
   now recorded for the length of the `resolve` call, the answer that a value has
   no text included, so what a resolution spends converting is bounded by the
-  distinct values it reaches. A value built afresh on each read — by a payload
-  getter, or by a custom modifier — is a new value every time and is converted
-  every time. The report is not recorded with the text: each link that finds
-  none is a defect of its own and still reports.
+  distinct values it reaches. That covers the host's own string conversion as
+  well as the JSON walk: a value the host describes through its own `toString`
+  runs it once for the resolution, and one whose `toString` raises is not asked
+  a second time, so a value cannot be absent at one placeholder and present at
+  the next. A `toString` that answers differently on each call therefore answers
+  every placeholder with the text the first read produced. A primitive is not
+  recorded — its conversion runs no host code and cannot answer twice over. A
+  value built afresh on each read — by a payload getter, or by a custom
+  modifier — is a new value every time and is converted every time. The report
+  is not recorded with the text: each link that finds none is a defect of its
+  own and still reports.
 * The call's own inputs are read as own properties. `payload`, `props`,
   `locale` and `key` were read off the context by plain member access, so a
   polluted `Object.prototype` supplied a payload to a call that passed none —

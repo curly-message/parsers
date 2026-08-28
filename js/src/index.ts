@@ -140,6 +140,18 @@ const serialize = (value: any): string | undefined => {
   }
 };
 
+const convert = (value: any): string | undefined => {
+  // Classifying a value reads it, and a value the host will not describe raises
+  // at that read as readily as at its coercion.
+  try {
+    if (!isPlainObject(value) && !Array.isArray(value)) return String(value);
+  } catch {
+    return undefined;
+  }
+
+  return serialize(value);
+};
+
 /**
  * The text a value resolves to. Everything the format carries is text: a plain
  * object and an array become JSON, so a custom modifier can read them back,
@@ -149,22 +161,20 @@ const serialize = (value: any): string | undefined => {
  * for one no conversion can describe. Both fall through to the fallback chain,
  * so nothing raises out of `resolve`.
  *
- * The JSON walk is the costly conversion, so `conversions` records what each
- * value it walked came out as, no text at all included, and one resolution
- * walks one value once.
+ * Converting is what costs, and a value is read once for every placeholder that
+ * names it, so `conversions` records what each value came out as, the answer
+ * that none describes it included, and one resolution converts one value once.
  */
 const text = (value: any, conversions: Conversions): string | undefined => {
   if (value === undefined) return undefined;
 
-  // Classifying a value reads it, and a value the host will not describe raises
-  // at that read as readily as at its coercion.
-  try {
-    if (!isPlainObject(value) && !Array.isArray(value)) return String(value);
-  } catch {
-    return undefined;
-  }
+  // A primitive's conversion runs no host code and cannot answer twice over, so
+  // recording one buys nothing and costs an entry per distinct value.
+  const carries = value !== null && (typeof value === 'object' || typeof value === 'function');
 
-  if (!conversions.has(value)) conversions.set(value, serialize(value));
+  if (!carries) return convert(value);
+
+  if (!conversions.has(value)) conversions.set(value, convert(value));
 
   return conversions.get(value);
 };
