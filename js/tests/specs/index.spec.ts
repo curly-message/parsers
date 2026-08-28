@@ -795,6 +795,20 @@ describe('parser', () => {
     expect(resolve('{{a\\}b}}', { payload: { 'a}b': 'HIT' } })).toBe('HIT');
     expect(resolve('{{v\\{}}', { payload: { 'v{': 'HIT' } })).toBe('HIT');
   });
+  it('an opening pair inside a placeholder ends the attempt', () => {
+    const { resolve } = defaultParser;
+    const payload = { 'a{{b': 'NESTKEY', b: 'B', '{v': 'BRACEV' };
+
+    // Only the first brace of the rejected pair becomes text; the scan resumes
+    // at the very next code point, where the inner pair opens for itself.
+    expect(resolve('{{a{{b}}', { payload })).toBe('{{aB');
+    expect(resolve('x {{a{{b}} y', { payload })).toBe('x {{aB y');
+    expect(resolve('{{{{v}}', { payload })).toBe('{BRACEV');
+
+    // A backslash claims the brace after it, so what is left is not a pair and
+    // the attempt runs on to name a key nobody could name otherwise.
+    expect(resolve('{{a\\{{b}}', { payload })).toBe('NESTKEY');
+  });
   it('a placeholder holds no line terminator in any position', () => {
     const { resolve } = defaultParser;
 
