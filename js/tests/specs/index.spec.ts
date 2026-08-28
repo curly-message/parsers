@@ -1937,6 +1937,71 @@ describe('parser', () => {
 
     expect(resolve('{{v}}', { payload: { v: mutated } })).toBe('{"a":2}');
   });
+  it('a resolution begun inside another is its own scope', () => {
+    const reports: Report[] = [];
+    const nested: string[] = [];
+
+    let coercions = 0;
+
+    class Counted {
+      toString() { coercions += 1; return 'C'; }
+    }
+
+    const counted = new Counted();
+    const big = 'x'.repeat(60000);
+    // A modifier resolving a message of its own is the plainest way a host
+    // begins a resolution inside one; an `onReport` handler writing its
+    // diagnostic into a translated string, a payload accessor and a value's
+    // own `toString` all reach it too.
+    const parser: Parser.T = createParser({
+      onReport: (report) => { reports.push(report); },
+      customModifiers: {
+        'x-nest': ({ value }) => {
+          nested.push(parser.resolve(value, { payload: { c: counted, loop: '{{loop}}', big }, key: 'inner' }));
+
+          return `[${nested.length}]`;
+        },
+      },
+    });
+
+    // The call is the scope, and a call begun inside another is a call: each
+    // converts the value they share once for itself, counts its own passes and
+    // spends its own output budget, and neither reaches a bound the other
+    // owns. The inner call stops at ten passes while the outer walks a
+    // three-link chain to the end, and stops at the output bound while the
+    // outer goes on building the text it was building.
+    expect(parser.resolve('{{c}} {{m:x-nest}} {{a}}', { payload: { c: counted, m: '{{c}}{{c}} {{loop}}', a: '{{b}}', b: '{{d}}', d: 'D' }, key: 'outer' })).toBe('C [1] D');
+    expect(parser.resolve('{{m:x-nest}}{{big}}', { payload: { m: '{{big}}{{big}}', big }, key: 'outer' })).toBe(`[2]${big}`);
+
+    expect(nested).toEqual(['CC {{loop}}', '{{big}}{{big}}']);
+    expect(coercions).toBe(2);
+
+    // And a report names the message the call that made it was resolving, not
+    // the one further out.
+    expect(reports.map(({ code, key }) => `${key}/${code}`)).toEqual(['inner/pass-limit', 'inner/output-limit']);
+  });
+  it('a resolution that never stops beginning another still fails soft', () => {
+    // Nothing bounds a resolution a host's own callback begins, so what ends
+    // one that never stops beginning another is the host's own stack. Running
+    // out of it is contained where every other failure is: the placeholder
+    // takes the fallback chain and `resolve` still answers with text. Each
+    // entry point gets a parser of its own — two of them feeding each other is
+    // the host's own loop, not a bound resolution can hold.
+    const modifier: Parser.T = createParser({ customModifiers: { 'x-loop': ({ value }) => modifier.resolve('{{v:x-loop}}', { payload: { v: value } }) } });
+    const reporter: Parser.T = createParser({ onReport: () => { reporter.resolve('{{v:nope}}', { payload: { v: 'V' } }); } });
+    const reader: Parser.T = createParser({});
+    const coercer: Parser.T = createParser({});
+    const payload = { get v(): string { return reader.resolve('{{v}}', { payload }); } };
+
+    class Coerced {
+      toString(): string { return coercer.resolve('{{v}}', { payload: { v: new Coerced() } }); }
+    }
+
+    expect(modifier.resolve('{{v:x-loop}}!', { payload: { v: 'V' } })).toBe('!');
+    expect(reporter.resolve('{{v:nope}}!', { payload: { v: 'V' } })).toBe('!');
+    expect(reader.resolve('{{v}}!', { payload })).toBe('!');
+    expect(coercer.resolve('{{v}}!', { payload: { v: new Coerced() } })).toBe('!');
+  });
   it('converting a value once leaves what a message resolves to unchanged', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ customModifiers: { test: ({ value }) => value }, onReport: (report) => { reports.push(report); } });
