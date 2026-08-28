@@ -33,6 +33,21 @@ class Opaque {
   }
 }
 
+// What a caller reads when somebody else has written to the prototype every
+// object inherits from. The name is removed again whatever the read does, so
+// one test's pollution never reaches the next.
+const polluted = (name: string, value: any, read: () => string) => {
+  const proto = Object.prototype as any;
+
+  proto[name] = value;
+
+  try {
+    return read();
+  } finally {
+    delete proto[name];
+  }
+};
+
 // The format's whitespace class (SPEC.md section 6). Every member is written as
 // an escape: a literal invisible code point is invisible to review and to a
 // diff.
@@ -392,16 +407,6 @@ describe('parser', () => {
     expect(({} as any).polluted).toBe(undefined);
   });
   it('configuration is read as own properties, never through a prototype', () => {
-    const proto = Object.prototype as any;
-    const polluted = (name: string, value: any, read: () => string) => {
-      proto[name] = value;
-
-      try {
-        return read();
-      } finally {
-        delete proto[name];
-      }
-    };
     const payload = { v: 1.23456789 };
     const seen: Report[] = [];
 
@@ -410,6 +415,23 @@ describe('parser', () => {
     expect(polluted('number', { maximumFractionDigits: 5 }, () => createParser({ modifierDefaults: {} }).resolve('{{v:number}}', { payload, props: {}, locale: defaultLocale }))).toBe('1.23');
     expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve('{{v:nosuch}}', { payload, locale: defaultLocale }))).toBe('');
     expect(seen).toEqual([]);
+  });
+  it('the call context is read as own properties, never through a prototype', () => {
+    const { resolve } = createParser({});
+
+    expect(polluted('payload', { v: 'HIJACKED' }, () => resolve('{{v; default:D}}', {}))).toBe('D');
+    expect(polluted('payload', { v: 'HIJACKED' }, () => resolve('{{v; default:D}}'))).toBe('D');
+    expect(polluted('payload', { default: 'HIJACKED' }, () => resolve(undefined, { key: 'a.b' }))).toBe('a.b');
+    expect(polluted('key', 'HIJACKED', () => resolve(undefined, {}))).toBe('');
+    expect(polluted('locale', altLocale, () => resolve('{{v:number}}', { payload: { v: 1.5 } }))).toBe('');
+    expect(polluted('props', { number: { minimumFractionDigits: 4 } }, () => resolve('{{v:number}}', { payload: { v: 1.5 }, locale: defaultLocale }))).toBe('1.5');
+  });
+  it('a context nobody passed and one passed as `null` resolve alike', () => {
+    const { resolve } = createParser({});
+
+    expect(resolve('{{v; default:D}}', null as any)).toBe('D');
+    expect(resolve('{{v; default:D}}', undefined)).toBe('D');
+    expect(resolve(undefined, null as any)).toBe('');
   });
   it('`date` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
