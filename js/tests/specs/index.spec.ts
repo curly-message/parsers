@@ -393,23 +393,39 @@ describe('parser', () => {
     const resolveAlt = resolverFor<{ value?: any }>(altLocale);
     const value = -1000 * 60 * 30;
 
-    expect(resolve('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale).format(-30, 'minute'));
-    expect(resolveAlt('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(altLocale).format(-30, 'minute'));
+    expect(resolve('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-30, 'minute'));
+    expect(resolveAlt('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(altLocale, { numeric: 'auto' }).format(-30, 'minute'));
+  });
+  it('`ago` asks for the word a locale keeps, unless a caller asks for the count', () => {
+    const resolve = resolverFor<{ value?: any }>(defaultLocale);
+    const resolveAlt = resolverFor<{ value?: any }>(altLocale);
+    const resolveAlways = resolverFor<{ value?: any }>(defaultLocale, createParser({ modifierDefaults: { ago: { numeric: 'always' } } }));
+    const value = -1000 * 60 * 60 * 24;
+
+    // A single day out is where the two spellings part. Every other fixture
+    // here sits at a magnitude they agree on, so only this one measures which
+    // of the two the modifier actually asks for.
+    expect(resolve('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-1, 'day'));
+    expect(resolve('common.modifier_ago', { value })).not.toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'always' }).format(-1, 'day'));
+    expect(resolveAlt('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(altLocale, { numeric: 'auto' }).format(-1, 'day'));
+
+    expect(resolve('common.modifier_ago', { value }, { ago: { numeric: 'always' } })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'always' }).format(-1, 'day'));
+    expect(resolveAlways('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'always' }).format(-1, 'day'));
   });
   it('`ago` props work', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
     const value = -1000 * 60 * 60 * 24 * 7;
 
-    expect(resolve('common.modifier_ago', { value }, { ago: { format: 'day' } })).toBe(new Intl.RelativeTimeFormat(defaultLocale).format(-7, 'day'));
-    expect(resolve('common.modifier_ago', { value }, { ago: { format: 'week' } })).not.toBe(new Intl.RelativeTimeFormat(defaultLocale).format(-7, 'day'));
+    expect(resolve('common.modifier_ago', { value }, { ago: { format: 'day' } })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
+    expect(resolve('common.modifier_ago', { value }, { ago: { format: 'week' } })).not.toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
   });
   it('`ago` defaults work', () => {
     const resolveDays = resolverFor<{ value?: any }>(defaultLocale, createParser({ modifierDefaults: { ago: { format: 'days' } } }));
     const resolveWeek = resolverFor<{ value?: any }>(defaultLocale, createParser({ modifierDefaults: { ago: { format: 'week' } } }));
     const value = -1000 * 60 * 60 * 24 * 7;
 
-    expect(resolveDays('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale).format(-7, 'day'));
-    expect(resolveWeek('common.modifier_ago', { value })).not.toBe(new Intl.RelativeTimeFormat(defaultLocale).format(-7, 'day'));
+    expect(resolveDays('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
+    expect(resolveWeek('common.modifier_ago', { value })).not.toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
   });
   it('`currency` modifier works', () => {
     const resolve = resolverFor<{ value?: number }>(defaultLocale);
