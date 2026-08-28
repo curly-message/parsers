@@ -78,23 +78,6 @@ export default tseslint.config(
     },
   },
   {
-    // The v1 sources predate the formatting contract (final newlines, blank
-    // lines); they ship byte-identical, so `--fix` must not rewrite them.
-    files: ['src/index.ts', 'src/modifiers.ts', 'src/types.ts', 'src/utils.ts'],
-    rules: {
-      '@stylistic/eol-last': 'off',
-      '@stylistic/no-multiple-empty-lines': 'off',
-    },
-  },
-  {
-    // The v1-era file-wide disable directive stays; without this opt-out,
-    // `--fix` would strip it as unused.
-    files: ['tsup.config.js'],
-    linterOptions: {
-      reportUnusedDisableDirectives: 'off',
-    },
-  },
-  {
     // Plain JS (this config, the tsup config) sits outside tsconfig's program
     // (no allowJs) — lint it untyped, with node globals so no-undef doesn't
     // fire on console/process in one-off scripts.
