@@ -161,7 +161,8 @@ const mergeProps = (base: any, override: any) => {
 };
 
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey }) => {
-  const { customModifiers, onReport } = parserOptions || {};
+  const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers');
+  const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
   const modifiers = mergeLayer(defaultModifiers, customModifiers);
   const modifierKeys = Object.keys(modifiers);
 
@@ -309,7 +310,7 @@ const report = (code: Report['code'], reported: string, key: Parser.Key | undefi
 };
 
 const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key }) => {
-  const { onReport } = parserOptions || {};
+  const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
 
   let output = value;
 
