@@ -491,6 +491,13 @@ describe('parser', () => {
       text: '{{value:plural; 1:one; default:many}}',
     });
   });
+  it('the modifier registry holds modifiers alone', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (entry) => reports.push(entry) });
+
+    expect(resolve('{{v:agoMap; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
+  });
   it('a modifier the caller registers is one the parser knows', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({

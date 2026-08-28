@@ -134,3 +134,18 @@ describe('payload typing', () => {
     expect(resolve(GREETING, { payload: { applicationName: { value: 'App', unit: 'kg' } } })).toBe('Hi {"value":"App","unit":"kg"}!');
   });
 });
+
+// `Modifier.DefaultKeys` is `keyof typeof modifiers`, so the modifier module's
+// exports are the registry — a helper exported beside the modifiers would
+// answer to its own name in a message. This is the type-level half of the
+// tripwire; `the modifier registry holds modifiers alone` is the runtime half.
+describe('modifier typing', () => {
+  it('names the registered modifiers, and nothing else', () => {
+    type Exact<A, B> = [A] extends [B] ? [B] extends [A] ? true : never : never;
+    type Registered = 'eq' | 'ne' | 'lt' | 'gt' | 'lte' | 'gte' | 'number' | 'date' | 'ago' | 'currency';
+
+    const registered: Exact<Modifier.DefaultKeys, Registered> = true;
+
+    expect(registered).toBe(true);
+  });
+});

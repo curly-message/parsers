@@ -1,4 +1,5 @@
 import * as modifiers from './modifiers';
+import type { AGO_LADDER } from './utils';
 
 /**
  * A locale as it reaches resolution — an opaque identifier the modifiers hand
@@ -53,7 +54,7 @@ export module Modifier {
 
   export type DefaultKeys = keyof typeof modifiers;
 
-  type AgoStep = (typeof modifiers.agoMap)[number]['key'];
+  type AgoStep = (typeof AGO_LADDER)[number]['key'];
 
   /**
    * A unit `ago` can resolve to, read off the ladder it climbs rather than off

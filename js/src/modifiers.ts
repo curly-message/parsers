@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer } from './utils';
+import { AGO_LADDER, getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back.
@@ -60,25 +60,11 @@ export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValu
   return new Intl.DateTimeFormat(locale, mergeLayer(defaults, rest)).format(input);
 };
 
-// The ladder `ago` climbs, each step a multiple of the one below it. A unit
-// `Intl` knows but this ladder does not climb can never be selected — the climb
-// simply runs out at `year` — so the ladder is also what `Modifier.AgoProps`
-// accepts as a format, read straight off this list.
-export const agoMap = [
-  { key: 'second', multiplier: 1000 },
-  { key: 'minute', multiplier: 60 },
-  { key: 'hour', multiplier: 60 },
-  { key: 'day', multiplier: 24 },
-  { key: 'week', multiplier: 7 },
-  { key: 'month', multiplier: 13 / 3 },
-  { key: 'year', multiplier: 12 },
-] as const satisfies readonly { key: Intl.RelativeTimeFormatUnit, multiplier: number }[];
-
 const testResolution = (defKey: string = '', testKey: string = '') => new RegExp(`^${defKey}s?$`).test(testKey);
 
-const findIndex = (currentKey: string) => agoMap.indexOf(agoMap.find(({ key }) => testResolution(key, currentKey)) as any);
+const findIndex = (currentKey: string) => AGO_LADDER.indexOf(AGO_LADDER.find(({ key }) => testResolution(key, currentKey)) as any);
 
-const agoFormat = (millis: number, resolution?: Intl.RelativeTimeFormatUnit | 'auto'): [number, Intl.RelativeTimeFormatUnit] => agoMap.reduce(([value, currentKey], { key, multiplier }, index) => {
+const agoFormat = (millis: number, resolution?: Intl.RelativeTimeFormatUnit | 'auto'): [number, Intl.RelativeTimeFormatUnit] => AGO_LADDER.reduce(([value, currentKey], { key, multiplier }, index) => {
   if (testResolution(currentKey, resolution)) return [value, currentKey];
 
   if (!currentKey || index === findIndex(currentKey) + 1) {
