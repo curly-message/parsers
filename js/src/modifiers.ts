@@ -60,7 +60,11 @@ export const date: Modifier.T<Modifier.DateProps> = ({ value, props, defaultValu
   return new Intl.DateTimeFormat(locale, mergeLayer(defaults, rest)).format(input);
 };
 
-const agoMap = [
+// The ladder `ago` climbs, each step a multiple of the one below it. A unit
+// `Intl` knows but this ladder does not climb can never be selected — the climb
+// simply runs out at `year` — so the ladder is also what `Modifier.AgoProps`
+// accepts as a format, read straight off this list.
+export const agoMap = [
   { key: 'second', multiplier: 1000 },
   { key: 'minute', multiplier: 60 },
   { key: 'hour', multiplier: 60 },
@@ -68,7 +72,7 @@ const agoMap = [
   { key: 'week', multiplier: 7 },
   { key: 'month', multiplier: 13 / 3 },
   { key: 'year', multiplier: 12 },
-] as { key: Intl.RelativeTimeFormatUnit, multiplier: number }[];
+] as const satisfies readonly { key: Intl.RelativeTimeFormatUnit, multiplier: number }[];
 
 const testResolution = (defKey: string = '', testKey: string = '') => new RegExp(`^${defKey}s?$`).test(testKey);
 

@@ -79,6 +79,17 @@ describe('payload typing', () => {
     expect(resolve('You have {{count:number}}.', { payload: { count }, locale: 'en' })).toBe('You have 1,234.6.');
   });
 
+  it('rejects an `ago` format the resolution ladder does not walk', () => {
+    const { resolve } = createParser<{ v: number }>();
+    const payload = { v: -40 * 24 * 60 * 60 * 1000 };
+
+    expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'month' } }, locale: 'en' })).toBe('last month');
+    expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'days' } }, locale: 'en' })).toBe('40 days ago');
+
+    // @ts-expect-error `quarter` is a unit `Intl` knows and this ladder does not walk
+    expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'quarter' } }, locale: 'en' })).toBe('this year');
+  });
+
   it('rejects a typo against a declared payload type', () => {
     const { resolve } = createParser<Payload>();
 
