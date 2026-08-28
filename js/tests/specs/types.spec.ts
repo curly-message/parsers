@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createParser } from '../../src';
-import type { Modifier, Parser } from '../../src';
+import type { Modifier, Parser, Report } from '../../src';
 
 const GREETING = 'Hi {{applicationName}}!';
 
@@ -166,6 +166,30 @@ describe('payload typing', () => {
     const count: Modifier.Wrapper<number> = { value: 1234.56, props: { nope: { a: 1 } } };
 
     expect(resolve('You have {{count:number}}.', { payload: { count }, locale: 'en' })).toBe('You have 1,234.56.');
+  });
+});
+
+// `Parser.Options` is published, so it has to read like one a consumer can
+// take apart: indexing it for a single option and taking the bag as a
+// parameter are the ordinary uses.
+describe('parser option typing', () => {
+  it('names a single option and reads it off the bag', () => {
+    const reports: Report[] = [];
+    const onReport: Parser.Options['onReport'] = (report) => { reports.push(report); };
+    const readHandler = (options: Parser.Options) => options.onReport;
+    const options = { onReport };
+    const { resolve } = createParser(options);
+
+    expect(readHandler(options)).toBe(onReport);
+    expect(resolve('{{v:nosuch; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
+  });
+
+  it('rejects an option bag carrying a key the parser does not read', () => {
+    // @ts-expect-error the parser reads `customModifiers`, `modifierDefaults` and `onReport`
+    const { resolve } = createParser({ onreport: () => {} });
+
+    expect(resolve('Hi!')).toBe('Hi!');
   });
 });
 

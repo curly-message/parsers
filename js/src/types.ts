@@ -151,7 +151,7 @@ export module Parser {
      * still fails soft, it just does so silently.
      */
     onReport?: OnReport;
-  } | undefined;
+  };
 
   export type PayloadDefault = { [key in 'default']?: any };
 

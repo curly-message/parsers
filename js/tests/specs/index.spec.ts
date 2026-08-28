@@ -994,14 +994,14 @@ describe('parser', () => {
     ];
 
     for (const customModifiers of hostile) {
-      const { resolve } = createParser({ customModifiers: customModifiers as NonNullable<Parser.Options>['customModifiers'] });
+      const { resolve } = createParser({ customModifiers: customModifiers as Parser.Options['customModifiers'] });
 
       expect(resolve('{{value}}', { payload: { value: 'TEST_STRING' } })).toBe('TEST_STRING');
       expect(resolve('{{value:test}}', { payload: { value: 'TEST_STRING', default: 'FALLBACK' } })).toBe('FALLBACK');
     }
   });
   it('a custom modifier set to `undefined` leaves the modifier beneath it standing', () => {
-    const { resolve } = createParser({ customModifiers: { eq: undefined } as unknown as NonNullable<Parser.Options>['customModifiers'] });
+    const { resolve } = createParser({ customModifiers: { eq: undefined } as unknown as Parser.Options['customModifiers'] });
 
     expect(resolve('{{value; TEST_STRING:HIT}}', { payload: { value: 'TEST_STRING' } })).toBe('HIT');
   });
