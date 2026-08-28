@@ -371,7 +371,16 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
 };
 
 export const createParser: Parser.Factory = (parserOptions) => ({
-  resolve: (message, { payload, props, locale, key } = {}) => {
+  resolve: (message, context) => {
+    // The context is caller-supplied like the payload inside it, and is read
+    // the same way: own entries only. A prototype somebody else wrote to is
+    // not a context a caller passed, and a caller that passed `null` for one
+    // is a caller that passed none.
+    const payload: Parser.Payload | undefined = ownValue(context, 'payload');
+    const props: Modifier.Props | undefined = ownValue(context, 'props');
+    const locale: Locale | undefined = ownValue(context, 'locale');
+    const key: Parser.Key | undefined = ownValue(context, 'key');
+
     // Everything the format carries is text, and the message becomes text
     // before anything reads it rather than after everything has: a host that
     // wrote its message as something else gets it interpolated and unescaped
