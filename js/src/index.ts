@@ -210,13 +210,19 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
     let resolvedDefault: string | undefined;
 
+    // A placeholder can name `default` itself, and then the chain's payload
+    // link is the entry it has already read as its value. One entry converts
+    // once: reading it again would pay for the same serialization twice and
+    // describe a single value that cannot become text as two.
+    const payloadDefault = key === 'default' ? () => valueText : () => payloadText(ownValue(payload, 'default'));
+
     // The wrapper speaks for its own value, the payload for every key it does
     // not carry, and the message only for what neither of them says. Converting
     // one costs a full serialization, so a link waits for the one before it to
     // come back empty, and the chain waits for a reader.
     const defaultText = () => {
-      resolvedDefault ??= [ownValue(wrapper, 'default'), ownValue(payload, 'default')]
-        .reduce<string | undefined>((output, candidate) => output ?? payloadText(candidate), undefined) ?? inlineDefault ?? '';
+      resolvedDefault ??= [() => payloadText(ownValue(wrapper, 'default')), payloadDefault]
+        .reduce<string | undefined>((output, read) => output ?? read(), undefined) ?? inlineDefault ?? '';
 
       return resolvedDefault;
     };
