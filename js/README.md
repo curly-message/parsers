@@ -86,12 +86,14 @@ else is read, and the package has no runtime dependencies — locale-dependent
 formatting is delegated to `Intl`.
 
 `customModifiers` registers modifiers by name, over the built-in ones, so a
-name it carries is a name a message may write. What it registers has to be a
-modifier: an entry that cannot be called registers none, so it takes no name of
-its own and does not shadow the built-in it names, and a message writing that
-name reads it as one nobody registered — `unknown-modifier`, the fallback
-chain. The types say as much, but a JavaScript caller reaches the table
-regardless.
+name it carries is a name a message may write, and so is a name the parser
+holds a modifier under already. What it registers has to be a modifier: an
+entry that cannot be called registers none, so it takes no name of its own and
+does not shadow the built-in it names. Where nothing else answers to the name,
+a message writing it reads it as one nobody registered — `unknown-modifier`,
+the fallback chain; where a built-in answers to it, that built-in answers as it
+did, so `{ eq: 'text' }` costs a caller the name it wrote and nothing further.
+The types say as much, but a JavaScript caller reaches the table regardless.
 
 `onReport` is where diagnostics go. The parser writes to no channel of its own,
 so unset it reports nowhere; resolution still fails soft, it just does so
