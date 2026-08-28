@@ -1152,9 +1152,15 @@ describe('parser', () => {
     // it supplied is empty. A locale the caller did supply and the host then
     // rejects is available but unusable, which is a formatting failure and
     // takes the chain like any other.
+    //
+    // The locale is read before the value, so a value the modifier could not
+    // have formatted answers the same way: a declared default stands in for a
+    // value the modifier cannot read, never for a locale nobody supplied.
     for (const modifier of ['number', 'date', 'ago', 'currency']) {
-      expect(resolve(`{{value:${modifier}; default:FALLBACK;}}`, { payload: { value: 10 } })).toBe('');
-      expect(resolve(`{{value:${modifier}; default:FALLBACK;}}`, { payload: { value: 10 }, locale: '' })).toBe('');
+      for (const value of [10, 'not a number']) {
+        expect(resolve(`{{value:${modifier}; default:FALLBACK;}}`, { payload: { value } })).toBe('');
+        expect(resolve(`{{value:${modifier}; default:FALLBACK;}}`, { payload: { value }, locale: '' })).toBe('');
+      }
     }
 
     expect(resolve(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 } })).toBe('');
