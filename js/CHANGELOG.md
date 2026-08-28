@@ -23,7 +23,12 @@ Initial version line for `@curly-message/parser`.
   asked; it now resolves to the fallback chain and reports `unknown-modifier`.
   Registering the name through `customModifiers` makes it known — a caller's
   table overrides the built-in one, so a host can supply what its messages
-  need.
+  need. What it registers has to be a modifier: an entry that cannot be called
+  registers none, so it takes no name of its own and does not shadow the
+  built-in it names. The parser's own exports are the registry a caller's table
+  composes with, and the `ago` unit ladder was among them, so `{{v:agoMap}}`
+  used to answer to a private data table and resolve to the fallback chain in
+  silence where `{{v:nosuch}}` reports.
 * Everything a modifier reads is text. A value used to reach a modifier at the
   type the payload gave it while a default arrived as text; both are converted
   the same way now, so a modifier has one kind of input to read. A plain object

@@ -694,9 +694,17 @@ describe('parser', () => {
   });
   it('the modifier registry holds modifiers alone', () => {
     const reports: Report[] = [];
-    const { resolve } = createParser({ onReport: (entry) => reports.push(entry) });
+    // The types admit modifiers alone, but a JavaScript caller reaches this
+    // table with anything, and the parser's own exports once reached it with a
+    // data table of their own.
+    const registry = { agoMap: [{ key: 'second', multiplier: 1000 }], eq: 'not a modifier' } as any;
+    const { resolve } = createParser({ customModifiers: registry, onReport: (entry) => reports.push(entry) });
 
     expect(resolve('{{v:agoMap; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    // An entry that is not a modifier registers none, so it takes no name a
+    // message can write and shadows no modifier that already answers to one.
+    expect(resolve('{{v; X:HIT; default:D}}', { payload: { v: 'X' } })).toBe('HIT');
+    expect(resolve('{{v:eq; X:HIT; default:D}}', { payload: { v: 'X' } })).toBe('HIT');
     expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
   });
   it('a modifier the caller registers is one the parser knows', () => {
