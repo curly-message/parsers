@@ -62,9 +62,12 @@ export type Report = {
   /** The limit that was reached, where the report is about one. */
   limit?: number;
   /**
-   * The text that never settled. Truncated — a cut is marked with a trailing
-   * `...` of the parser's own — and with its line terminators escaped, so
-   * payload content cannot forge a line wherever this is written.
+   * Where the trouble came from: the placeholder for a report about one, the
+   * output that would not settle for the two limits, and nothing at all where
+   * what could not be described is the chain a message itself resolves
+   * through, which names no placeholder. Truncated — a cut is marked with a
+   * trailing `...` of the parser's own — and with its line terminators
+   * escaped, so payload content cannot forge a line wherever this is written.
    */
   text: string;
 };
