@@ -232,7 +232,10 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       return defaultText();
     }
 
-    if (valueText === undefined && modifierKey !== 'ne') return defaultText();
+    // An absent value is nothing to compare against, whatever the modifier
+    // asks: the placeholder takes the fallback chain rather than measuring the
+    // host's own word for absence.
+    if (valueText === undefined) return defaultText();
 
     if (!hasModifier && !options.length) return valueText ?? defaultText();
 

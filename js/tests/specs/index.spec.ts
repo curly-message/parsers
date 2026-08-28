@@ -223,7 +223,15 @@ describe('parser', () => {
     expect(resolve('common.modifier_ne', { value: 10 })).toBe('DEFAULT VALUE');
     expect(resolve('common.modifier_ne', { value: 5 })).toBe('VALUE2');
     expect(resolve('common.modifier_ne', { value: 15 })).toBe('VALUE2');
-    expect(resolve('common.modifier_ne')).toBe('VALUE2');
+    expect(resolve('common.modifier_ne')).toBe('DEFAULT VALUE');
+  });
+  it('an absent value takes the fallback chain under `ne` like every other modifier', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v:ne; 10:V2; default:D}}')).toBe('D');
+    expect(resolve('{{v:ne; a:A; b:B}}')).toBe('');
+    expect(resolve('{{v:ne; 10:V2; default:D}}', { payload: { v: 10 } })).toBe('D');
+    expect(resolve('{{v:ne; 10:V2; default:D}}', { payload: { v: 5 } })).toBe('V2');
   });
   it('`lt` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
@@ -685,7 +693,7 @@ describe('parser', () => {
   it('short option segments work', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
-    expect(resolve('common.modifier_short_option')).toBe('VALUES: DEF, DEF, z');
+    expect(resolve('common.modifier_short_option')).toBe('VALUES: DEF, DEF, DEF');
     expect(resolve('common.modifier_short_option', { value: 'x' })).toBe('VALUES: , DEF, z');
     expect(resolve('common.modifier_short_option', { value: 5 })).toBe('VALUES: FIVE, , z');
     expect(resolve('common.modifier_short_option', { value: 2 })).toBe('VALUES: DEF, , z');

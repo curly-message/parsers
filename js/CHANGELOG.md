@@ -189,3 +189,10 @@ Initial version line for `@curly-message/parser`.
   with the default the message actually declared discarded. Both gates now
   compare the same spelling, so `DEFAULT:x` is an ordinary option and
   `{{v; DEFAULT:X}}` over `{ v: 'DEFAULT' }` renders `'X'` through `eq`.
+* An absent value takes the fallback chain under every comparison, `ne`
+  included. `ne` was exempt from the guard, so a placeholder whose key the
+  payload does not carry still ran the comparison — against the host's own word
+  for absence, the text `undefined` — and `{{v:ne; 10:V2; default:D}}` rendered
+  `'V2'` because `10` differs from that word. It renders `'D'` now, and
+  `{{v:ne; a:A; b:B}}` the empty string. The old answer was a spelling one
+  language happens to use rather than anything the format decides.
