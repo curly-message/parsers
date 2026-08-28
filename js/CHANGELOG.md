@@ -182,3 +182,10 @@ Initial version line for `@curly-message/parser`.
   string, because the inline default was read by a rule of its own instead of
   being split at its first colon like every other option; it now resolves to
   `':x'`.
+* The inline `default` is reserved in lowercase only. The scan that claimed it
+  folded case while the filter that removed it from the option list compared
+  exactly, so `{{v; DEFAULT:UPPER; default:LOWER}}` rendered `'UPPER'` — one
+  segment standing as the inline default and as a comparison option at once,
+  with the default the message actually declared discarded. Both gates now
+  compare the same spelling, so `DEFAULT:x` is an ordinary option and
+  `{{v; DEFAULT:X}}` over `{ v: 'DEFAULT' }` renders `'X'` through `eq`.

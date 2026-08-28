@@ -932,6 +932,13 @@ describe('parser', () => {
     expect(resolve('{{v; default:10:30}}')).toBe('10:30');
     expect(resolve('{{v; default:https://example.com/a:b}}')).toBe('https://example.com/a:b');
   });
+  it('`default` is reserved in lowercase only', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v; DEFAULT:UPPER; default:LOWER}}')).toBe('LOWER');
+    expect(resolve('{{v; Default:X}}')).toBe('');
+    expect(resolve('{{v; DEFAULT:X}}', { payload: { v: 'DEFAULT' } })).toBe('X');
+  });
   it('a payload value is unescaped by the same rule as the message', () => {
     const { resolve } = defaultParser;
 

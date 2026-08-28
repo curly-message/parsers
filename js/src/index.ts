@@ -189,7 +189,9 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
       if (!optionKey) return;
 
-      if (inlineDefault === undefined && optionKey.toLowerCase() === 'default') inlineDefault = optionValue;
+      // `default` is reserved in lowercase, so both gates read the same
+      // spelling and a segment is either the inline default or an option.
+      if (inlineDefault === undefined && optionKey === 'default') inlineDefault = optionValue;
 
       if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
     });
