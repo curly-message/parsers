@@ -116,6 +116,25 @@ const isPlainObject = (value: any) => {
   }
 };
 
+// Serialization follows a shared reference again every time it meets one, so a
+// value holding twenty-five objects — each of twenty-four levels naming the
+// same child twice — serializes to sixteen million leaves with no cycle for the
+// `catch` below to find. Every node the walk visits owes the output at least a
+// character, so a value past this budget could never have fit `resolve`'s own
+// output budget: the two are the same number because they bound the same thing
+// from two ends.
+const serialize = (value: any) => {
+  let budget = MAX_INTERPOLATION_LENGTH;
+
+  return JSON.stringify(value, (_, entry) => {
+    budget -= 1;
+
+    if (budget < 0) throw new RangeError('The value visits more nodes than a resolvable output can hold.');
+
+    return entry;
+  });
+};
+
 /**
  * The text a value resolves to. Everything the format carries is text: a plain
  * object and an array become JSON, so a custom modifier can read them back,
@@ -130,7 +149,7 @@ const text = (value: any): string | undefined => {
 
   try {
     if (isPlainObject(value) || Array.isArray(value)) {
-      const json = JSON.stringify(value);
+      const json = serialize(value);
 
       return typeof json === 'string' ? json : undefined;
     }

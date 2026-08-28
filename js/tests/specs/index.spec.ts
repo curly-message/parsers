@@ -1322,6 +1322,33 @@ describe('parser', () => {
       text: '{{v11}}',
     });
   });
+  it('a value whose serialization outgrows a resolvable output is read as missing', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // Twenty-five objects, each of twenty-four levels naming the same child
+    // twice. Nothing here is circular, so serialization has nothing to refuse —
+    // it just walks sixteen million leaves to describe twenty-five objects.
+    let shared: unknown = { leaf: 1 };
+
+    for (let level = 0; level < 24; level += 1) shared = { a: shared, b: shared };
+
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: shared } })).toBe('INLINE');
+    expect(resolve(shared as string, { payload: {}, key: 'common.shared' })).toBe('common.shared');
+
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+
+    // The budget bounds the walk, not the value: a value that describes itself
+    // in one pass is serialized however deep or wide it is.
+    let chain: unknown = { leaf: 1 };
+
+    for (let level = 0; level < 24; level += 1) chain = { a: chain };
+
+    expect(resolve('{{v}}', { payload: { v: chain } })).toBe(`${'{"a":'.repeat(24)}{"leaf":1}${'}'.repeat(24)}`);
+    expect(resolve('{{v}}', { payload: { v: Array.from({ length: 1000 }, (_, index) => index) } })).toBe(JSON.stringify(Array.from({ length: 1000 }, (_, index) => index)));
+
+    expect(reports).toHaveLength(1);
+  });
   it('a reported excerpt is cut at the bound, not at whatever reached it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
