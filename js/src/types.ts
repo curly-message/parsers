@@ -32,7 +32,7 @@ export type Interpolation = Interpolate;
  */
 export type Report = {
   /** What stopped resolution. */
-  code: 'unknown-modifier' | 'unserializable-value' | 'pass-limit' | 'output-limit';
+  code: 'unknown-modifier' | 'failed-modifier' | 'unserializable-value' | 'pass-limit' | 'output-limit';
   /**
    * The same in English. It is self-contained and carries nothing from the
    * payload, so writing it anywhere is safe without further thought.
