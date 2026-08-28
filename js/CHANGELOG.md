@@ -91,6 +91,12 @@ Initial version line for `@curly-message/parser`.
   call's `props` of `{ number: { useGrouping: false } }` and a wrapper's
   `props` of `{ number: { maximumFractionDigits: 1 } }`, `{{v:number}}` over
   `1234.56` renders `'1234.6'`.
+* A wrapper's `props` is checked like the two layers beneath it. The factory's
+  props type parameter reaches the wrapper through the payload, so a wrapper
+  carries the same modifier-keyed table `modifierDefaults` and a call's `props`
+  carry — the built-in modifiers' options plus whatever the host registered.
+  A wrapper's `props` of `{ number: { maximumFractionDigits: 'lots' } }` used
+  to compile, and then resolved to the fallback chain at runtime.
 * Resolution never raises. A modifier that cannot produce a result now resolves
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any
