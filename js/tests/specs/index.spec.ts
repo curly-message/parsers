@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createParser, Parser, Report } from '../../src';
-import { LINE_TERM } from '../../src/utils';
+import { getDateInput, getModifierInput, LINE_TERM } from '../../src/utils';
 import { MESSAGES } from '../data';
 
 const defaultLocale = 'en';
@@ -1361,6 +1361,24 @@ describe('parser', () => {
     expect(resolve('{{v:number; default:FALLBACK}}', { payload: { v: '2024-03-05T10:00:00.000Z' }, locale: defaultLocale })).toBe('FALLBACK');
     expect(resolve('{{v:ago; default:FALLBACK}}', { payload: { v: '2024-03-05T10:00:00.000Z' }, locale: defaultLocale })).toBe('FALLBACK');
     expect(resolve('{{v:currency; default:FALLBACK}}', { payload: { v: '2024-03-05T10:00:00.000Z' }, props: { currency: { currency: 'USD' } }, locale: defaultLocale })).toBe('FALLBACK');
+  });
+  it('a date the host cannot parse answers nothing, not the host\'s own word for nothing', () => {
+    // Both readings a timestamp can fail at answer the same way, because the
+    // modifier tests for nothing and hands whatever it gets to `Intl`: an
+    // answer of `NaN` reads as a timestamp the format would then have to raise
+    // over, and containment is not what makes a value the modifier cannot
+    // format take the fallback chain.
+    expect(getModifierInput('tomorrow')).toBeUndefined();
+    expect(getDateInput('tomorrow')).toBeUndefined();
+    expect(getDateInput('')).toBeUndefined();
+    expect(getDateInput('2024-13-45')).toBeUndefined();
+    expect(getDateInput({})).toBeUndefined();
+
+    const stamp = Date.parse('2024-03-05T10:00:00.000Z');
+
+    expect(getDateInput(`${stamp}`)).toBe(stamp);
+    expect(getDateInput('2024-03-05T10:00:00.000Z')).toBe(stamp);
+    expect(getDateInput(0)).toBe(0);
   });
   it('a formatting modifier formats zero rather than falling back', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
