@@ -177,10 +177,11 @@ repository, not just these docs.
   single spread before it escapes to consumers.
 - Keep `index.ts` for the resolution pipeline; put pure, reusable helpers in
   `utils.ts` and modifier implementations in `modifiers.ts`.
-- Diagnostics leave through the `onReport` option at the interpolation guards,
-  and nowhere else. The format specifies no channel to report through, so a
-  parser writes to none — it describes what happened and lets its caller decide
-  where that goes. Reporting somewhere directly, or widening what a `Report`
+- Diagnostics leave through the `onReport` option and nowhere else — from a
+  placeholder the parser could not resolve, and from the interpolation guards.
+  The format specifies no channel to report through, so a parser writes to none
+  — it describes what happened and lets its caller decide where that goes.
+  Reporting somewhere directly, adding a `code`, or widening what a `Report`
   carries, is a change to the public surface: propose it rather than
   introducing it in passing.
 - **Reuse before reimplementing** — `ownValue`, `unesc`, `getModifierDefaults`
