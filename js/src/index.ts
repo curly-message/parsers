@@ -249,7 +249,13 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     try {
       const modifierProps = mergeProps(props, ownValue(wrapper, 'props'));
 
-      return String(modifier({ value: valueText, options, props: modifierProps, defaultValue: defaultText(), locale, parserOptions }));
+      // A modifier answers with a host value like any other, so it becomes text
+      // by the conversion a payload entry does: an object it built stays
+      // structured instead of collapsing to the host's own word for an object.
+      // An answer no conversion can describe is not an answer, and neither is
+      // nothing, so the placeholder takes the fallback chain — the way it does
+      // for a value that is not a value.
+      return text(modifier({ value: valueText, options, props: modifierProps, defaultValue: defaultText(), locale, parserOptions })) ?? defaultText();
     } catch {
       return defaultText();
     }

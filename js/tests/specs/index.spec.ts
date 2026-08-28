@@ -513,6 +513,28 @@ describe('parser', () => {
     expect(resolve('{{v:x-a\\:b}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('COLON');
     expect(resolve('{{v:x-c\\ }}', { payload: { v: 1 }, locale: defaultLocale })).toBe('SPACE');
   });
+  it('a modifier answers with a host value, converted like any other', () => {
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-void': () => undefined,
+        'x-obj': () => ({ a: 1 }),
+        'x-arr': () => [1, 2],
+        'x-circ': () => circular,
+      },
+    });
+    const payload = { v: 1 };
+
+    // A plain object and an array serialize, the way a payload value does.
+    expect(resolve('{{v:x-obj}}', { payload, locale: defaultLocale })).toBe('{"a":1}');
+    expect(resolve('{{v:x-arr}}', { payload, locale: defaultLocale })).toBe('[1,2]');
+
+    // An answer that is nothing, or that no conversion can describe, is no
+    // answer: the placeholder takes the fallback chain rather than rendering
+    // the host's own word for it.
+    expect(resolve('{{v:x-void; default:D}}', { payload, locale: defaultLocale })).toBe('D');
+    expect(resolve('{{v:x-void}}', { payload, locale: defaultLocale })).toBe('');
+    expect(resolve('{{v:x-circ; default:D}}', { payload, locale: defaultLocale })).toBe('D');
+  });
   it('a modifier the parser does not know resolves to the fallback chain and reports it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
