@@ -780,6 +780,40 @@ describe('parser', () => {
     expect(resolve('{{v:x-void}}', { payload, locale: defaultLocale })).toBe('');
     expect(resolve('{{v:x-circ; default:D}}', { payload, locale: defaultLocale })).toBe('D');
   });
+  it('an answer no conversion can describe is reported, and one that is nothing is not', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-void': () => undefined,
+        'x-circ': () => circular,
+        'x-opaque': () => new Opaque(),
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+    const payload = { v: 1 };
+
+    // A modifier's answer converts the way a payload entry does, so an answer
+    // it cannot describe is described as missing the same way one of those is.
+    expect(resolve('{{v:x-circ; default:D}}', { payload, locale: defaultLocale, key: 'common.opaque' })).toBe('D');
+
+    expect(reports).toEqual([{
+      code: 'unserializable-value',
+      message: 'A value could not become text, so resolution read it as missing.',
+      key: 'common.opaque',
+      text: '{{v:x-circ; default:D}}',
+    }]);
+
+    expect(resolve('{{v:x-opaque; default:D}}', { payload, locale: defaultLocale })).toBe('D');
+
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value', 'unserializable-value']);
+
+    // An answer that is nothing at all is an absent answer, not one that could
+    // not be described, so it takes the chain without reporting.
+    expect(resolve('{{v:x-void; default:D}}', { payload, locale: defaultLocale })).toBe('D');
+    expect(resolve('{{v:x-void}}', { payload, locale: defaultLocale })).toBe('');
+
+    expect(reports).toHaveLength(2);
+  });
   it('the fallback chain waits for a reader, and reports only what one read', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
@@ -930,7 +964,7 @@ describe('parser', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toEqual({
       code: 'unserializable-value',
-      message: 'A payload value could not become text, so resolution read it as missing.',
+      message: 'A value could not become text, so resolution read it as missing.',
       key: 'common.opaque',
       text: '{{v; default:INLINE}}',
     });
@@ -1124,7 +1158,7 @@ describe('parser', () => {
     expect(resolve(circular, { payload: { default: circular }, key: 'common.key' })).toBe('common.key');
     expect(reports).toEqual([{
       code: 'unserializable-value',
-      message: 'A payload value could not become text, so resolution read it as missing.',
+      message: 'A value could not become text, so resolution read it as missing.',
       key: 'common.key',
       limit: undefined,
       text: '',

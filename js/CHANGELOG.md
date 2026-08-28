@@ -314,6 +314,16 @@ Initial version line for `@curly-message/parser`.
   the placeholder reported `failed-modifier` and rendered its fallback. What
   carries the composed layers to a formatter now owns every entry it is
   configured with and answers for no prototype.
+* A modifier's answer that no conversion describes is reported. Such an answer
+  already took the fallback chain, the way a payload value that cannot become
+  text does, but only half of that treatment reached it: the placeholder
+  rendered its fallback and the caller heard nothing, so a custom modifier
+  returning a structure that references itself, or one whose `toString` raises,
+  failed invisibly. It now reports `unserializable-value` like the payload value
+  it is converted as. An answer that is nothing at all is an absent answer
+  rather than one that could not be described, so it still takes the chain
+  silently. The code's message reads `A value could not become text, so
+  resolution read it as missing.`, which is what it now covers.
 * A fallback chain link that refuses to be read is reported. A payload entry, a
   wrapper's `value` or `default`, or the payload's own `default` could be an
   accessor that raises; the read answered "absent" and moved on silently, while
