@@ -662,6 +662,22 @@ describe('parser', () => {
     expect(resolve('{{v:x-a\\:b}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('COLON');
     expect(resolve('{{v:x-c\\ }}', { payload: { v: 1 }, locale: defaultLocale })).toBe('SPACE');
   });
+  it('a modifier name keeps every colon after the first, like an option value', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ customModifiers: { 'x-a:b': () => 'COLON' }, onReport: (report) => { reports.push(report); } });
+
+    // The first colon of a declaration separates the key from the modifier and
+    // every later one is part of the name, so a name carrying one needs no
+    // escape and escaping it names the same modifier. The rule is what keeps a
+    // name with something appended to it from running the modifier it starts
+    // with.
+    expect(resolve('{{v:x-a:b}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('COLON');
+    expect(resolve('{{v:x-a\\:b}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('COLON');
+    expect(resolve('{{v:number:x; default:D}}', { payload: { v: 1.5 }, locale: defaultLocale })).toBe('D');
+
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
+    expect(reports[0].text).toBe('{{v:number:x; default:D}}');
+  });
   it('a modifier answers with a host value, converted like any other', () => {
     const { resolve } = createParser({
       customModifiers: {
