@@ -158,8 +158,9 @@ export module Parser {
 
   /**
    * Everything resolution reads besides the message itself. `key` is the
-   * message's own identifier where the caller has one — it is what a missing
-   * message resolves to.
+   * message's own identifier where the caller has one. A missing message
+   * resolves to the payload's own `default`, and to `key` where the payload
+   * carries none — the same chain a placeholder falls through, one level up.
    */
   export type Context<P = PayloadDefault, M = Modifier.DefaultProps> = {
     payload?: Payload<P>;
