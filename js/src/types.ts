@@ -148,10 +148,12 @@ export module Parser {
 
   export type Options<Key extends string = Modifier.Key, Props = Modifier.DefaultProps> = {
     /**
-     * Modifiers registered by name, over the built-in ones. Registration is
-     * what makes a name one a message may write, so an entry that is not a
-     * modifier registers none: it takes no name of its own and shadows no
-     * built-in, and the name reads as one nobody registered.
+     * Modifiers registered by name, over the built-in ones. A name a message
+     * may write is one the parser holds a modifier under or one a host
+     * registered one under, so an entry that is not a modifier registers none:
+     * it takes no name of its own and shadows no built-in. The name then reads
+     * as one nobody registered where nothing else answers to it, and answers
+     * as it did where a built-in does.
      */
     customModifiers?: Modifier.CustomModifiers<Key, Props>;
     /**
