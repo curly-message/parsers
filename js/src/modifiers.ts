@@ -13,21 +13,22 @@ export const ne: Modifier.T = ({ value, options = [], defaultValue = '' }) => se
   ({ key }) => `${key}`.toLowerCase() !== `${value}`.toLowerCase(),
 ), defaultValue);
 
-export const lt: Modifier.T = ({ value, options = [], defaultValue = '' }) => {
-  const sortedOptions = options.sort((a, b) => +a.key - +b.key);
+// A numeric comparison reads only the options it can order. A key that is not
+// numeric can never be selected by one, and leaving it in the list would leave
+// the comparator answering NaN, which sorts as equal and freezes the pairs
+// around it. Ordering is done on a copy, so the caller's list keeps its order
+// for the `eq` leg `lte` and `gte` run over it.
+const ordered = (options: Modifier.ModifierOption[], compare: (a: number, b: number) => number) => options
+  .filter(({ key }) => !Number.isNaN(+key))
+  .sort((a, b) => compare(+a.key, +b.key));
 
-  return selected(sortedOptions.find(
-    ({ key }) => +value < +key,
-  ), defaultValue);
-};
+export const lt: Modifier.T = ({ value, options = [], defaultValue = '' }) => selected(ordered(options, (a, b) => a - b).find(
+  ({ key }) => +value < +key,
+), defaultValue);
 
-export const gt: Modifier.T = ({ value, options = [], defaultValue = '' }) => {
-  const sortedOptions = options.sort((a, b) => +b.key - +a.key);
-
-  return selected(sortedOptions.find(
-    ({ key }) => +value > +key,
-  ), defaultValue);
-};
+export const gt: Modifier.T = ({ value, options = [], defaultValue = '' }) => selected(ordered(options, (a, b) => b - a).find(
+  ({ key }) => +value > +key,
+), defaultValue);
 
 export const lte: Modifier.T = ({ value, options = [], defaultValue = '' }) => eq({ value, options, defaultValue: lt({ value, options, defaultValue }) });
 

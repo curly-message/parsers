@@ -261,6 +261,16 @@ describe('parser', () => {
     expect(resolve('common.modifier_gte', { value: 15 })).toBe('VALUE2');
     expect(resolve('common.modifier_gte')).toBe('DEFAULT VALUE');
   });
+  it('a numeric comparison orders its options and skips a key that is not numeric', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{v:lt; 10:TEN; 5:FIVE; default:D}}', { payload: { v: 1 } })).toBe('FIVE');
+    expect(resolve('{{v:gt; 5:FIVE; 10:TEN; default:D}}', { payload: { v: 20 } })).toBe('TEN');
+    expect(resolve('{{v:lt; 10:TEN; abc:ABC; 5:FIVE; default:D}}', { payload: { v: 1 } })).toBe('FIVE');
+    expect(resolve('{{v:gt; 5:FIVE; abc:ABC; 10:TEN; default:D}}', { payload: { v: 20 } })).toBe('TEN');
+    expect(resolve('{{v:lt; abc:ABC; default:D}}', { payload: { v: 1 } })).toBe('D');
+    expect(resolve('{{v:gte; abc:ABC; 5:FIVE; default:D}}', { payload: { v: 7 } })).toBe('FIVE');
+  });
   it('`number` modifier works', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
     const resolveAlt = resolverFor<{ value?: any }>(altLocale);

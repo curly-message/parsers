@@ -196,3 +196,13 @@ Initial version line for `@curly-message/parser`.
   `'V2'` because `10` differs from that word. It renders `'D'` now, and
   `{{v:ne; a:A; b:B}}` the empty string. The old answer was a spelling one
   language happens to use rather than anything the format decides.
+* A numeric comparison reads only the options it can order. `lt`, `lte`, `gt`
+  and `gte` sorted the whole option list with a comparator that answers `NaN`
+  for any key that is not a number, and a `NaN` answer sorts as equal, so one
+  such key froze the pairs around it and the wrong option won:
+  `{{v:lt; 10:TEN; abc:ABC; 5:FIVE; default:D}}` over `1` rendered `'TEN'`
+  where the same message without `abc` rendered `'FIVE'` — the order decided by
+  an option that can never be selected. Keys that are not numeric are now left
+  out of the ordering entirely, which is also the rule that keeps them
+  unselectable, and the ordering runs on a copy, so the list `lte` and `gte`
+  hand to their `eq` leg keeps the order the message wrote.
