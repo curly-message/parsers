@@ -950,6 +950,12 @@ describe('parser', () => {
     expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: String(new Date(stamp)) }, locale: defaultLocale })).toBe(formatted);
     expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: new Date(stamp) }, locale: defaultLocale })).toBe(formatted);
 
+    // Numeric text is read as a timestamp before the host's date grammar sees
+    // it, and the two readings disagree wherever that grammar accepts a number
+    // too: `2024` is 2024 milliseconds after the epoch, not the year of it.
+    expect(Date.parse('2024')).toBe(Date.parse('2024-01-01T00:00:00.000Z'));
+    expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: '2024' }, locale: defaultLocale })).toBe(new Intl.DateTimeFormat(defaultLocale, {}).format(2024));
+
     expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: 'tomorrow' }, locale: defaultLocale })).toBe('FALLBACK');
     expect(resolve('{{v:date; default:FALLBACK}}', { payload: { v: '' }, locale: defaultLocale })).toBe('FALLBACK');
 
