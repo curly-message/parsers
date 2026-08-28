@@ -607,6 +607,19 @@ describe('parser', () => {
     expect(resolve('{{v:currency}}', { payload: { v: 0.5 }, props: { currency: { style: 'percent' } }, locale: defaultLocale })).toBe(expected);
     expect(resolve('{{v:currency}}', { payload: { v: { value: 0.5, props: { currency: { style: 'decimal' } } } }, locale: defaultLocale })).toBe(expected);
   });
+  it('a formatting modifier reads its properties from `props`, never from an option', () => {
+    const { resolve } = defaultParser;
+    const usd = (amount: number) => new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(amount);
+    const digits = (amount: number, maximumFractionDigits: number) => new Intl.NumberFormat(defaultLocale, { maximumFractionDigits }).format(amount);
+
+    // A placeholder segment spelled like a property is an option, and an
+    // option reaches no layer: the ratio stays 1 and the maximum stays two.
+    expect(resolve('{{v:currency; ratio:100}}', { payload: { v: 2 }, props: { currency: { currency: 'USD' } }, locale: defaultLocale })).toBe(usd(2));
+    expect(resolve('{{v:currency}}', { payload: { v: 2 }, props: { currency: { currency: 'USD', ratio: 100 } }, locale: defaultLocale })).toBe(usd(200));
+
+    expect(resolve('{{v:number; maximumFractionDigits:4}}', { payload: { v: 1.23456 }, locale: defaultLocale })).toBe(digits(1.23456, 2));
+    expect(resolve('{{v:number}}', { payload: { v: 1.23456 }, props: { number: { maximumFractionDigits: 4 } }, locale: defaultLocale })).toBe(digits(1.23456, 4));
+  });
   it('custom modifier works', () => {
     const resolve = resolverFor<{ data?: any }>(defaultLocale, createParser({
       customModifiers: {
