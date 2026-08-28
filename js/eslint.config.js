@@ -5,8 +5,11 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  // Build outputs; node_modules is ignored by default.
-  { ignores: ['**/dist/', '**/lib/'] },
+  // Build outputs and machine-local scratch; node_modules is ignored by
+  // default. `.claude/worktrees/` is where the agent tooling checks the branch
+  // out a second time, and linting a checkout of the repo from inside the
+  // repo reports every dev dependency twice.
+  { ignores: ['**/dist/', '**/lib/', '**/.claude/'] },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
