@@ -6,6 +6,13 @@ import * as modifiers from './modifiers';
  */
 export type Locale = string;
 
+/**
+ * Holds a position out of the inference the surrounding call does. A type
+ * parameter is decided where it is declared or where its own argument names it
+ * — never by a second position that merely has to agree with it.
+ */
+type Given<T> = [T][T extends any ? 0 : never];
+
 export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options };
 
 /**
@@ -103,7 +110,12 @@ export module Parser {
 
   export type Options<Key extends string = Modifier.Key, Props = any> = {
     customModifiers?: Modifier.CustomModifiers<Key, Props>;
-    modifierDefaults?: Modifier.DefaultProps;
+    /**
+     * The bottom formatting layer, keyed by modifier name. It carries the same
+     * names the call's own `props` does, host-defined modifiers included — a
+     * modifier a host can configure per call it can also give defaults.
+     */
+    modifierDefaults?: Modifier.Props<Given<Props>>;
     /**
      * Where diagnostics go. Unset, the parser reports nowhere — resolution
      * still fails soft, it just does so silently.

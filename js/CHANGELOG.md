@@ -225,3 +225,10 @@ Initial version line for `@curly-message/parser`.
   same thing silently. The accepted units are now read off the ladder itself,
   so the two cannot drift and an unclimbable unit is a compile error rather
   than a wrong answer.
+* A host-defined modifier can be given implementation defaults.
+  `modifierDefaults` named only the built-in modifiers, so an `x-` modifier the
+  factory declares could be handed props per call but never configured at the
+  bottom layer without a cast. It now names the same modifiers the call's own
+  `props` does. The position does not decide the factory's props parameter —
+  `customModifiers` and the explicit argument do — so a parser configured only
+  through `modifierDefaults` keeps the context type it had.
