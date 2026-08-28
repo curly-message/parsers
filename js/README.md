@@ -52,7 +52,7 @@ takes the four inputs resolution is defined over, plus the message's own key:
 | `payload` | The values the placeholders name, or the configuration of one — see [Payload](#payload). Its `default` key is the message-wide fallback. |
 | `props` | Per-call formatting options handed to the modifiers, keyed by modifier name. A payload entry layers over them. |
 | `locale` | The locale the locale-dependent modifiers format for. |
-| `key` | The message's identifier. A missing message resolves to it. |
+| `key` | The message's identifier. A missing message resolves to the payload's `default`, and to this where the payload carries none. |
 
 `options` carries `customModifiers`, `modifierDefaults` and `onReport`. Nothing
 else is read, and the package has no runtime dependencies — locale-dependent
