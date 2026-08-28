@@ -507,6 +507,12 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_custom', { data: 'TEST_STRING' })).toBe('TEST_STRING');
   });
+  it('a modifier name selects on its unescaped spelling, like a key', () => {
+    const { resolve } = createParser({ customModifiers: { 'x-a:b': () => 'COLON', 'x-c ': () => 'SPACE' } });
+
+    expect(resolve('{{v:x-a\\:b}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('COLON');
+    expect(resolve('{{v:x-c\\ }}', { payload: { v: 1 }, locale: defaultLocale })).toBe('SPACE');
+  });
   it('a modifier the parser does not know resolves to the fallback chain and reports it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
