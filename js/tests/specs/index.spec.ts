@@ -668,9 +668,10 @@ describe('parser', () => {
     expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
 
     // And a modifier that raises after reading lands on the same chain, not on
-    // a second walk of it.
+    // a second walk of it. The raise earns a report of its own; what the chain
+    // owes is the one entry it could not describe, read once more and not twice.
     expect(resolve('{{v:x-raise; default:INLINE}}', { payload, locale: defaultLocale })).toBe('INLINE');
-    expect(reports.map(({ code }) => code)).toEqual(Array(2).fill('unserializable-value'));
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value', 'unserializable-value', 'failed-modifier']);
 
     expect(seen).toEqual(['', 'INLINE']);
   });
@@ -805,6 +806,35 @@ describe('parser', () => {
     const { resolve: resolveRaw } = defaultParser;
 
     expect(resolveRaw(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 }, locale: 'not a locale' })).toBe('FALLBACK');
+  });
+  it('a modifier that could not produce a result reports', () => {
+    const reports: Report[] = [];
+    const onReport = (entry: Report) => reports.push(entry);
+    const raising = { 'x-raise': () => { throw new Error('MODIFIER FAILURE'); } };
+    const { resolve } = createParser({ customModifiers: raising, onReport });
+
+    // Containment is what keeps a modifier out of the caller's render path; it
+    // is not a reason for the caller to hear nothing about it.
+    expect(resolve('{{v:x-raise; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    expect(resolve('{{v:number; default:D}}', { payload: { v: 1 }, locale: 'not a locale' })).toBe('D');
+    expect(resolve('{{v:currency; default:D}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['failed-modifier', 'failed-modifier', 'failed-modifier']);
+
+    // The report names the placeholder that named the modifier, like the one a
+    // name nobody registered earns, and carries nothing the modifier raised.
+    expect(reports[0].text).toBe('{{v:x-raise; default:D}}');
+    expect(reports[0].message).not.toContain('MODIFIER FAILURE');
+
+    // A modifier that answers, with nothing or with text, has produced a
+    // result: the chain it may land on is the message's own answer, not a
+    // failure.
+    reports.length = 0;
+    const answering = createParser({ customModifiers: { 'x-none': () => undefined, 'x-text': () => 'OK' }, onReport });
+
+    expect(answering.resolve('{{v:x-none; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    expect(answering.resolve('{{v:x-text; default:D}}', { payload: { v: 'X' } })).toBe('OK');
+    expect(answering.resolve('{{v:number; default:D}}', { payload: { v: 1 } })).toBe('');
+    expect(reports).toEqual([]);
   });
   it('a formatting modifier resolves to the empty string with no locale', () => {
     const { resolve } = defaultParser;

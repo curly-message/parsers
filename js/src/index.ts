@@ -305,6 +305,8 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
 
     // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
+    // Containment is what keeps that failure out of the caller's render path,
+    // and not a reason for the caller to hear nothing about it.
     try {
       const modifierProps = mergeProps(props, ownValue(wrapper, 'props'));
 
@@ -321,6 +323,8 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
       return text(modifier(input)) ?? defaultText();
     } catch {
+      report('failed-modifier', placeholder, messageKey, onReport);
+
       return defaultText();
     }
   };
@@ -361,6 +365,7 @@ const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LE
 
 const REPORT_MESSAGES: Record<Report['code'], string> = {
   'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
+  'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
   'unserializable-value': 'A payload value could not become text, so resolution read it as missing.',
   'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
   'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,

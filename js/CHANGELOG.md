@@ -29,6 +29,14 @@ Initial version line for `@curly-message/parser`.
   composes with, and the `ago` unit ladder was among them, so `{{v:agoMap}}`
   used to answer to a private data table and resolve to the fallback chain in
   silence where `{{v:nosuch}}` reports.
+* A modifier that cannot produce a result is reported as `failed-modifier`.
+  Containment was already the behavior — a locale the host rejects, a currency
+  style with no currency code, a `customModifiers` entry that throws all
+  resolve the placeholder to its fallback chain rather than raising out of
+  `resolve` — but the caller heard nothing, so a message that quietly rendered
+  its default read exactly like one that had no value to render. The
+  specification asks for both halves: the failure is contained and it is
+  reported.
 * Everything a modifier reads is text. A value used to reach a modifier at the
   type the payload gave it while a default arrived as text; both are converted
   the same way now, so a modifier has one kind of input to read. A plain object

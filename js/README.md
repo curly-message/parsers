@@ -28,10 +28,11 @@ and a `default`. Locale-dependent formatting is delegated to `Intl`; the
 package itself has no runtime dependencies. A modifier that cannot produce a
 result — a locale the host rejects, a custom modifier that throws — resolves
 the placeholder to its `default` rather than raising, and so does a value that
-no conversion turns into text. A placeholder naming a modifier the parser does
-not know resolves to its `default` and is reported; it is never run as a
-comparison instead. Given no locale at all, the formatting
-modifiers resolve to the empty string.
+no conversion turns into text. Neither is silent: containment keeps the failure
+out of the caller's render path, and a report is how the caller hears about it
+anyway. A placeholder naming a modifier the parser does not know resolves to
+its `default` and is reported as well; it is never run as a comparison instead.
+Given no locale at all, the formatting modifiers resolve to the empty string.
 
 ## Usage
 
@@ -83,15 +84,15 @@ silently. It is called with a `Report` describing what the parser could not do
 — `code`, an English `message` carrying nothing from the payload, the `limit`
 reached where the report is about one, the message's `key` where one was
 passed, and `text`, the source of the trouble: the placeholder that named it
-for `unknown-modifier` and `unserializable-value`, the output that would not
-settle for `pass-limit` and `output-limit`, and nothing at all where what could
-not be described is the chain the message itself resolves through, which names
-no placeholder. Only `text` derives from the payload. It is cut to 120
-characters of what reached it, marked with a trailing `...` of the parser's own
-where the cut took something, and escaped after that — quotes, backslashes, and
-every line terminator. So a cut excerpt arrives at 123 characters at the
-shortest, one carrying something to escape arrives longer still, and no payload
-can forge a line where a report is written.
+for `unknown-modifier`, `failed-modifier` and `unserializable-value`, the
+output that would not settle for `pass-limit` and `output-limit`, and nothing
+at all where what could not be described is the chain the message itself
+resolves through, which names no placeholder. Only `text` derives from the
+payload. It is cut to 120 characters of what reached it, marked with a trailing
+`...` of the parser's own where the cut took something, and escaped after that
+— quotes, backslashes, and every line terminator. So a cut excerpt arrives at
+123 characters at the shortest, one carrying something to escape arrives longer
+still, and no payload can forge a line where a report is written.
 
 Two guards bound resolution, and reaching either is what the two limit codes
 report. A payload value may name another placeholder, so interpolation runs
