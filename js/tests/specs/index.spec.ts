@@ -406,6 +406,20 @@ describe('parser', () => {
     expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: polluting } }, props: { number: {} } })).toBe('{"number":{},"__proto__":{"polluted":true}}');
     expect(({} as any).polluted).toBe(undefined);
   });
+  it('a `props` layer overrides only the names it carries, whatever its prototype', () => {
+    const { resolve } = createParser({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
+    const layer: any = Object.create({ inherited: 'INHERITED' });
+
+    layer.maximumFractionDigits = 1;
+
+    const wrapper = { value: 1, props: { number: layer } };
+    const inheritedBag: any = Object.create({ date: { month: 'long' } });
+
+    inheritedBag.number = { maximumFractionDigits: 1 };
+
+    expect(resolve('{{v:test}}', { payload: { v: wrapper }, props: { number: { useGrouping: false } } })).toBe('{"number":{"useGrouping":false,"maximumFractionDigits":1}}');
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: inheritedBag } }, props: { number: { useGrouping: false } } })).toBe('{"number":{"useGrouping":false,"maximumFractionDigits":1}}');
+  });
   it('configuration is read as own properties, never through a prototype', () => {
     const payload = { v: 1.23456789 };
     const seen: Report[] = [];
