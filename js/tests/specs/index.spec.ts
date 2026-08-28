@@ -736,6 +736,38 @@ describe('parser', () => {
 
     expect(resolve('common.modifier_custom', { data: 'TEST_STRING' })).toBe('TEST_STRING');
   });
+  it('a modifier is handed the value as text, its options and the locale', () => {
+    const seen: unknown[] = [];
+    const { resolve } = createParser({ customModifiers: { 'x-see': ({ value, options, locale }) => { seen.push({ value, options, locale }); return 'DONE'; } } });
+
+    // A modifier receives the value, the options, the default, the locale and
+    // the props. The default and the props are handed over above; these are the
+    // other three, and no modifier sees a value at the type it was authored
+    // with.
+    expect(resolve('{{v:x-see; 10:TEN; 2:TWO; abc:X; z; w:; default:D}}', { payload: { v: { a: 1 } }, locale: altLocale })).toBe('DONE');
+    expect(resolve('{{v:x-see; a\\:b : X ; \\ :SPACE}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('DONE');
+    expect(resolve('{{v:x-see}}', { payload: { v: 'V' } })).toBe('DONE');
+
+    expect(seen).toEqual([
+      // Every segment but the inline default, in the order the message wrote
+      // them, each key and value unescaped and trimmed the way a key is.
+      {
+        value: '{"a":1}',
+        options: [
+          { key: '10', value: 'TEN' },
+          { key: '2', value: 'TWO' },
+          { key: 'abc', value: 'X' },
+          { key: 'z', value: 'z' },
+          { key: 'w', value: '' },
+        ],
+        locale: altLocale,
+      },
+      { value: '1', options: [{ key: 'a:b', value: 'X' }, { key: ' ', value: 'SPACE' }], locale: defaultLocale },
+      // A message that names no option hands over an empty list rather than
+      // nothing, and a caller that named no locale hands over none.
+      { value: 'V', options: [], locale: undefined },
+    ]);
+  });
   it('a modifier name selects on its unescaped spelling, like a key', () => {
     const { resolve } = createParser({ customModifiers: { 'x-a:b': () => 'COLON', 'x-c ': () => 'SPACE' } });
 
