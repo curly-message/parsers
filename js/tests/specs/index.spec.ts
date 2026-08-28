@@ -1713,7 +1713,7 @@ describe('parser', () => {
     const resolve = resolverFor<{ value?: any, a?: string }>(defaultLocale);
 
     const runAt = (size: number) => {
-      const payload = { value: `{{a}}{{${' \n'.repeat(size / 2)}`, a: 'A' };
+      const payload = { value: `{{a}}{{${' '.repeat(size)}`, a: 'A' };
 
       return () => { resolve('common.placeholder', payload); };
     };
