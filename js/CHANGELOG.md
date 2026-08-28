@@ -354,3 +354,14 @@ Initial version line for `@curly-message/parser`.
   names them — `Modifier.T<MyProps>`, `Modifier.CustomModifiers<Key, MyProps>`
   — as the factory's own props parameter already had to. Nothing about
   resolution changes; a parser that names its props type is unaffected.
+* The option bag declares the props its modifiers read. `Parser.Options` kept
+  defaulting its props type parameter to `any` after the entries it holds
+  stopped, so a bag written down without one typed nothing it carried:
+  `customModifiers` took a modifier reading `props?.['x-own']?.width` and
+  `modifierDefaults` took a layer named `x-own`, both against a built-in table
+  naming neither. It defaults to `Modifier.DefaultProps` now, like every other
+  position, and a bag carrying props of its own names them —
+  `Parser.Options<Key, MyProps>`. The `parserOptions` a modifier receives is
+  typed by the same table that modifier reads, so a host-defined modifier
+  reaches its own `modifierDefaults` entry without a cast. The factory supplies
+  the parameter itself, so a parser built through `createParser` is unaffected.
