@@ -265,6 +265,16 @@ Initial version line for `@curly-message/parser`.
   there is none, so its `text` is empty and its `key` is what says which message
   went looking. Stepping past the message itself stays unreported: a message
   nothing describes is one nobody wrote, not a defect in the payload.
+* A key is echoed, not resolved. Where the chain ran out, the key was handed to
+  interpolation like a message, so a key shaped like a placeholder rendered what
+  the payload said — `{{name}}` over `{ name: 'Alice' }` resolved to `Alice`,
+  and over nothing at all to the empty string — a key carrying `\;` lost the
+  backslash to the final unescape pass, and a key naming a value the payload
+  could not describe reported a second time. The key echo is what the format
+  says when there is no message, not text the format resolves over: it now
+  leaves as the caller spelled it. It still becomes text, because `resolve`
+  answers with text, so a caller that named a key the host wrote as something
+  else keeps the echo it had.
 * A host-defined modifier can be given implementation defaults.
   `modifierDefaults` named only the built-in modifiers, so an `x-` modifier the
   factory declares could be handed props per call but never configured at the

@@ -882,6 +882,32 @@ describe('parser', () => {
     expect(resolve(undefined, { payload: { default: new Opaque() }, key: 'common.key' })).toBe('common.key');
     expect(resolve(undefined, { payload: { default: circular } })).toBe('');
   });
+  it('the key echo is the key, not text the format resolves over', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const backslash = String.fromCharCode(92);
+
+    // A key echo is what the format says when there is no message, not one of
+    // the things that may resolve to text carrying placeholders. A key shaped
+    // like a placeholder is therefore echoed rather than resolved, and an
+    // escape sequence inside one stays as the caller spelled it.
+    expect(resolve(undefined, { payload: { name: 'Alice' }, key: '{{name}}' })).toBe('{{name}}');
+    expect(resolve(undefined, { key: '{{lit}}' })).toBe('{{lit}}');
+    expect(resolve(undefined, { key: `a${backslash};b` })).toBe(`a${backslash};b`);
+    expect(reports).toHaveLength(0);
+
+    // Nothing resolves, so no bound is reached and the payload behind the key
+    // is not read a second time: the echo ends the chain.
+    expect(resolve(undefined, { payload: { a: '{{a}}' }, key: '{{a}}' })).toBe('{{a}}');
+    expect(resolve(undefined, { payload: { default: circular }, key: '{{name}}' })).toBe('{{name}}');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+
+    // The key still becomes text, because `resolve` answers with text, and a
+    // caller that named no key still has nothing to echo.
+    expect(resolve(undefined, { key: 42 as any })).toBe('42');
+    expect(resolve(undefined, { key: {} as any })).toBe('{}');
+    expect(resolve(undefined, {})).toBe('');
+  });
   it('a message becomes text before it is read, not after', () => {
     const { resolve } = defaultParser;
 

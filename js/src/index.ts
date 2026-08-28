@@ -429,7 +429,16 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // Stepping past the payload's link is reported, because that link is a
     // payload value like any other; stepping past the message is not, because
     // a message nothing describes is a message nobody wrote.
-    const value = text(message) ?? describedText(ownValue(payload, 'default', raised), raised) ?? (key === undefined ? '' : key);
+    const value = text(message) ?? describedText(ownValue(payload, 'default', raised), raised);
+
+    // What is left when the chain runs out is not a message the format resolves
+    // over: it is the format naming the message that went looking. A value, an
+    // option value, an inline default and a payload `default` are what may
+    // carry placeholders; a key is not one of them, so it leaves as the caller
+    // spelled it, neither resolved nor unescaped. It still becomes text,
+    // because `resolve` answers with text, and a caller that named no key has
+    // nothing to echo.
+    if (value === undefined) return text(key) ?? '';
 
     return interpolate({ value, payload, props, parserOptions, locale, key });
   },
