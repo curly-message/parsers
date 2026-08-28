@@ -140,6 +140,19 @@ each placeholder, and one that raises is not asked a second time. A value built
 afresh on each read — by a payload getter, or by a custom modifier — is a new
 value every time and is converted every time.
 
+All three bounds belong to the call rather than to the parser, and a call is
+what a host begins by calling `resolve` again while one is running — from a
+custom modifier, from an `onReport` handler writing its diagnostic into a
+translated string, from a payload accessor, or from a value's own `toString`.
+Such a resolution counts its own passes, spends its own output and keeps its
+own record of what it has converted, so neither it nor the one around it can
+reach a bound the other owns, each report names the message its own call was
+resolving, and a value the two share is converted once for each of them.
+Nothing bounds how deep that goes: a modifier resolving a message that names
+it again recurses until the host's own stack runs out, which is contained like
+any other failure — the placeholder takes its fallback chain and `resolve`
+still answers with text.
+
 ## Payload
 
 Everything the format carries is text. A payload value reaches a modifier, and
