@@ -83,7 +83,8 @@ export module Modifier {
    * A unit `ago` can resolve to, read off the ladder it climbs rather than off
    * `Intl`'s whole vocabulary: a unit the ladder does not climb is never
    * selected, it just leaves the climb running out at its largest step. Every
-   * step is accepted in the plural too, which is how a message spells it.
+   * step is accepted in the plural too, so a layer naming one may spell it
+   * either way.
    */
   export type AgoUnit = AgoStep | `${AgoStep}s`;
 
