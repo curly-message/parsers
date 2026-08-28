@@ -213,6 +213,12 @@ Nothing here references a host framework: `resolve` takes the format's own
 inputs, and an adapter that presents this parser to a host library belongs in
 that host's own repository.
 
+This implementation satisfies every conformance level the specification
+defines: **Core**, **Intl** and **Extensions**. Section 2 asks an
+implementation to say so, because a level it does not satisfy changes what a
+message resolves to rather than merely what it can do — without Intl, `number`,
+`date`, `ago` and `currency` are modifier names nobody registered.
+
 The specification is normative — where this implementation and the
 specification disagree, this implementation is wrong.
 
