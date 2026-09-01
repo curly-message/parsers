@@ -314,6 +314,13 @@ Initial version line for `@curly-message/parser`.
   the placeholder reported `failed-modifier` and rendered its fallback. What
   carries the composed layers to a formatter now owns every entry it is
   configured with and answers for no prototype.
+* A polluted prototype names no limit in a report either. `Report.limit` was
+  read out of a table holding the two codes that reach a limit, so the three
+  that reach none read through that table's prototype: with
+  `Object.prototype['unknown-modifier']` set, an `unknown-modifier` report
+  carried that value as the limit this parser had reached, in a field typed as
+  a number and given none of the truncation and terminator escaping `text`
+  gets. The table now names all five codes, so no read of it leaves the table.
 * A modifier's answer that no conversion describes is reported. Such an answer
   already took the fallback chain, the way a payload value that cannot become
   text does, but only half of that treatment reached it: the placeholder
