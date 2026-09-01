@@ -1181,9 +1181,11 @@ describe('parser', () => {
     expect(reports.map(({ code }) => code)).toEqual(['failed-modifier', 'failed-modifier', 'failed-modifier']);
 
     // The report names the placeholder that named the modifier, like the one a
-    // name nobody registered earns, and carries nothing the modifier raised.
+    // name nobody registered earns. Its `message` is the text a host prints,
+    // and it is the same sentence whatever the modifier raised: `text` is the
+    // one field a report derives from what it was resolving.
     expect(reports[0].text).toBe('{{v:x-raise; default:D}}');
-    expect(reports[0].message).not.toContain('MODIFIER FAILURE');
+    expect(reports[0].message).toBe('A modifier could not produce a result, so the placeholder took its fallback chain.');
 
     // A modifier that answers, with nothing or with text, has produced a
     // result: the chain it may land on is the message's own answer, not a
@@ -2192,7 +2194,12 @@ describe('parser', () => {
     expect(output.length).toBe(27968);
 
     expect(reports).toHaveLength(1);
-    expect(reports[0]).toMatchObject({ code: 'output-limit', limit: 100000, key: 'common.placeholder_chain' });
+    expect(reports[0]).toMatchObject({
+      code: 'output-limit',
+      message: 'Interpolation stopped before exceeding 100000 characters. A payload value probably multiplies its own placeholder.',
+      limit: 100000,
+      key: 'common.placeholder_chain',
+    });
     expect(reports[0].text.length).toBeLessThan(300);
   });
   it('the output budget is a length a pass may reach, not one it may not', () => {
