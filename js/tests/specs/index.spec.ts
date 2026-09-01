@@ -1445,6 +1445,29 @@ describe('parser', () => {
     expect(resolve('common.modifier_ago', { value: 'not a number', default: 'FALLBACK' })).toBe('FALLBACK');
     expect(resolve('common.modifier_date', { value: 'not a number' })).toBe('');
   });
+  it('the formatting modifiers answer a value none of them can format alike', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const props = { currency: { currency: 'USD' } };
+
+    const answer = (modifier: string, value: any) => {
+      reports.length = 0;
+
+      const text = resolve(`{{v:${modifier}; default:FALLBACK}}`, { payload: { v: value }, props, locale: defaultLocale, key: 'common.key' });
+
+      return `${text} ${reports.map(({ code }) => code).join(' ')}`;
+    };
+
+    // All four reject an input they cannot format before the host's formatter
+    // sees it, so they answer such a value alike: the same text, and the same
+    // nothing or something on the report channel. What is pinned is that they
+    // agree, not what they agree on.
+    for (const value of ['not a number', '   ', {}, [1, 2], true]) {
+      for (const modifier of ['date', 'ago', 'currency']) {
+        expect(answer(modifier, value)).toBe(answer('number', value));
+      }
+    }
+  });
   it('blank text is not a number a formatting modifier can format', () => {
     const { resolve } = defaultParser;
     const props = { currency: { currency: 'USD', ratio: 21.4 } };
