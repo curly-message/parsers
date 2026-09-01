@@ -632,6 +632,33 @@ describe('parser', () => {
       }
     }
   });
+  it('the segment scan reads no character past the end of a placeholder', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const messages = ['{{v:eq}}', '{{v:eq; 1:one}}', '{{:}}', '{{v;}}', '{{v; :D}}', '{{v:number}}', '{{v:nosuch}}'];
+
+    const resolveAll = () => {
+      reports.length = 0;
+
+      const text = messages.map((each) => resolve(each, { payload: { v: 'V', default: 'CHAIN' }, locale: defaultLocale, key: 'common.key' })).join('|');
+
+      return `${text} ${reports.map(({ code }) => code).join(' ')}`;
+    };
+
+    // What a placeholder holds is cut into segments and options by scans over
+    // the text between its delimiters, and past the last character those scans
+    // ask the prototype: a separator somebody else wrote there cuts a segment
+    // the message does not have, and the parser reports a modifier nobody named.
+    const clean = 'CHAIN|CHAIN|CHAIN|V|V|CHAIN|CHAIN unknown-modifier';
+
+    expect(resolveAll()).toBe(clean);
+
+    for (let index = 0; index <= Math.max(...messages.map(({ length }) => length)); index += 1) {
+      for (const character of [':', ';']) {
+        expect(polluted(`${index}`, character, resolveAll)).toBe(clean);
+      }
+    }
+  });
   it('the call context is read as own properties, never through a prototype', () => {
     const { resolve } = createParser({});
 
