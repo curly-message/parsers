@@ -322,6 +322,13 @@ Initial version line for `@curly-message/parser`.
   carried that value as the limit this parser had reached, in a field typed as
   a number and given none of the truncation and terminator escaping `text`
   gets. The table now names all five codes, so no read of it leaves the table.
+* A polluted prototype closes no placeholder. Both delimiters are two
+  characters, so each scan read one character ahead, and past the end of the
+  message that read left the string: with `Object.prototype['4']` set to `'}'`,
+  the four-character message `{{v}` was read as a placeholder somebody had
+  closed, resolved through the fallback chain and rendered what the payload's
+  `default` held instead of the text a translator wrote. The scans read one
+  ahead through `charAt` now, which stops at the end of the message.
 * A modifier's answer that no conversion describes is reported. Such an answer
   already took the fallback chain, the way a payload value that cannot become
   text does, but only half of that treatment reached it: the placeholder
