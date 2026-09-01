@@ -1689,6 +1689,18 @@ describe('parser', () => {
     expect(resolve('{{v; \\ :X; default:D}}', { payload: { v: ' ' } })).toBe('X');
     expect(resolve('{{v; \\ :X; default:D}}', { payload: { v: 'x' } })).toBe('D');
   });
+  it('whitespace an escape sequence does not claim is still padding', () => {
+    const { resolve } = defaultParser;
+
+    // An escape sequence claims the one character behind the backslash. Blanks
+    // past it are padding, and a trim that let the sequence claim them too
+    // would carry them into a rendered message and into the key a placeholder
+    // reads by.
+    expect(resolve('{{v; 1:ONE\\: }}', { payload: { v: 1 } })).toBe('ONE:');
+    expect(resolve('{{v; 1:ONE\\  }}', { payload: { v: 1 } })).toBe('ONE ');
+    expect(resolve('{{v; default:D\\: }}', { payload: {} })).toBe('D:');
+    expect(resolve('{{v\\: ; default:D}}', { payload: { 'v:': 'HIT' } })).toBe('HIT');
+  });
   it('only the whitespace class is trimmed around a key', () => {
     const { resolve } = defaultParser;
 
