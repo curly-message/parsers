@@ -185,8 +185,10 @@ export module Parser {
    *
    * A `Date` loses its sub-second precision to that conversion, and the text
    * `String` writes for one is not numeric, so `number`, `currency`, `ago`,
-   * `lt` and `gt` over a `Date` resolve to the fallback chain. A timestamp or
-   * an ISO string keeps both.
+   * `lt` and `gt` over a `Date` resolve to the fallback chain — the three
+   * formatting ones given a locale, because with none they resolve to the
+   * empty string whatever the value is. A timestamp or an ISO string keeps
+   * both.
    *
    * A value passes through the same unescaping as the message around it: a
    * backslash before a character the syntax reserves — `:`, `;`, `{`, `}`, a
