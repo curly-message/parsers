@@ -50,8 +50,9 @@ Initial version line for `@curly-message/parser`.
   renders `10:00:00.000` where the same instant written as an ISO string or as
   a timestamp renders `10:00:00.123`. That text is not numeric either, so
   `{{v:number}}`, `{{v:currency}}`, `{{v:ago}}`, `{{v:lt}}` and `{{v:gt}}` over
-  a `Date` resolve to the fallback chain; pass `getTime()` where a placeholder
-  needs the number.
+  a `Date` resolve to the fallback chain — the three formatting ones given a
+  locale, because with none they resolve to the empty string whatever the value
+  is; pass `getTime()` where a placeholder needs the number.
 * A value that is present but cannot become text is reported as
   `unserializable-value`. Resolution reads it as missing and falls through to
   the fallback chain, as it already did, and now says so. The report fires for
@@ -117,8 +118,8 @@ Initial version line for `@curly-message/parser`.
 * A formatting modifier reads its value as the host does, and falls back when
   that conversion fails. `{{when:date}}` over `'tomorrow'` used to render the
   Unix epoch and `{{count:number; default:99;}}` over `0` used to render `99`;
-  both now resolve to the fallback chain only when the value is not a number,
-  and zero formats as zero.
+  given a locale, both now resolve to the fallback chain only when the value is
+  not a number, and zero formats as zero.
 * Blank text is not a number. `+''` is `0`, so `{{v:number}}` over `''`
   rendered `'0'` and `{{v:date}}` over `''` rendered the Unix epoch, formatting
   a value nobody wrote; text that is empty, or made only of the whitespace the
