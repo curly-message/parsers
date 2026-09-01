@@ -122,18 +122,18 @@ Initial version line for `@curly-message/parser`.
   not a number, and zero formats as zero.
 * Blank text is not a number. `+''` is `0`, so `{{v:number}}` over `''`
   rendered `'0'` and `{{v:date}}` over `''` rendered the Unix epoch, formatting
-  a value nobody wrote; text that is empty, or made only of the whitespace the
-  specification enumerates, now resolves to the fallback chain in `number`,
-  `date`, `ago` and `currency`. `currency` applied its `ratio` before it read
-  the value, which turned blank text into a `0` its guard never saw; it reads
-  the value first, then applies the ratio.
+  a value nobody wrote; given a locale, text that is empty, or made only of the
+  whitespace the specification enumerates, now resolves to the fallback chain
+  in `number`, `date`, `ago` and `currency`. `currency` applied its `ratio`
+  before it read the value, which turned blank text into a `0` its guard never
+  saw; it reads the value first, then applies the ratio.
 * `date` reads a date string, not only a timestamp. `+'2024-03-05T10:00:00Z'`
   is `NaN`, so a date written as text resolved to the fallback chain. Numeric
   text is still a timestamp, and anything else is now left to the host's own
   `Date` parsing, so an ISO string and the form `String(new Date())` writes
   both format. Text that is no date at all — `'tomorrow'`, `''` — still
-  resolves to the fallback chain, and `number`, `ago` and `currency` stay
-  numeric.
+  resolves to the fallback chain given a locale, and `number`, `ago` and
+  `currency` stay numeric.
 * Resolution always returns a string. A message that is not one is converted
   rather than handed back as it arrived — `42` resolves to `'42'` and `null` to
   `'null'` — and a resolution that reaches the end of the fallback chain with
