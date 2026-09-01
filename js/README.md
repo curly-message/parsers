@@ -172,8 +172,10 @@ That conversion costs a `Date` its sub-second precision, because `String(date)`
 writes seconds: `{{v:date}}` over `new Date('2024-03-05T10:00:00.123Z')`
 renders the same instant with its milliseconds zeroed. The text is not numeric
 either, so `{{v:number}}`, `{{v:currency}}`, `{{v:ago}}`, `{{v:lt}}` and
-`{{v:gt}}` over a `Date` resolve to the fallback chain. Pass a timestamp or an
-ISO string where a placeholder needs either.
+`{{v:gt}}` over a `Date` resolve to the fallback chain — the three formatting
+ones given a locale, because with none they resolve to the empty string
+whatever the value is. Pass a timestamp or an ISO string where a placeholder
+needs either.
 
 A payload entry may carry the value's own configuration — a wrapper — instead
 of the value itself:
