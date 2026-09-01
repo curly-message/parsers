@@ -1301,6 +1301,17 @@ describe('parser', () => {
     expect(resolve({ a: 1 }, { payload, key: 'common.key' })).toBe('{"a":1}');
     expect(resolve(42, { payload, key: 'common.key' })).toBe('42');
   });
+  it('an empty message is a message, and the chain stops at it', () => {
+    const { resolve } = defaultParser;
+
+    // The chain steps past a message no conversion describes, not past one that
+    // describes to nothing: a translator who wrote an empty string wrote a
+    // message, and answering it with the payload's link or with the key would
+    // put text on screen where that translator asked for none.
+    expect(resolve('', { payload: { default: 'CHAIN' }, key: 'common.key' })).toBe('');
+    expect(resolve('', { key: 'common.key' })).toBe('');
+    expect(resolve('', { payload: { default: 'CHAIN' } })).toBe('');
+  });
   it('the chain a message resolves through reports what it read and could not describe', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
