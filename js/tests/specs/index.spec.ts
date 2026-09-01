@@ -584,6 +584,35 @@ describe('parser', () => {
     expect(polluted('style', 'narrow', asAgo)).toBe(clean[2]);
     expect(polluted('currencyDisplay', 'name', asCurrency)).toBe(clean[3]);
   });
+  it('a polluted prototype writes no limit into a report', () => {
+    const reports: Report[] = [];
+    const raising = { 'x-raise': () => { throw new Error('MODIFIER FAILURE'); } };
+    const { resolve } = createParser({ customModifiers: raising, onReport: (report) => { reports.push(report); } });
+
+    const read = () => {
+      reports.length = 0;
+
+      resolve('{{v:nosuch}}', { payload: { v: 'V' }, key: 'common.key' });
+      resolve('{{v:x-raise}}', { payload: { v: 'V' }, key: 'common.key' });
+      resolve(circular, { payload: { default: circular }, key: 'common.key' });
+      resolve('{{v}}', { payload: { v: '{{v}}' }, key: 'common.key' });
+      resolve('{{v}}', { payload: { v: 'x'.repeat(100001) }, key: 'common.key' });
+
+      return reports.map(({ code, limit }) => `${code}=${limit}`).join(' ');
+    };
+
+    // A report about no limit carries none, and the three codes that are about
+    // no limit are the three the table behind that field does not name. Read
+    // through a prototype, a name somebody else wrote there answers for the
+    // table, and a host prints it as the limit this parser reached.
+    const clean = 'unknown-modifier=undefined failed-modifier=undefined unserializable-value=undefined pass-limit=10 output-limit=100000';
+
+    expect(read()).toBe(clean);
+
+    for (const code of ['unknown-modifier', 'failed-modifier', 'unserializable-value', 'pass-limit', 'output-limit']) {
+      expect(polluted(code, 'HIJACKED', read)).toBe(clean);
+    }
+  });
   it('the call context is read as own properties, never through a prototype', () => {
     const { resolve } = createParser({});
 

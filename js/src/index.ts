@@ -393,7 +393,13 @@ const REPORT_MESSAGES: Record<Report['code'], string> = {
   'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
 };
 
-const REPORT_LIMITS: Partial<Record<Report['code'], number>> = {
+// A code that reached no limit names one all the same, because a table read by
+// a key it does not carry answers for its prototype, and a report would then
+// carry out whatever somebody else had written there.
+const REPORT_LIMITS: Record<Report['code'], number | undefined> = {
+  'unknown-modifier': undefined,
+  'failed-modifier': undefined,
+  'unserializable-value': undefined,
   'pass-limit': MAX_INTERPOLATION_PASSES,
   'output-limit': MAX_INTERPOLATION_LENGTH,
 };
