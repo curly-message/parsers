@@ -613,6 +613,25 @@ describe('parser', () => {
       expect(polluted(code, 'HIJACKED', read)).toBe(clean);
     }
   });
+  it('the scanner reads no character past the end of the message', () => {
+    const { resolve } = createParser({});
+    const messages = ['{{v}', '{{v{', '{{v', 'a{', '{{{}', '{{v:eq}'];
+    const resolveAll = () => messages.map((message) => resolve(message, { payload: { v: 'V', default: 'CHAIN' }, key: 'common.key' })).join('|');
+
+    // Both delimiters are two characters, so every scan asks what follows the
+    // character it is on, and past the last one that question leaves the
+    // message: a `}` somebody else wrote on the prototype closes a placeholder
+    // the message left open, and the text a translator wrote resolves away.
+    const clean = messages.join('|');
+
+    expect(resolveAll()).toBe(clean);
+
+    for (let index = 0; index <= Math.max(...messages.map(({ length }) => length)); index += 1) {
+      for (const character of ['{', '}', '\\']) {
+        expect(polluted(`${index}`, character, resolveAll)).toBe(clean);
+      }
+    }
+  });
   it('the call context is read as own properties, never through a prototype', () => {
     const { resolve } = createParser({});
 

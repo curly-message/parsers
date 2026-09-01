@@ -12,7 +12,9 @@ const EVERY_TERMINATOR = new RegExp(TERMINATOR_CLASS, 'g');
 
 // A backslash consumes the character after it, so a brace an escape claimed
 // is text rather than half of a delimiter, and a placeholder holds no line
-// terminator in any position.
+// terminator in any position. Both delimiters are two characters, so each scan
+// reads one character ahead, and `charAt` stops at the end of the message where
+// an index would answer for its prototype.
 const placeholderEnd = (value: string, open: number) => {
   for (let index = open + 2; index < value.length; index += 1) {
     const character = value[index];
@@ -26,9 +28,9 @@ const placeholderEnd = (value: string, open: number) => {
 
     if (TERMINATOR.test(character)) return undefined;
 
-    if (character === '{' && value[index + 1] === '{') return undefined;
+    if (character === '{' && value.charAt(index + 1) === '{') return undefined;
 
-    if (character === '}' && value[index + 1] === '}') return index + 2;
+    if (character === '}' && value.charAt(index + 1) === '}') return index + 2;
   }
 
   return undefined;
@@ -45,7 +47,7 @@ const nextPlaceholder = (value: string, from: number): [number, number] | undefi
       continue;
     }
 
-    if (value[index] !== '{' || value[index + 1] !== '{') continue;
+    if (value[index] !== '{' || value.charAt(index + 1) !== '{') continue;
 
     const end = placeholderEnd(value, index);
 
