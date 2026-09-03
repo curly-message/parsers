@@ -475,3 +475,26 @@ Initial version line for `@curly-message/parser`.
   which said as much in prose, is gone. A wrapper's `default` is untouched: a
   payload may declare any value as a fallback, and it is the config that always
   sees text. Nothing about resolution changes.
+* Every entry is read the way the value conversion reads one. "Own" meant two
+  things: the value conversion, the key enumerations and the layer merges read
+  own **enumerable** properties, while the payload key, the payload's
+  `default`, a wrapper's `default`, `onReport` and the call context tested own
+  properties alone. The enumerable rule is now the only one, so a property
+  `Object.defineProperty` left hidden is read nowhere: after
+  `Object.defineProperty(payload, 'v', { value: 'V' })`, `{{v; default:D}}`
+  resolved to `'V'` and now resolves to `'D'`, a hidden context `payload`
+  resolves to the empty string, and a hidden `onReport` reports nowhere. What a
+  prototype offers is unread as it was.
+* A read that refuses is reported wherever it sits. A value that raised when
+  read already reported `unserializable-value`; a `props` entry, a
+  `modifierDefaults` entry, a `customModifiers` entry, a context entry or a key
+  enumeration that raised was contained in silence. All of them report now.
+  Resolution is unchanged — a layer entry that refuses leaves the layer beneath
+  it standing, and a formatting request is composed of exactly what it was
+  before — so this adds the report and nothing else. A layer entry is read at
+  the placeholder that needed it and reports with the placeholder as its
+  `text`; a configuration or context entry is read once for the call, reports
+  with the text that went looking, and where the entry that raised is the `key`
+  itself the report names no key. One read that raised is one report, so a
+  payload entry whose enumeration raises reports twice: it is enumerated once
+  to ask whether it configures a value and once to describe it.
