@@ -32,6 +32,13 @@ no conversion turns into text. Neither is silent: containment keeps the failure
 out of the caller's render path, and a report is how the caller hears about it
 anyway. A placeholder naming a modifier the parser does not know resolves to
 its `default` and is reported as well; it is never run as a comparison instead.
+A comparison that declares no options has been asked to select from nothing —
+the inline `default` is the fallback itself rather than something to select, so
+`{{v:eq; default:D}}` declares none either. It resolves to the fallback chain,
+as it always did, and reports `missing-options`. That is a defect in how the
+placeholder was written, so it reports whether or not the payload carries the
+key, and the six names are the ones this format defines as comparisons: a host
+that registers its own `eq` does not change what the message asked for.
 Given no locale the formatting modifiers resolve to the empty string, not to
 the fallback chain: a declared default does not stand in for a locale nobody
 supplied. A caller that passes none and a caller that passes the empty string
@@ -111,10 +118,11 @@ silently. It is called with a `Report` describing what the parser could not do
 nothing from the payload, the `limit` reached where the report is about one,
 the message's `key` where one was passed, and `text`, the source of the
 trouble: the placeholder that named it for `unknown-modifier`,
-`failed-modifier`, `missing-locale` and `unserializable-value`, the output that
-would not settle for `pass-limit` and `output-limit`, and nothing at all where
-what could not be described is the chain the message itself resolves through,
-which names no placeholder. `origin` says who fixes what `code` names — `'message'` for a
+`failed-modifier`, `missing-options`, `missing-locale` and
+`unserializable-value`, the output that would not settle for `pass-limit` and
+`output-limit`, and nothing at all where what could not be described is the
+chain the message itself resolves through, which names no placeholder. `origin`
+says who fixes what `code` names — `'message'` for a
 defect in the message that was written, `'payload'` for one in what the caller
 passed, and `'limit'` for a bound this parser set. Every code declares one, and
 it ranks nothing: a report is no graver for coming from one of the three than

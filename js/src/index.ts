@@ -234,6 +234,12 @@ const mergeProps = (base: any, override: any) => {
   return ownProps(mergeLayer(base, override, (from, to) => isLayer(to) ? mergeLayer(from, to) : to));
 };
 
+// The names this format defines as comparisons. A message that writes one has
+// asked for a selection, whatever a host registered under the name, and the
+// list is typed off the registry so a name that stops being a built-in stops
+// compiling here.
+const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'];
+
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey, conversions }) => {
   const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers');
   const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults');
@@ -318,6 +324,12 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
       return defaultText();
     }
+
+    // A comparison selects among the options a placeholder declares, so one
+    // declaring none was asked to select from nothing. It is how the
+    // placeholder is written that says so, which is why the reading comes
+    // before the value is consulted at all.
+    if (COMPARISONS.includes(modifierKey) && !options.length) report('missing-options', placeholder, messageKey, onReport);
 
     // An absent value is nothing to compare against, whatever the modifier
     // asks: the placeholder takes the fallback chain rather than measuring the

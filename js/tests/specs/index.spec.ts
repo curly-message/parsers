@@ -659,20 +659,21 @@ describe('parser', () => {
 
     resolve('{{v:nosuch}}', { payload: { v: 'V' } });
     resolve('{{v:x-raise}}', { payload: { v: 'V' } });
+    resolve('{{v:eq}}', { payload: { v: 'V' } });
     resolve('{{v:number}}', { payload: { v: 1 } });
     resolve(circular, { payload: { default: circular } });
     resolve('{{v}}', { payload: { v: '{{v}}' } });
     resolve('{{v}}', { payload: { v: 'x'.repeat(100001) } });
 
-    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier', 'failed-modifier', 'missing-locale', 'unserializable-value', 'pass-limit', 'output-limit']);
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier', 'failed-modifier', 'missing-options', 'missing-locale', 'unserializable-value', 'pass-limit', 'output-limit']);
 
     // A report carries the origin its own code declares, so the axis a caller
     // reads is the code's and never the reporting site's.
     for (const { code, origin } of reports) expect(origin).toBe(origins[code]);
 
-    // The one nothing emits yet is declared all the same: the axis belongs to
-    // the vocabulary, not to what a resolution has happened to reach.
-    expect(origins['missing-options']).toBe('message');
+    // Every code the vocabulary holds is emitted above, so the loop reads the
+    // whole table rather than the part a resolution happens to reach.
+    expect(new Set(reports.map(({ code }) => code)).size).toBe(Object.keys(origins).length);
   });
   it('the scanner reads no character past the end of the message', () => {
     const { resolve } = createParser({});
@@ -710,9 +711,10 @@ describe('parser', () => {
     // the text between its delimiters, and past the last character those scans
     // ask the prototype: a separator somebody else wrote there cuts a segment
     // the message does not have, and the parser reports a modifier nobody named.
-    // `number` over `'V'` reports too — it is a value no locale formats — and
-    // what a polluted prototype must not do is move either list.
-    const clean = 'CHAIN|CHAIN|CHAIN|V|V|CHAIN|CHAIN failed-modifier unknown-modifier';
+    // `{{v:eq}}` reports the options it declares none of and `number` over `'V'`
+    // reports a value no locale formats, and what a polluted prototype must not
+    // do is move either list.
+    const clean = 'CHAIN|CHAIN|CHAIN|V|V|CHAIN|CHAIN missing-options failed-modifier unknown-modifier';
 
     expect(resolveAll()).toBe(clean);
 
@@ -1402,6 +1404,61 @@ describe('parser', () => {
     expect(answer('{{v:eq; 10:TEN}}', { payload: { v: 10 } })).toEqual({ text: 'TEN', reported: [] });
     expect(answer('{{v; 10:TEN}}', { payload: { v: 10 } })).toEqual({ text: 'TEN', reported: [] });
     expect(answer('{{v:x-locale}}', { payload: { v: 10 } })).toEqual({ text: '[]', reported: [] });
+  });
+  it('a comparison given no options to select from reports', () => {
+    const reports: Report[] = [];
+    const onReport = (entry: Report) => reports.push(entry);
+    const { resolve } = createParser({ onReport });
+
+    const answer = (placeholder: string, context: Parser.Context) => {
+      reports.length = 0;
+
+      const text = resolve(placeholder, context);
+
+      return { text, reported: reports.map(({ code, origin }) => `${code}/${origin}`) };
+    };
+
+    // A comparison selects among the options a placeholder declares, so one
+    // declaring none has nothing to select from: the placeholder takes the
+    // fallback chain it always took, and the report is what says the message
+    // asked for a selection it never described.
+    for (const modifier of ['eq', 'ne', 'lt', 'gt', 'lte', 'gte']) {
+      expect(answer(`{{v:${modifier}; default:FALLBACK}}`, { payload: { v: 10 } })).toEqual({ text: 'FALLBACK', reported: ['missing-options/message'] });
+
+      // The check reads how the placeholder is written, so what the payload
+      // carries under the key — a value, or nothing at all — moves neither the
+      // report nor the chain the placeholder takes.
+      expect(answer(`{{v:${modifier}}}`, { payload: { v: 10, default: 'CHAIN' } })).toEqual({ text: 'CHAIN', reported: ['missing-options/message'] });
+      expect(answer(`{{v:${modifier}}}`, { payload: { default: 'CHAIN' } })).toEqual({ text: 'CHAIN', reported: ['missing-options/message'] });
+    }
+
+    expect(answer('{{v:eq}}', { payload: { v: 10 } })).toEqual({ text: '', reported: ['missing-options/message'] });
+    expect(reports[0].message).toBe('A comparison was given no options to select from, so the placeholder took its fallback chain.');
+    expect(reports[0].text).toBe('{{v:eq}}');
+
+    // An option is what a comparison selects from, and the inline `default` is
+    // the fallback itself rather than something to select, so a placeholder
+    // declaring one and nothing else is still a comparison given nothing.
+    expect(answer('{{v:eq; 10:TEN; default:FALLBACK}}', { payload: { v: 10 } })).toEqual({ text: 'TEN', reported: [] });
+    expect(answer('{{v:eq; 10:TEN}}', { payload: {} })).toEqual({ text: '', reported: [] });
+
+    // A placeholder naming no modifier is not a comparison, whatever the
+    // parser runs behind it, and neither is one naming a modifier that does
+    // not compare.
+    expect(answer('{{v}}', { payload: { v: 10 } })).toEqual({ text: '10', reported: [] });
+    expect(answer('{{v; default:FALLBACK}}', { payload: {} })).toEqual({ text: 'FALLBACK', reported: [] });
+    expect(answer('{{v:number}}', { payload: { v: 10 }, locale: defaultLocale })).toEqual({ text: '10', reported: [] });
+
+    // The six names are the ones this format defines as comparisons, so the
+    // check reads the name the message wrote: a host that registered its own
+    // `eq` answers in the built-in's place and does not change what the
+    // message asked for.
+    reports.length = 0;
+    const hosted = createParser({ customModifiers: { eq: () => 'HOST', 'x-pick': () => 'PICKED' }, onReport });
+
+    expect(hosted.resolve('{{v:eq}}', { payload: { v: 10 } })).toBe('HOST');
+    expect(hosted.resolve('{{v:x-pick}}', { payload: { v: 10 } })).toBe('PICKED');
+    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['missing-options/message']);
   });
   it('a value that cannot become text resolves to the fallback chain', () => {
     const { resolve } = defaultParser;
