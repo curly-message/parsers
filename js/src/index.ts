@@ -1,6 +1,6 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report } from './types';
-import { isBlank, LINE_TERM, mergeLayer, ownKeys, ownModifiers, ownValue, unicodeEscape } from './utils';
+import { isBlank, LINE_TERM, mergeLayer, ownKeys, ownLayer, ownModifiers, ownValue, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
@@ -236,6 +236,7 @@ const mergeProps = (base: any, override: any) => {
 
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey, conversions }) => {
   const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers');
+  const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults');
   const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
   // The modifier module's exports are the registry a host's table composes
   // with, and each layer contributes the modifiers it holds and nothing else:
@@ -325,13 +326,18 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
     if (!hasModifier && !options.length) return valueText;
 
-    const modifier = modifiers[(hasModifier ? modifierKey : 'eq') as keyof typeof modifiers];
+    const modifierName = hasModifier ? modifierKey : 'eq';
+    const modifier = modifiers[modifierName as keyof typeof modifiers];
 
     // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
     // Containment is what keeps that failure out of the caller's render path,
     // and not a reason for the caller to hear nothing about it.
     try {
-      const modifierProps = mergeProps(props, ownValue(wrapper, 'props'));
+      // Every layer names the modifiers it configures, and a modifier reads the
+      // slice its own name holds rather than the table those layers are: what
+      // one modifier is configured with is not what the next reads, and a
+      // modifier nobody configured reads an object all the same.
+      const modifierProps = ownLayer(mergeProps(mergeProps(modifierDefaults, props), ownValue(wrapper, 'props')), modifierName);
 
       // A modifier answers with a host value like any other, so it becomes text
       // by the conversion a payload entry does: an object it built stays

@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { AGO_LADDER, formatOptions, getDateInput, getModifierDefaults, getModifierInput, mergeLayer, ownLayer, ownValue } from './utils';
+import { AGO_LADDER, getDateInput, getModifierInput, mergeLayer, ownValue } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back, and the fallback is read off the
@@ -57,7 +57,7 @@ export const lte: Modifier.T = (config) => eq({ value: config.value, options: co
 export const gte: Modifier.T = (config) => eq({ value: config.value, options: config.options, get defaultValue() { return gt(config); } });
 
 export const number: Modifier.T<Modifier.NumberProps> = (config) => {
-  const { value, props, locale = '', parserOptions } = config;
+  const { value, props, locale = '' } = config;
 
   if (!locale) return '';
 
@@ -65,20 +65,19 @@ export const number: Modifier.T<Modifier.NumberProps> = (config) => {
 
   if (input === undefined) return config.defaultValue ?? '';
 
-  const layered = mergeLayer(getModifierDefaults<Modifier.NumberProps>('number', parserOptions), ownLayer(props, 'number'));
   // Two fraction digits is what this modifier formats when nobody named a
   // maximum: a default, not a cap. `Intl` widens its own default maximum to
   // reach a larger minimum, and this default widens the same way — held at two
   // over a layer's `minimumFractionDigits`, it would contradict it, `Intl`
   // would raise, and the number would resolve to a fallback nobody asked for.
-  const minimum = Number(ownValue(layered, 'minimumFractionDigits')) || 0;
-  const maximumFractionDigits = ownValue(layered, 'maximumFractionDigits') ?? Math.max(minimum, 2);
+  const minimum = Number(ownValue(props, 'minimumFractionDigits')) || 0;
+  const maximumFractionDigits = ownValue(props, 'maximumFractionDigits') ?? Math.max(minimum, 2);
 
-  return new Intl.NumberFormat(locale, formatOptions(layered, { maximumFractionDigits })).format(input);
+  return new Intl.NumberFormat(locale, mergeLayer(props, { maximumFractionDigits })).format(input);
 };
 
 export const date: Modifier.T<Modifier.DateProps> = (config) => {
-  const { value, props, locale = '', parserOptions } = config;
+  const { value, props, locale = '' } = config;
 
   if (!locale) return '';
 
@@ -86,10 +85,7 @@ export const date: Modifier.T<Modifier.DateProps> = (config) => {
 
   if (input === undefined) return config.defaultValue ?? '';
 
-  const { ...defaults } = getModifierDefaults<Modifier.DateProps>('date', parserOptions);
-  const { ...rest } = ownLayer(props, 'date');
-
-  return new Intl.DateTimeFormat(locale, formatOptions(mergeLayer(defaults, rest))).format(input);
+  return new Intl.DateTimeFormat(locale, mergeLayer(props, undefined)).format(input);
 };
 
 const testResolution = (defKey: string = '', testKey: string = '') => new RegExp(`^${defKey}s?$`).test(testKey);
@@ -116,7 +112,7 @@ const agoFormat = (millis: number, resolution?: Intl.RelativeTimeFormatUnit | 'a
 }, [millis, '' as Intl.RelativeTimeFormatUnit]);
 
 export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
-  const { value, locale = '', props, parserOptions } = config;
+  const { value, locale = '', props } = config;
 
   if (!locale) return '';
 
@@ -124,16 +120,14 @@ export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
 
   if (input === undefined) return config.defaultValue ?? '';
 
-  const { format: formatDefault, numeric: numericDefault, ...defaults } = getModifierDefaults<Modifier.AgoProps>('ago', parserOptions);
-  const { format = formatDefault ?? 'auto', numeric = numericDefault ?? 'auto', ...rest } = ownLayer(props, 'ago');
+  const numeric = ownValue(props, 'numeric') ?? 'auto';
+  const formatParams = agoFormat(input, ownValue(props, 'format') ?? 'auto');
 
-  const formatParams = agoFormat(input, format);
-
-  return new Intl.RelativeTimeFormat(locale, formatOptions(mergeLayer(defaults, rest), { numeric })).format(...formatParams);
+  return new Intl.RelativeTimeFormat(locale, mergeLayer(props, { numeric })).format(...formatParams);
 };
 
 export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
-  const { value, locale = '', props, parserOptions } = config;
+  const { value, locale = '', props } = config;
 
   if (!locale) return '';
 
@@ -141,10 +135,7 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
 
   if (amount === undefined) return config.defaultValue ?? '';
 
-  const { ratio: ratioDefault, currency: currencyDefault, ...defaults } = getModifierDefaults<Modifier.CurrencyProps>('currency', parserOptions);
-  const { ratio = ratioDefault ?? 1, currency = currencyDefault, ...rest } = ownLayer(props, 'currency');
-
-  const input = getModifierInput(amount * ratio);
+  const input = getModifierInput(amount * (ownValue(props, 'ratio') ?? 1));
 
   if (input === undefined) return config.defaultValue ?? '';
 
@@ -152,5 +143,5 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
   // layers: a layer naming another style asks it to stop being the modifier the
   // message named. Pinning it against the parser's defaults alone left the call
   // and the wrapper able to render `{{v:currency}}` as a percentage.
-  return new Intl.NumberFormat(locale, formatOptions(mergeLayer(defaults, rest), { style: 'currency', currency })).format(input);
+  return new Intl.NumberFormat(locale, mergeLayer(props, { style: 'currency' })).format(input);
 };
