@@ -113,11 +113,10 @@ describe('payload typing', () => {
   it('accepts implementation defaults for a host-defined modifier', () => {
     const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }>({
       customModifiers: {
-        'x-temp': ({ value, props, parserOptions }) => {
-          const { unit } = { ...parserOptions?.modifierDefaults?.['x-temp'], ...props?.['x-temp'] };
-
-          return `${value}${unit}`;
-        },
+        // A modifier is handed the properties its own name holds, composed out
+        // of the layers a table declares; the config type still names the
+        // table, so a modifier reads its own slice through an assertion.
+        'x-temp': ({ value, props }) => `${value}${(props as { unit?: 'C' | 'F' } | undefined)?.unit}`,
       },
       modifierDefaults: { 'x-temp': { unit: 'C' } },
     });
@@ -129,7 +128,7 @@ describe('payload typing', () => {
   it('accepts a wrapper declaring props for a host-defined modifier', () => {
     const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }>({
       customModifiers: {
-        'x-temp': ({ value, props }) => `${value}${props?.['x-temp']?.unit}`,
+        'x-temp': ({ value, props }) => `${value}${(props as { unit?: 'C' | 'F' } | undefined)?.unit}`,
       },
     });
 
@@ -137,13 +136,16 @@ describe('payload typing', () => {
   });
 
   it('rejects a props name a modifier declaring none cannot read', () => {
-    const digits: Modifier.T = ({ value, props }) => `${value}@${props?.number?.maximumFractionDigits ?? 0}`;
+    const digits: Modifier.T = ({ value, props }) => `${value}@${(props as Intl.NumberFormatOptions | undefined)?.maximumFractionDigits ?? 0}`;
     // @ts-expect-error a modifier that declares no props of its own reads the built-in table, which names no `x-own`
     const own: Modifier.T = ({ value, props }) => `${value}@${props?.['x-own']?.width}`;
-    const { resolve } = createParser({ customModifiers: { 'x-digits': digits, 'x-own': own } });
+    // A modifier reads the slice its own name holds, so the one reading the
+    // built-in table's `number` properties is the one registered under that
+    // name — a caller's table stands over the built-in it names.
+    const { resolve } = createParser({ customModifiers: { number: digits, 'x-own': own } });
     const context = { payload: { v: '1' }, props: { number: { maximumFractionDigits: 3 } } };
 
-    expect(resolve('{{v:x-digits}}', context)).toBe('1@3');
+    expect(resolve('{{v:number}}', context)).toBe('1@3');
     expect(resolve('{{v:x-own}}', context)).toBe('1@undefined');
   });
 

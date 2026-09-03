@@ -184,9 +184,8 @@ repository, not just these docs.
   and lets its caller decide where that goes. Reporting somewhere directly,
   adding a `code`, or widening what a `Report` carries, is a change to the
   public surface: propose it rather than introducing it in passing.
-- **Reuse before reimplementing** — `ownValue`, `unesc`, `getModifierDefaults`
-  already exist. Grep before adding a helper; bend an existing one rather than
-  forking.
+- **Reuse before reimplementing** — `ownValue`, `unesc`, `mergeLayer` already
+  exist. Grep before adding a helper; bend an existing one rather than forking.
 - **Abstraction beats duplication.** When code repeats the same (or near-same)
   logical structure, that repetition is a candidate for abstraction — factor
   the shared shape into one named unit (helper, type, constant). This is

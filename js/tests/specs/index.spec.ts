@@ -416,14 +416,37 @@ describe('parser', () => {
   });
   it('a wrapper leaves every prop it does not name alone', () => {
     const seen: unknown[] = [];
-    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+    const { resolve } = createParser<{ v: any }, { test?: Intl.NumberFormatOptions }>({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
 
-    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { number: { maximumFractionDigits: 1 } } } }, props: { number: { useGrouping: true }, date: { timeStyle: 'full' } } })).toBe('DONE');
-    expect(resolve('{{v:test}}', { payload: { v: 1 }, props: { number: { useGrouping: true } } })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { test: { maximumFractionDigits: 1 } } } }, props: { test: { useGrouping: true }, date: { timeStyle: 'full' } } })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: 1 }, props: { test: { useGrouping: true } } })).toBe('DONE');
 
     expect(seen).toEqual([
-      { number: { useGrouping: true, maximumFractionDigits: 1 }, date: { timeStyle: 'full' } },
-      { number: { useGrouping: true } },
+      { useGrouping: true, maximumFractionDigits: 1 },
+      { useGrouping: true },
+    ]);
+  });
+  it('a modifier reads the slice its own name holds, layered over every source', () => {
+    const seen: unknown[] = [];
+    const table = { test: ({ props }: { props?: unknown }) => { seen.push(props); return 'DONE'; } };
+    const { resolve } = createParser<{ v: any }, { test?: Intl.NumberFormatOptions }>({
+      customModifiers: table,
+      modifierDefaults: { test: { maximumFractionDigits: 4, useGrouping: false }, number: { style: 'percent' } },
+    });
+
+    // A host-defined modifier is configured through the layers a built-in one
+    // is, `modifierDefaults` included, and reads what its own name holds in
+    // them — never what another modifier was configured with, and never the
+    // table those layers are.
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { test: { maximumFractionDigits: 1 } } } }, props: { test: { useGrouping: true }, number: { style: 'decimal' } } })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: 1 } })).toBe('DONE');
+    // A modifier nobody configured reads an object all the same.
+    expect(createParser({ customModifiers: table }).resolve('{{v:test}}', { payload: { v: 1 } })).toBe('DONE');
+
+    expect(seen).toEqual([
+      { maximumFractionDigits: 1, useGrouping: true },
+      { maximumFractionDigits: 4, useGrouping: false },
+      {},
     ]);
   });
   it('a wrapper prop set to `undefined` leaves the layer beneath it standing', () => {
@@ -456,54 +479,57 @@ describe('parser', () => {
     expect(resolve('{{v:number}}', { payload: { v: 1.23456 }, locale: defaultLocale })).toBe('1.23');
     expect(resolve('{{v:number}}', { payload: { v: 1.23456 }, props: { number: { maximumFractionDigits: 4 } }, locale: defaultLocale })).toBe('1.2346');
   });
-  it('a modifier receives a payload-supplied `props` copied one level down', () => {
+  it('a modifier receives a payload-supplied `props` as a copy', () => {
     const seen: any[] = [];
-    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
-    const wrapperProps = { number: { maximumFractionDigits: 1 } };
+    const { resolve } = createParser<{ v: any }, { test?: Intl.NumberFormatOptions }>({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+    const wrapperProps = { test: { maximumFractionDigits: 1 } };
 
     expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: wrapperProps } } })).toBe('DONE');
     expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: wrapperProps } }, props: { date: { timeStyle: 'full' } } })).toBe('DONE');
 
     seen.forEach((props) => {
-      expect(props).not.toBe(wrapperProps);
-      expect(props.number).not.toBe(wrapperProps.number);
+      expect(props).not.toBe(wrapperProps.test);
+
+      props.maximumFractionDigits = 4;
     });
+
+    expect(wrapperProps).toEqual({ test: { maximumFractionDigits: 1 } });
   });
-  it('a modifier receives the call\'s `props` copied one level down', () => {
+  it('a modifier receives the call\'s `props` as a copy', () => {
     const seen: any[] = [];
-    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
-    const callProps = { number: { maximumFractionDigits: 1 } };
+    const { resolve } = createParser<{ v: any }, { test?: Intl.NumberFormatOptions }>({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+    const callProps = { test: { maximumFractionDigits: 1 } };
 
     expect(resolve('{{v:test}}', { payload: { v: 1 }, props: callProps })).toBe('DONE');
     expect(resolve('{{v:test}}', { payload: { v: { value: 1 } }, props: callProps })).toBe('DONE');
 
     seen.forEach((props) => {
-      expect(props).not.toBe(callProps);
-      expect(props.number).not.toBe(callProps.number);
+      expect(props).not.toBe(callProps.test);
+
+      props.maximumFractionDigits = 4;
     });
+
+    expect(callProps).toEqual({ test: { maximumFractionDigits: 1 } });
   });
-  it('a modifier receives its `props` as ordinary objects', () => {
+  it('a modifier receives its `props` carrying no prototype', () => {
     const seen: any[] = [];
-    const { resolve } = createParser({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
+    const { resolve } = createParser<{ v: any }, { test?: Intl.NumberFormatOptions }>({ customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } } });
 
-    // Every layer is accumulated onto a null prototype, so a name a message or
-    // a payload supplies cannot reach one, and each is finished with a spread
-    // before it leaves. What a modifier holds is an object like any other,
-    // not one whose prototype went missing on the way.
-    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { number: { maximumFractionDigits: 1 } } } }, props: { date: { timeStyle: 'full' } } })).toBe('DONE');
-    expect(resolve('{{v:test}}', { payload: { v: 1 }, props: { number: { useGrouping: true } } })).toBe('DONE');
+    // The slice is accumulated onto a null prototype and leaves on one, so a
+    // name a message or a payload supplies is an own entry of it rather than a
+    // write through a prototype setter, and a modifier reading its properties
+    // reads what it was configured with and never what somebody else wrote
+    // where every object would have found it.
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { test: { maximumFractionDigits: 1 } } } }, props: { date: { timeStyle: 'full' } } })).toBe('DONE');
+    expect(resolve('{{v:test}}', { payload: { v: 1 }, props: { test: { useGrouping: true } } })).toBe('DONE');
 
-    seen.forEach((props) => {
-      expect(Object.getPrototypeOf(props)).toBe(Object.prototype);
-
-      Object.values(props).forEach((layer) => { expect(Object.getPrototypeOf(layer)).toBe(Object.prototype); });
-    });
+    seen.forEach((props) => { expect(Object.getPrototypeOf(props)).toBe(null); });
   });
   it('merging a wrapper\'s `props` cannot reach a prototype', () => {
-    const { resolve } = createParser({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
+    const { resolve } = createParser<{ v: any }, { test?: Intl.NumberFormatOptions }>({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
     const polluting = JSON.parse('{"__proto__":{"polluted":true}}');
 
-    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: polluting } }, props: { number: {} } })).toBe('{"number":{},"__proto__":{"polluted":true}}');
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: { test: polluting } } }, props: { test: { useGrouping: true } } })).toBe('{"useGrouping":true,"__proto__":{"polluted":true}}');
     expect(({} as any).polluted).toBe(undefined);
   });
   it('a modifier\'s own layer cannot reach a prototype either', () => {
@@ -526,18 +552,18 @@ describe('parser', () => {
     expect(({} as any).ratio).toBe(undefined);
   });
   it('a `props` layer overrides only the names it carries, whatever its prototype', () => {
-    const { resolve } = createParser({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
+    const { resolve } = createParser<{ v: any }, { test?: Intl.NumberFormatOptions }>({ customModifiers: { test: ({ props }) => JSON.stringify(props) } });
     const layer: any = Object.create({ inherited: 'INHERITED' });
 
     layer.maximumFractionDigits = 1;
 
-    const wrapper = { value: 1, props: { number: layer } };
+    const wrapper = { value: 1, props: { test: layer } };
     const inheritedBag: any = Object.create({ date: { month: 'long' } });
 
-    inheritedBag.number = { maximumFractionDigits: 1 };
+    inheritedBag.test = { maximumFractionDigits: 1 };
 
-    expect(resolve('{{v:test}}', { payload: { v: wrapper }, props: { number: { useGrouping: false } } })).toBe('{"number":{"useGrouping":false,"maximumFractionDigits":1}}');
-    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: inheritedBag } }, props: { number: { useGrouping: false } } })).toBe('{"number":{"useGrouping":false,"maximumFractionDigits":1}}');
+    expect(resolve('{{v:test}}', { payload: { v: wrapper }, props: { test: { useGrouping: false } } })).toBe('{"useGrouping":false,"maximumFractionDigits":1}');
+    expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: inheritedBag } }, props: { test: { useGrouping: false } } })).toBe('{"useGrouping":false,"maximumFractionDigits":1}');
   });
   it('configuration is read as own properties, never through a prototype', () => {
     const payload = { v: 1.23456789 };

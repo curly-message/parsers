@@ -233,8 +233,8 @@ Formatting options are keyed by modifier name, and their layers compose per
 property: the parser's `modifierDefaults`, then the `props` the call passes,
 then the wrapper's own `props`. Each layer overrides only the properties it
 names, so a layer cannot reset an earlier one. Only what a layer owns composes,
-and the object the formatter is handed owns every entry it is configured with,
-so a prototype somebody else wrote to configures nothing.
+and the object a modifier is handed owns every entry it is configured with and
+carries no prototype, so a prototype somebody else wrote to configures nothing.
 
 ```
 modifierDefaults  { number: { maximumFractionDigits: 4, useGrouping: false } }
@@ -242,6 +242,13 @@ call props        { number: { useGrouping: true } }
 wrapper props     { number: { maximumFractionDigits: 1 } }
 effective         { maximumFractionDigits: 1, useGrouping: true }  ->  1,234.6
 ```
+
+A modifier is handed that composition under its own name and nothing else — the
+`effective` line is what `number` reads — so what one modifier is configured
+with never reaches the next, and a modifier nobody configured is handed an empty
+object rather than nothing. A modifier a host registers reads its properties the
+same way, `modifierDefaults` included, and the object it holds is the parser's
+own copy: writing into it reaches neither the next placeholder nor the caller.
 
 `number` formats at most two fraction digits when no layer names a maximum.
 That two is a default rather than a cap: a layer naming a

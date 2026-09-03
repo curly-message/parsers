@@ -1,5 +1,3 @@
-import type { Parser } from './types';
-
 /**
  * The format's `line-term` production (SPEC.md section 6, note 1): the four
  * code points a placeholder holds in no position. Every rule that reads the
@@ -64,9 +62,10 @@ export const ownKeys = (target: any) => {
 };
 
 export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any) => any) => {
-  // A null prototype takes `__proto__` as an own key, and the spread that
-  // finishes the object defines rather than assigns, so a supplied name stays
-  // an own property instead of reaching a prototype.
+  // A null prototype takes `__proto__` as an own key instead of routing the
+  // name through the prototype setter, and the merged layer keeps that
+  // prototype on the way out: whatever reads it — a host formatter, a modifier
+  // — then answers for the entries it was configured with and for no others.
   const output: Record<string, any> = Object.create(null);
 
   ownKeys(base).forEach((name) => { output[name] = ownValue(base, name); });
@@ -80,7 +79,7 @@ export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any
     output[name] = merge ? merge(ownValue(base, name), to) : to;
   });
 
-  return { ...output };
+  return output;
 };
 
 /**
@@ -112,14 +111,6 @@ export const ownLayer = (target: any, key: PropertyKey) => {
 
   return output;
 };
-
-export const getModifierDefaults = <T>(key: keyof T, parserOptions?: Parser.Options) => ownLayer(ownValue(parserOptions, 'modifierDefaults'), key) as Required<T>[keyof T];
-
-// A host formatter reads its options by name off whatever object it is handed,
-// so that object owns every entry it is configured with and inherits none:
-// reading the layers as own entries buys nothing if the object carrying them to
-// the formatter answers for a prototype somebody else wrote to.
-export const formatOptions = (...layers: any[]) => Object.assign(Object.create(null), ...layers);
 
 /**
  * The number a formatting modifier will format, by the host's own conversion.

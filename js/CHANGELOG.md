@@ -104,6 +104,18 @@ Initial version line for `@curly-message/parser`.
   call's `props` of `{ number: { useGrouping: false } }` and a wrapper's
   `props` of `{ number: { maximumFractionDigits: 1 } }`, `{{v:number}}` over
   `1234.56` renders `'1234.6'`.
+* A modifier reads the slice of `props` its own name holds. The three layers
+  compose as they did, and what a modifier is handed is what that composition
+  holds under the name the placeholder wrote: an object of its own properties,
+  empty where nobody configured it, rather than the whole modifier-keyed table.
+  That is how `modifierDefaults` reaches a host-defined modifier at all — one
+  registered as `x-temp` read `props['x-temp']` for its per-call layer and
+  could reach the defaults the parser was built with only by walking
+  `parserOptions` itself. The slice is the parser's own copy and carries no
+  prototype, so a modifier writing into it reaches nothing else and a name
+  somebody wrote onto `Object.prototype` configures nothing. Effective
+  formatting options are unchanged: the built-in modifiers composed these same
+  layers for themselves.
 * A wrapper's `props` is checked like the two layers beneath it. The factory's
   props type parameter reaches the wrapper through the payload, so a wrapper
   carries the same modifier-keyed table `modifierDefaults` and a call's `props`
