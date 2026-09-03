@@ -229,6 +229,23 @@ link in it. Anything the chain reads and could not convert is reported as
 `unserializable-value`; a link nothing reaches is never read, so it is never
 reported either.
 
+Every entry the parser reads is read as an own **enumerable** property: a
+payload key, a wrapper's, a `props` layer's, an entry of the modifier registry,
+and the call's own `payload`, `props`, `locale` and `key`. That is the rule the
+value conversion has always followed, so a property `Object.defineProperty`
+left hidden is not one the format carries anywhere — after
+`Object.defineProperty(payload, 'v', { value: 'V' })`, `{{v}}` resolves to its
+fallback chain, and a hidden `onReport` reports nowhere. A prototype somebody
+else wrote to supplies nothing at any of those reads either.
+
+A read that raises is an absence and a report wherever it sits, not only at a
+value. A `props` entry that refuses to be read leaves the layer beneath it
+standing and reports `unserializable-value` at the placeholder that needed it;
+`customModifiers`, `modifierDefaults` and the context's own entries are read
+once for the call, so a report about one names the text that went looking
+rather than a placeholder, and a `key` that is itself the entry that raised
+leaves the report naming no key.
+
 A modifier's answer becomes text by that same conversion, so an answer no
 conversion describes is read as missing and reported the same way, and the
 placeholder takes the chain. An answer that is nothing at all is an absent
@@ -329,6 +346,21 @@ regular expression or a Windows path survives as typed: `\d+` resolves to
 A payload value is read the same way, because a value may carry a placeholder
 of its own. A value that has to keep a backslash in front of a reserved
 character doubles it — `\\server\share` resolves to `\server\share`.
+
+Escape sequences are removed once, from the finished text, so the removal
+reaches the text a conversion produced as readily as the text a message was
+written in. The two characters JSON writes for a backslash are an escape
+sequence, and the removal takes one of them, so the JSON a plain object
+serializes to does not necessarily reach the output parsable as JSON.
+
+```
+{ v: { a: 'C:\U' } }    serializes to  {"a":"C:\\U"}  and renders  {"a":"C:\U"}
+```
+
+A modifier is unaffected, because it reads its value before the removal runs:
+one that parses a serialized object back reads the serialization the conversion
+produced. A caller that needs the result itself to parse passes the text it
+wants as an ordinary string value, with every backslash doubled.
 
 ## Status
 
