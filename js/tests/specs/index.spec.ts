@@ -582,6 +582,32 @@ describe('parser', () => {
     expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve('{{v}}', { payload: { v: '{{v}}' } }))).toBe('{{v}}');
     expect(seen).toEqual([]);
   });
+  it('an own property nobody can enumerate is not one the format reads', () => {
+    // `Object.defineProperty` leaves a property non-enumerable unless the
+    // descriptor says otherwise, and the value conversion has always read by
+    // enumerability, so every other read now agrees with it.
+    const hidden = (name: string, value: any, target: any = {}) => Object.defineProperty(target, name, { value, configurable: true });
+    const seen: Report[] = [];
+    const { resolve } = createParser({});
+
+    expect(resolve('{{v; default:D}}', { payload: { v: 'V' } })).toBe('V');
+    expect(resolve('{{v; default:D}}', { payload: hidden('v', 'V') })).toBe('D');
+
+    expect(resolve('{{v}}', { payload: { default: 'D' } })).toBe('D');
+    expect(resolve('{{v}}', { payload: hidden('default', 'D') })).toBe('');
+
+    expect(resolve('{{v}}', { payload: { v: { value: undefined, default: 'D' } } })).toBe('D');
+    expect(resolve('{{v}}', { payload: { v: hidden('default', 'D', { value: undefined }) } })).toBe('');
+
+    expect(resolve('{{v}}', { payload: { v: 'V' } })).toBe('V');
+    expect(resolve('{{v}}', hidden('payload', { v: 'V' }))).toBe('');
+
+    expect(createParser({ onReport: (entry) => seen.push(entry) }).resolve('{{v:nosuch}}', { payload: { v: 'V' } })).toBe('');
+    expect(seen).toHaveLength(1);
+
+    expect(createParser(hidden('onReport', (entry: Report) => seen.push(entry))).resolve('{{v:nosuch}}', { payload: { v: 'V' } })).toBe('');
+    expect(seen).toHaveLength(1);
+  });
   it('a polluted prototype configures no formatter', () => {
     const { resolve } = createParser({});
 
