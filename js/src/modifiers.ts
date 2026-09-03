@@ -5,7 +5,7 @@ import { AGO_LADDER, getDateInput, getModifierInput, mergeLayer, ownValue } from
 // selection that matched nothing falls back, and the fallback is read off the
 // config rather than destructured out of it: the chain behind it resolves for a
 // reader, and a modifier that matched never became one.
-const selected = (option: Modifier.ModifierOption | undefined, config: { defaultValue?: Modifier.DefaultValue }) => (option ? option.value : config.defaultValue ?? '');
+const selected = (option: Modifier.ModifierOption | undefined, config: { defaultValue: string }) => (option ? option.value : config.defaultValue);
 
 export const eq: Modifier.T = (config) => {
   const { value, options = [] } = config;
@@ -63,7 +63,7 @@ export const number: Modifier.T<Modifier.NumberProps> = (config) => {
 
   const input = getModifierInput(value);
 
-  if (input === undefined) return config.defaultValue ?? '';
+  if (input === undefined) return config.defaultValue;
 
   // Two fraction digits is what this modifier formats when nobody named a
   // maximum: a default, not a cap. `Intl` widens its own default maximum to
@@ -83,7 +83,7 @@ export const date: Modifier.T<Modifier.DateProps> = (config) => {
 
   const input = getDateInput(value);
 
-  if (input === undefined) return config.defaultValue ?? '';
+  if (input === undefined) return config.defaultValue;
 
   return new Intl.DateTimeFormat(locale, mergeLayer(props, undefined)).format(input);
 };
@@ -118,7 +118,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
 
   const input = getModifierInput(value);
 
-  if (input === undefined) return config.defaultValue ?? '';
+  if (input === undefined) return config.defaultValue;
 
   const numeric = ownValue(props, 'numeric') ?? 'auto';
   const formatParams = agoFormat(input, ownValue(props, 'format') ?? 'auto');
@@ -133,11 +133,11 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
 
   const amount = getModifierInput(value);
 
-  if (amount === undefined) return config.defaultValue ?? '';
+  if (amount === undefined) return config.defaultValue;
 
   const input = getModifierInput(amount * (ownValue(props, 'ratio') ?? 1));
 
-  if (input === undefined) return config.defaultValue ?? '';
+  if (input === undefined) return config.defaultValue;
 
   // The currency style is what this modifier is, not one of the options it
   // layers: a layer naming another style asks it to stop being the modifier the

@@ -425,3 +425,13 @@ Initial version line for `@curly-message/parser`.
   typed by the same table that modifier reads, so a host-defined modifier
   reaches its own `modifierDefaults` entry without a cast. The factory supplies
   the parameter itself, so a parser built through `createParser` is unaffected.
+* A modifier's config is typed as the text it is handed. `value` and
+  `defaultValue` were `any` and optional where resolution has always passed a
+  string for both — a placeholder whose value is absent takes its fallback
+  chain before any modifier is called, and that chain ends in the empty string
+  — so every built-in carried a `?? ''` that could never fire and a
+  host-defined modifier had to write one of its own to read a default as text.
+  Both are `string` and required now, and the `Modifier.DefaultValue` alias,
+  which said as much in prose, is gone. A wrapper's `default` is untouched: a
+  payload may declare any value as a fallback, and it is the config that always
+  sees text. Nothing about resolution changes.
