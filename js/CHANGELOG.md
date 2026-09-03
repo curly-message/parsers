@@ -294,6 +294,17 @@ Initial version line for `@curly-message/parser`.
   same thing silently. The accepted units are now read off the ladder itself,
   so the two cannot drift and an unclimbable unit is a compile error rather
   than a wrong answer.
+* An `ago` `format` the ladder does not climb takes the fallback chain. The
+  accepted units are read off the ladder, but a caller reaching past the type —
+  from JavaScript, or through a layer typed loosely — had its format climbed
+  past in silence: `{{v:ago}}` over a week ago under
+  `{ ago: { format: 'YEAR' } }` rendered `'this year'`, which is the climb
+  running out at `year`. The reading is case sensitive, so `YEAR` is not the
+  `year` beside it on the ladder. A format that is neither a rung, in the
+  singular or the plural, nor `auto` is a property the modifier cannot process
+  now: the placeholder takes its fallback chain and reports `failed-modifier`,
+  which is what an empty format already did on a raise from the host's own
+  formatter.
 * Turning a value into text is bounded. A plain object or an array became
   JSON with nothing watching the walk, and both interpolation guards measure a
   string that already exists, so they could not see the cost of building one: a

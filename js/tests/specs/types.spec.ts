@@ -106,8 +106,11 @@ describe('payload typing', () => {
     expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'month' } }, locale: 'en' })).toBe('last month');
     expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'days' } }, locale: 'en' })).toBe('40 days ago');
 
+    // The type is one guard of two: a caller reaching past it, or reaching the
+    // table from JavaScript, takes the fallback chain rather than the `year`
+    // the climb used to run out at.
     // @ts-expect-error `quarter` is a unit `Intl` knows and this ladder does not walk
-    expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'quarter' } }, locale: 'en' })).toBe('this year');
+    expect(resolve('{{v:ago}}', { payload, props: { ago: { format: 'quarter' } }, locale: 'en' })).toBe('');
   });
 
   it('accepts implementation defaults for a host-defined modifier', () => {
