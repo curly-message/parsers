@@ -799,6 +799,38 @@ describe('parser', () => {
     expect(resolveDays('common.modifier_ago', { value })).toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
     expect(resolveWeek('common.modifier_ago', { value })).not.toBe(new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(-7, 'day'));
   });
+  it('`ago` cannot count in a unit its ladder does not climb', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const value = -1000 * 60 * 60 * 24 * 7;
+    const relative = (delta: number, unit: Intl.RelativeTimeFormatUnit) => new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' }).format(delta, unit);
+
+    const answer = (format: any) => {
+      reports.length = 0;
+
+      const text = resolve('{{v:ago; default:FALLBACK}}', { payload: { v: value }, props: { ago: { format } }, locale: defaultLocale });
+
+      return { text, reported: reports.map(({ code, origin }) => `${code}/${origin}`) };
+    };
+
+    // A rung of the ladder, in the singular or in the plural, and the `auto` a
+    // layer naming no format leaves in place.
+    expect(answer('day')).toEqual({ text: relative(-7, 'day'), reported: [] });
+    expect(answer('days')).toEqual({ text: relative(-7, 'day'), reported: [] });
+    expect(answer('week')).toEqual({ text: relative(-1, 'week'), reported: [] });
+    expect(answer('auto')).toEqual({ text: relative(-1, 'week'), reported: [] });
+
+    // Anything else is a property the modifier cannot process: the reading is
+    // case sensitive, so `YEAR` is not the `year` beside it on the ladder, and
+    // a unit `Intl` knows the ladder still does not climb. Each of these used
+    // to climb past the format in silence and render `'this year'`, which is
+    // what the ladder running out at `year` says about a delta of a week; only
+    // the empty one already took the chain, on a raise from the host's own
+    // formatter.
+    for (const format of ['YEAR', 'Day', 'quarter', 'fortnight', '', ' day', 'dayss', 42]) {
+      expect(answer(format)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+    }
+  });
   it('`ago` reads a delta and its negation the same way', () => {
     const { resolve } = createParser({});
     const relative = new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' });

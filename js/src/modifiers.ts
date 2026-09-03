@@ -96,6 +96,12 @@ export const date: Modifier.T<Modifier.DateProps> = (config) => {
 
 const testResolution = (defKey: string = '', testKey: string = '') => new RegExp(`^${defKey}s?$`).test(testKey);
 
+// The ladder is the whole of what `ago` counts in, so a format naming anything
+// else — a unit `Intl` knows and the ladder does not climb, a rung spelled in
+// another case, a typo — is a property the modifier cannot process rather than
+// one to climb past on the way to `year`.
+const onLadder = (format: string) => format === 'auto' || AGO_LADDER.some(({ key }) => testResolution(key, format));
+
 const findIndex = (currentKey: string) => AGO_LADDER.indexOf(AGO_LADDER.find(({ key }) => testResolution(key, currentKey)) as any);
 
 // A step is rounded on its magnitude and given its sign back. The host's own
@@ -125,7 +131,11 @@ export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
   const input = formattable(getModifierInput(value));
 
   const numeric = ownValue(props, 'numeric') ?? 'auto';
-  const formatParams = agoFormat(input, ownValue(props, 'format') ?? 'auto');
+  const format = ownValue(props, 'format') ?? 'auto';
+
+  if (!onLadder(format)) throw new ModifierFailure('failed-modifier');
+
+  const formatParams = agoFormat(input, format);
 
   return new Intl.RelativeTimeFormat(locale, mergeLayer(props, { numeric })).format(...formatParams);
 };

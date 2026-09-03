@@ -265,8 +265,13 @@ multiplies its value by a `ratio` property first, defaulting to 1, so a payload
 carrying minor units renders as major ones.
 
 `ago` takes the unit to count in from a `format` property holding a unit name,
-in the singular or the plural. Its `auto`, which is what a layer naming none
-leaves in place, selects the unit from the magnitude of the delta instead.
+in the singular or the plural: `second`, `minute`, `hour`, `day`, `week`,
+`month` and `year` are the rungs of the ladder it climbs. Its `auto`, which is
+what a layer naming none leaves in place, selects the unit from the magnitude
+of the delta instead. A `format` naming anything else — a unit `Intl` knows and
+this ladder does not climb, a rung spelled in another case — is a property the
+modifier cannot process: the placeholder takes its fallback chain and reports
+`failed-modifier`.
 
 `ratio` and `format` are the format's own properties rather than `Intl`'s, and
 both are read from the layers like every other property — a message cannot
