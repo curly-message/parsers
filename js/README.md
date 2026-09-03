@@ -36,7 +36,10 @@ Given no locale the formatting modifiers resolve to the empty string, not to
 the fallback chain: a declared default does not stand in for a locale nobody
 supplied. A caller that passes none and a caller that passes the empty string
 resolve alike; one that passes a locale the host then rejects has supplied one,
-and takes the fallback chain like any other formatting failure.
+and takes the fallback chain like any other formatting failure. The empty
+string is reported as `missing-locale`, whose origin is the payload: a locale
+nobody supplied is a defect in what the caller passed rather than in the
+message that was written.
 
 Given a locale, each formatting modifier reads its value as a particular kind
 of number, and a value that is not one resolves the placeholder to its
@@ -108,10 +111,10 @@ silently. It is called with a `Report` describing what the parser could not do
 nothing from the payload, the `limit` reached where the report is about one,
 the message's `key` where one was passed, and `text`, the source of the
 trouble: the placeholder that named it for `unknown-modifier`,
-`failed-modifier` and `unserializable-value`, the output that would not settle
-for `pass-limit` and `output-limit`, and nothing at all where what could not be
-described is the chain the message itself resolves through, which names no
-placeholder. `origin` says who fixes what `code` names — `'message'` for a
+`failed-modifier`, `missing-locale` and `unserializable-value`, the output that
+would not settle for `pass-limit` and `output-limit`, and nothing at all where
+what could not be described is the chain the message itself resolves through,
+which names no placeholder. `origin` says who fixes what `code` names — `'message'` for a
 defect in the message that was written, `'payload'` for one in what the caller
 passed, and `'limit'` for a bound this parser set. Every code declares one, and
 it ranks nothing: a report is no graver for coming from one of the three than

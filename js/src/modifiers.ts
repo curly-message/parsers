@@ -69,7 +69,7 @@ const formattable = (input: number | undefined) => {
 export const number: Modifier.T<Modifier.NumberProps> = (config) => {
   const { value, props, locale = '' } = config;
 
-  if (!locale) return '';
+  if (!locale) throw new ModifierFailure('missing-locale');
 
   const input = formattable(getModifierInput(value));
 
@@ -87,7 +87,7 @@ export const number: Modifier.T<Modifier.NumberProps> = (config) => {
 export const date: Modifier.T<Modifier.DateProps> = (config) => {
   const { value, props, locale = '' } = config;
 
-  if (!locale) return '';
+  if (!locale) throw new ModifierFailure('missing-locale');
 
   const input = formattable(getDateInput(value));
 
@@ -120,7 +120,7 @@ const agoFormat = (millis: number, resolution?: Intl.RelativeTimeFormatUnit | 'a
 export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
   const { value, locale = '', props } = config;
 
-  if (!locale) return '';
+  if (!locale) throw new ModifierFailure('missing-locale');
 
   const input = formattable(getModifierInput(value));
 
@@ -133,7 +133,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
 export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
   const { value, locale = '', props } = config;
 
-  if (!locale) return '';
+  if (!locale) throw new ModifierFailure('missing-locale');
 
   const amount = formattable(getModifierInput(value));
   const input = formattable(getModifierInput(amount * (ownValue(props, 'ratio') ?? 1)));
