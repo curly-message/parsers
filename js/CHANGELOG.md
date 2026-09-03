@@ -61,6 +61,17 @@ Initial version line for `@curly-message/parser`.
   placeholder reaches a modifier at all, so an absent value takes its chain
   before any of it and reports nothing, and a comparison, which reads no
   locale, never reports it.
+* A comparison given no options to select from reports `missing-options`.
+  `{{count:eq}}` and `{{count:eq; default:none}}` ask a comparison to choose
+  among nothing, and the inline `default` is the fallback itself rather than
+  something to choose, so the second declares no options either. The output is
+  unchanged — the placeholder takes the fallback chain it always took — and the
+  caller now hears that the message described no selection. The check reads how
+  the placeholder is written, so it reports whether or not the payload carries
+  the key, and it reads the six names this format defines as comparisons, so a
+  host that registered its own `eq` does not change what the message asked for.
+  A placeholder naming no modifier is not a comparison: `{{count}}`
+  interpolates and reports nothing.
 * Everything a modifier reads is text. A value used to reach a modifier at the
   type the payload gave it while a default arrived as text; both are converted
   the same way now, so a modifier has one kind of input to read. A plain object
