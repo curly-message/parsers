@@ -1,3 +1,5 @@
+import type { Report } from './types';
+
 /**
  * The format's `line-term` production (SPEC.md section 6, note 1): the four
  * code points a placeholder holds in no position. Every rule that reads the
@@ -113,9 +115,34 @@ export const ownLayer = (target: any, key: PropertyKey) => {
 };
 
 /**
+ * Why a modifier could not answer, in the vocabulary a report is written in. A
+ * built-in modifier says so by raising, the way a host-defined one already
+ * does, and the parser reads the code off the raise. It never leaves the
+ * parser.
+ */
+export class ModifierFailure extends Error {
+  constructor(readonly code: Report['code']) {
+    super(code);
+  }
+}
+
+/**
+ * The code a raise carries, where the raise is one of the parser's own. A
+ * modifier may raise anything at all — an object that raises again at the mere
+ * question of what it is included — so nothing is one of the answers.
+ */
+export const failureCode = (raised: any): Report['code'] | undefined => {
+  try {
+    return raised instanceof ModifierFailure ? raised.code : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * The number a formatting modifier will format, by the host's own conversion.
- * A value that does not convert is one the modifier cannot format — the caller
- * resolves it to the fallback chain instead.
+ * A value that does not convert is one the modifier cannot format — the
+ * placeholder resolves to the fallback chain instead.
  */
 export const getModifierInput = (value: any) => {
   // `+''` is `0`, so blank text would otherwise format as a number nobody wrote.

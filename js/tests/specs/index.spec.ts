@@ -709,7 +709,9 @@ describe('parser', () => {
     // the text between its delimiters, and past the last character those scans
     // ask the prototype: a separator somebody else wrote there cuts a segment
     // the message does not have, and the parser reports a modifier nobody named.
-    const clean = 'CHAIN|CHAIN|CHAIN|V|V|CHAIN|CHAIN unknown-modifier';
+    // `number` over `'V'` reports too — it is a value no locale formats — and
+    // what a polluted prototype must not do is move either list.
+    const clean = 'CHAIN|CHAIN|CHAIN|V|V|CHAIN|CHAIN failed-modifier unknown-modifier';
 
     expect(resolveAll()).toBe(clean);
 
@@ -1508,6 +1510,37 @@ describe('parser', () => {
     expect(resolve('common.modifier_date', { value: 'not a number', default: 'FALLBACK' })).toBe('FALLBACK');
     expect(resolve('common.modifier_ago', { value: 'not a number', default: 'FALLBACK' })).toBe('FALLBACK');
     expect(resolve('common.modifier_date', { value: 'not a number' })).toBe('');
+  });
+  it('a formatting modifier that cannot format its input reports', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const props = { currency: { currency: 'USD', ratio: 21.4 } };
+
+    const answer = (placeholder: string, value: any) => {
+      reports.length = 0;
+
+      const text = resolve(placeholder, { payload: { v: value }, props, locale: defaultLocale });
+
+      return { text, reported: reports.map(({ code, origin }) => `${code}/${origin}`) };
+    };
+
+    // Each of the four tests its value before the host's formatter sees it, and
+    // a value that fails that test used to take the fallback chain in silence
+    // where the same placeholder under a locale the host rejects reported. Both
+    // halves of the failure report now, and the output is the one the modifier
+    // read for itself: the same chain, resolved by the same read.
+    for (const modifier of ['number', 'date', 'ago', 'currency']) {
+      for (const value of ['not a number', '', '   ']) {
+        expect(answer(`{{v:${modifier}; default:FALLBACK}}`, value)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+      }
+
+      expect(answer(`{{v:${modifier}}}`, 'not a number')).toEqual({ text: '', reported: ['failed-modifier/message'] });
+    }
+
+    // `currency` reads its value and then multiplies it by its ratio, so the
+    // product is a second input it can reject.
+    expect(answer('{{v:currency; default:FALLBACK}}', 1e308)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+    expect(reports[0].text).toBe('{{v:currency; default:FALLBACK}}');
   });
   it('the formatting modifiers answer a value none of them can format alike', () => {
     const reports: Report[] = [];

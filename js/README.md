@@ -40,7 +40,8 @@ and takes the fallback chain like any other formatting failure.
 
 Given a locale, each formatting modifier reads its value as a particular kind
 of number, and a value that is not one resolves the placeholder to its
-`default`:
+`default` and is reported as `failed-modifier`, like any other result a
+modifier could not produce:
 
 | Modifier | Value |
 | --- | --- |
