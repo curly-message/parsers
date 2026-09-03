@@ -5,8 +5,11 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
-  // Build outputs; node_modules is ignored by default.
-  { ignores: ['**/dist/', '**/lib/'] },
+  // Build outputs and machine-local scratch; node_modules is ignored by
+  // default. `.claude/worktrees/` is where the agent tooling checks the branch
+  // out a second time, and linting a checkout of the repo from inside the
+  // repo reports every dev dependency twice.
+  { ignores: ['**/dist/', '**/.claude/'] },
   js.configs.recommended,
   tseslint.configs.recommendedTypeChecked,
   {
@@ -45,7 +48,7 @@ export default tseslint.config(
     },
   },
   {
-    // The formatting contract shared across the sveltekit-i18n repos.
+    // The formatting contract this repository lints by, named in AGENTS.md.
     plugins: { '@stylistic': stylistic },
     rules: {
       '@stylistic/comma-dangle': ['error', 'always-multiline'],
@@ -59,8 +62,8 @@ export default tseslint.config(
     },
   },
   {
-    // The public types (Parser, Modifier, Config) are namespace-shaped since
-    // v1, spelled with the `module` keyword of that era.
+    // The public types (Parser, Modifier) are namespace-shaped since v1,
+    // spelled with the `module` keyword of that era.
     files: ['src/types.ts'],
     rules: {
       '@typescript-eslint/no-namespace': 'off',
@@ -75,23 +78,6 @@ export default tseslint.config(
     files: ['tests/specs/index.spec.ts'],
     rules: {
       'no-useless-assignment': 'off',
-    },
-  },
-  {
-    // The v1 sources predate the formatting contract (final newlines, blank
-    // lines); they ship byte-identical, so `--fix` must not rewrite them.
-    files: ['src/index.ts', 'src/modifiers.ts', 'src/types.ts', 'src/utils.ts'],
-    rules: {
-      '@stylistic/eol-last': 'off',
-      '@stylistic/no-multiple-empty-lines': 'off',
-    },
-  },
-  {
-    // The v1-era file-wide disable directive stays; without this opt-out,
-    // `--fix` would strip it as unused.
-    files: ['tsup.config.js'],
-    linterOptions: {
-      reportUnusedDisableDirectives: 'off',
     },
   },
   {

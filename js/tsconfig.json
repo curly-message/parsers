@@ -3,9 +3,6 @@
     "module": "ESNext",
     "noImplicitReturns": true,
     "noUnusedLocals": true,
-    "removeComments": true,
-    "outDir": "lib",
-    "sourceMap": false,
     "strict": true,
     // Declaration files of build tooling (tsup, vitest) target newer lib
     // levels than this package; the subject of this gate is our code.
@@ -14,7 +11,6 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "resolveJsonModule": true,
-    "declaration": true,
     "allowSyntheticDefaultImports": true
   },
   "include": [

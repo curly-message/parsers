@@ -1,55 +1,410 @@
 import * as defaultModifiers from './modifiers';
-import type { Parser, Modifier, Interpolate, Config } from './types';
+import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report } from './types';
+import { failureCode, isBlank, LINE_TERM, mergeLayer, ownKeys, ownLayer, ownModifiers, ownValue, unicodeEscape } from './utils';
 
-export type { Parser, Modifier, Config };
+export type { Parser, Modifier, Locale, Report };
 
-const hasPlaceholders = (value: any) => typeof value === 'string' && /{{(?:(?!{{|}}).)+}}/.test(value);
+const TERMINATOR_CLASS = `[${LINE_TERM.map(unicodeEscape).join('')}]`;
 
-const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\(?=:|;|{|})/g, '') : value;
+const TERMINATOR = new RegExp(TERMINATOR_CLASS);
 
-const ownValue = (target: any, key?: PropertyKey) => (key !== undefined && !!target && Object.prototype.hasOwnProperty.call(target, key) ? target[key] : undefined);
+const EVERY_TERMINATOR = new RegExp(TERMINATOR_CLASS, 'g');
 
-const placeholders: Interpolate = ({ value: text, props, payload, parserOptions, locale }) => `${text}`.replace(/{{(?:\s*(?!{{|}})\S(?:(?:(?!{{|}})[^\n\r\u2028\u2029])*(?!{{|}})\S)?\s*|[\n\r\u2028\u2029]*[^\S\n\r\u2028\u2029]\s*)}}/g, (placeholder) => {
-  const [escapedKey] = placeholder.match(/(?!{|\s)(?:\\[:;]|\\(?![:;])|[^:;\\\n\r\u2028\u2029])*?(?:\\[:;]|\\(?![:;])|[^:;\s\\])(?=\s*(?:[:;]|}}$))/) || [];
-  const key = escapedKey === undefined ? undefined : unesc(escapedKey) as keyof Parser.Payload;
-  const value = ownValue(payload, key);
+// A backslash consumes the character after it, so a brace an escape claimed
+// is text rather than half of a delimiter, and a placeholder holds no line
+// terminator in any position. Both delimiters are two characters, so each scan
+// reads one character ahead, and `charAt` stops at the end of the message where
+// an index would answer for its prototype.
+const placeholderEnd = (value: string, open: number) => {
+  for (let index = open + 2; index < value.length; index += 1) {
+    const character = value[index];
 
-  let [, defaultValue = ''] = placeholder.match(/{{(?:[^\\]|\\;|\\(?!;))*?;\s*default\s*:\s*((?:\\[:;]|[^\s:;])(?:\\[:;]|\\(?![:;])|[^;\\])*?)(?=;|}}$)/i) || [];
-  defaultValue = defaultValue || ownValue(payload, 'default') || '';
+    if (character === '\\') {
+      if (TERMINATOR.test(value.charAt(index + 1))) return undefined;
 
-  let [, modifierKey = ''] = placeholder.match(/{{(?:[^;\\]|\\;|\\(?!;))*(?:\\;|[^\\\n\r\u2028\u2029]):\s*(?!\s)((?:\\;|[^;\s])(?:(?:\\;|[^;])*(?:\\;|[^;\s]))?)(?=\s*(?:[;]|}}$))/i) || [];
+      index += 1;
+      continue;
+    }
 
-  if (value === undefined && modifierKey !== 'ne') return defaultValue;
+    if (TERMINATOR.test(character)) return undefined;
 
-  const hasModifier = !!modifierKey;
+    if (character === '{' && value.charAt(index + 1) === '{') return undefined;
 
-  const { customModifiers } = parserOptions || {};
-  const modifiers = { ...defaultModifiers, ...(customModifiers || {}) };
+    if (character === '}' && value.charAt(index + 1) === '}') return index + 2;
+  }
 
-  modifierKey = (Object.keys(modifiers).includes(modifierKey) ? modifierKey : 'eq');
+  return undefined;
+};
 
-  const modifier = modifiers[modifierKey as keyof typeof modifiers];
-  const options = (
-    placeholder.match(/(?:\\[;]|[^\s:;{}])(?:(?:[^;]|\\[;])*[^:;}])?/gi) as RegExpMatchArray || []
-  ).reduce(
-    (acc, option, i) => {
-      // NOTE: First item is a placeholder and modifier
-      if (i > 0) {
-        const parts = option.split(/(?<!\\):/);
-        const optionKey = unesc(parts[0].trim());
-        const optionValue = parts[parts.length - 1].trimStart();
+// Both scans skip an escape sequence whole, so the parity of a run of
+// backslashes is never counted backwards and the cost stays linear in the
+// length of the message. An attempt that fails leaves the braces it rejected
+// to a later pair.
+const nextPlaceholder = (value: string, from: number): [number, number] | undefined => {
+  for (let index = from; index < value.length; index += 1) {
+    if (value[index] === '\\') {
+      index += 1;
+      continue;
+    }
 
-        if (optionKey && optionKey !== 'default' && optionValue) acc.push({ key: optionKey, value: optionValue });
-      }
+    if (value[index] !== '{' || value.charAt(index + 1) !== '{') continue;
 
-      return acc;
-    }, [] as Modifier.ModifierOption[],
-  );
+    const end = placeholderEnd(value, index);
 
-  if (!hasModifier && !options.length) return value;
+    if (end !== undefined) return [index, end];
+  }
 
-  return modifier({ value, options, props, defaultValue, locale, parserOptions });
-});
+  return undefined;
+};
+
+const hasPlaceholders = (value: any) => typeof value === 'string' && !!nextPlaceholder(value, 0);
+
+// The syntax reserves a colon, a semicolon, either brace, a backslash and
+// whitespace, which `isBlank` answers for. A backslash writes any of them as
+// text; before anything else it is text itself, so a Windows path and a
+// regular expression survive as typed.
+const RESERVED = /[:;{}\\]/;
+
+const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/g, (sequence, character) => RESERVED.test(character) || isBlank(character) ? character : sequence) : value;
+
+// Whitespace an escape sequence claims is text, not padding around it.
+const trim = (value: string) => {
+  let start = -1;
+  let end = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const escaped = value[index] === '\\' && index + 1 < value.length;
+
+    if (!escaped && isBlank(value[index])) continue;
+
+    if (start < 0) start = index;
+
+    index += escaped ? 1 : 0;
+    end = index + 1;
+  }
+
+  return start < 0 ? '' : value.slice(start, end);
+};
+
+// Separates on every occurrence of `separator` no escape sequence claims.
+const split = (value: string, separator: string) => {
+  const parts: string[] = [];
+  let from = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '\\') index += 1;
+    else if (value[index] === separator) {
+      parts.push(value.slice(from, index));
+      from = index + 1;
+    }
+  }
+
+  return [...parts, value.slice(from)];
+};
+
+// A `Date`, a `RegExp` and a `Map` all say what they are through `toString`; a
+// plain object says `[object Object]`, so it is the one shape JSON describes
+// better.
+const isPlainObject = (value: any) => {
+  if (!value || typeof value !== 'object') return false;
+
+  // A value the host will not describe is not a shape this can read.
+  try {
+    const prototype = Object.getPrototypeOf(value);
+
+    return prototype === Object.prototype || prototype === null;
+  } catch {
+    return false;
+  }
+};
+
+// Serialization follows a shared reference again every time it meets one, so a
+// value holding twenty-five objects — each of twenty-four levels naming the
+// same child twice — serializes to sixteen million leaves with no cycle for the
+// `catch` to find. The budget is what one conversion may spend: a value
+// visiting more nodes than a resolvable output can hold is one no conversion
+// describes, which is what a cycle and a `toJSON` answering nothing are too.
+const serialize = (value: any): string | undefined => {
+  let budget = MAX_INTERPOLATION_LENGTH;
+
+  try {
+    const json = JSON.stringify(value, (_, entry) => {
+      budget -= 1;
+
+      if (budget < 0) throw new RangeError('The value visits more nodes than a resolvable output can hold.');
+
+      return entry;
+    });
+
+    return typeof json === 'string' ? json : undefined;
+  } catch {
+    return undefined;
+  }
+};
+
+const convert = (value: any): string | undefined => {
+  // Classifying a value reads it, and a value the host will not describe raises
+  // at that read as readily as at its coercion.
+  try {
+    if (!isPlainObject(value) && !Array.isArray(value)) return String(value);
+  } catch {
+    return undefined;
+  }
+
+  return serialize(value);
+};
+
+/**
+ * The text a value resolves to. Everything the format carries is text: a plain
+ * object and an array become JSON, so a custom modifier can read them back,
+ * and every other value becomes what the host makes of it.
+ *
+ * `undefined` answers "this is not a value" — for a value nobody passed, and
+ * for one no conversion can describe. Both fall through to the fallback chain,
+ * so nothing raises out of `resolve`.
+ *
+ * Converting is what costs, and a value is read once for every placeholder that
+ * names it, so `conversions` records what each value came out as, the answer
+ * that none describes it included, and one resolution converts one value once.
+ */
+const text = (value: any, conversions: Conversions): string | undefined => {
+  if (value === undefined) return undefined;
+
+  // A primitive's conversion runs no host code and cannot answer twice over, so
+  // recording one buys nothing and costs an entry per distinct value.
+  const carries = value !== null && (typeof value === 'object' || typeof value === 'function');
+
+  if (!carries) return convert(value);
+
+  if (!conversions.has(value)) conversions.set(value, convert(value));
+
+  return conversions.get(value);
+};
+
+// A value nobody passed is not a defect; a value that cannot become text is.
+// Both answer nothing, so the one that is a defect has to say so on the way
+// past, and every chain the format resolves reads its links through here. The
+// conversion behind it runs once for a value; the report does not, because each
+// link that finds nothing is a defect of its own.
+const describedText = (declared: any, onUndescribed: () => void, conversions: Conversions) => {
+  const output = text(declared, conversions);
+
+  if (declared !== undefined && output === undefined) onUndescribed();
+
+  return output;
+};
+
+// Reserved by the payload for a value's own configuration.
+const WRAPPED = ['value', 'default', 'props'];
+
+const isWrapped = (value: any, onRaise?: () => void) => {
+  if (!isPlainObject(value)) return false;
+
+  const keys = ownKeys(value, onRaise);
+
+  return !!keys.length && keys.every((key) => WRAPPED.includes(key));
+};
+
+// A configuration layer is anything carrying entries to read. `isPlainObject`
+// answers which conversion describes a value better, which is a question about
+// values; a layer is read for its own entries and never converted, so a
+// prototype it happens to carry decides nothing about how it composes.
+const isLayer = (value: any) => !!value && typeof value === 'object';
+
+// A `props` layer copied down to the objects it names. What a modifier
+// receives is the parser's own object, so a modifier that writes into what it
+// was handed reaches neither the next placeholder nor the caller.
+const ownProps = (layer: any, onRaise?: () => void) => {
+  const output: Record<string, any> = Object.create(null);
+
+  ownKeys(layer, onRaise).forEach((name) => {
+    const value = ownValue(layer, name, onRaise);
+
+    output[name] = isLayer(value) ? mergeLayer(value, undefined, undefined, onRaise) : value;
+  });
+
+  return { ...output };
+};
+
+// Layers of `props` compose the way the parser's own defaults and the call's
+// already do: each names what it overrides and leaves the rest standing.
+const mergeProps = (base: any, override: any, onRaise?: () => void) => {
+  if (!isLayer(override)) return isLayer(base) ? ownProps(base, onRaise) : base;
+
+  return ownProps(mergeLayer(base, override, (from, to) => isLayer(to) ? mergeLayer(from, to, undefined, onRaise) : to, onRaise), onRaise);
+};
+
+// The names this format defines as comparisons. A message that writes one has
+// asked for a selection, whatever a host registered under the name, and the
+// list is typed off the registry so a name that stops being a built-in stops
+// compiling here.
+const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'];
+
+const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey, conversions }) => {
+  const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
+  // A configuration entry that refuses to be read is read once for the whole
+  // pass rather than at a placeholder, so what a report names it by is the
+  // text that pass went looking through.
+  const configRaised = () => report('unserializable-value', typeof message === 'string' ? message : '', messageKey, onReport);
+  const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', configRaised);
+  const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', configRaised);
+  // The modifier module's exports are the registry a host's table composes
+  // with, and each layer contributes the modifiers it holds and nothing else:
+  // an entry that cannot be called is not one a message can name and not one
+  // that shadows the name it would replace. Filtered after the merge instead,
+  // a host's bad entry would take the built-in down with it.
+  const modifiers = mergeLayer(ownModifiers(defaultModifiers), ownModifiers(customModifiers, configRaised));
+  const modifierKeys = Object.keys(modifiers);
+
+  const resolvePlaceholder = (placeholder: string) => {
+    const [declaration, ...declaredOptions] = split(placeholder.slice(2, -2), ';');
+    const [declaredKey, ...declaredModifier] = split(declaration, ':');
+
+    const declaredName = trim(declaredKey);
+    const key = declaredName ? unesc(declaredName) as keyof Parser.Payload : undefined;
+    // A link that refuses to be read is not a link nobody passed. `ownValue`
+    // answers nothing either way, because resolution must not throw; the
+    // difference between the two is what a report is for.
+    const raised = () => report('unserializable-value', placeholder, messageKey, onReport);
+    const entry = ownValue(payload, key, raised);
+    // The payload's root `default` is the fallback itself, never configuration.
+    const wrapper = key !== 'default' && isWrapped(entry, raised) ? entry : undefined;
+    const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
+
+    const options: Modifier.ModifierOption[] = [];
+    let inlineDefault: string | undefined;
+
+    declaredOptions.forEach((option) => {
+      const [declaredOptionKey, ...declaredValue] = split(option, ':');
+      const optionKey = unesc(trim(declaredOptionKey));
+      // The first colon is the separator and every later one is value. An
+      // option that names no value at all stands for itself; one that ends
+      // at its colon declares the empty string.
+      const optionValue = declaredValue.length ? trim(declaredValue.join(':')) : trim(declaredOptionKey);
+
+      if (!optionKey) return;
+
+      // `default` is reserved in lowercase, so both gates read the same
+      // spelling and a segment is either the inline default or an option.
+      if (inlineDefault === undefined && optionKey === 'default') inlineDefault = optionValue;
+
+      if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
+    });
+
+    const payloadText = (declared: any) => describedText(declared, raised, conversions);
+
+    const valueText = payloadText(value);
+
+    let resolvedDefault: string | undefined;
+
+    // A placeholder can name `default` itself, and then the chain's payload
+    // link is the entry it has already read as its value. One entry is read
+    // once: reading it again would describe a single value that cannot become
+    // text as two.
+    const payloadDefault = key === 'default' ? () => valueText : () => payloadText(ownValue(payload, 'default', raised));
+
+    // The wrapper speaks for its own value, the payload for every key it does
+    // not carry, and the message only for what neither of them says. Converting
+    // one costs a full serialization, so a link waits for the one before it to
+    // come back empty, and the chain waits for a reader.
+    const defaultText = () => {
+      resolvedDefault ??= [() => payloadText(ownValue(wrapper, 'default', raised)), payloadDefault]
+        .reduce<string | undefined>((output, read) => output ?? read(), undefined) ?? inlineDefault ?? '';
+
+      return resolvedDefault;
+    };
+
+    // A modifier answers to its name, not to the spelling a message needed to
+    // write it: an escape is how a name carrying a reserved character reaches
+    // the parser, the way a key's and an option key's do.
+    const modifierKey = unesc(trim(declaredModifier.join(':')));
+    const hasModifier = !!modifierKey;
+
+    // A modifier nobody registered is a defect in the message, not a selection:
+    // running `eq` in its place would render a plausible answer to a question the
+    // message never asked.
+    if (hasModifier && !modifierKeys.includes(modifierKey)) {
+      report('unknown-modifier', placeholder, messageKey, onReport);
+
+      return defaultText();
+    }
+
+    // A comparison selects among the options a placeholder declares, so one
+    // declaring none was asked to select from nothing. It is how the
+    // placeholder is written that says so, which is why the reading comes
+    // before the value is consulted at all.
+    if (COMPARISONS.includes(modifierKey) && !options.length) report('missing-options', placeholder, messageKey, onReport);
+
+    // An absent value is nothing to compare against, whatever the modifier
+    // asks: the placeholder takes the fallback chain rather than measuring the
+    // host's own word for absence.
+    if (valueText === undefined) return defaultText();
+
+    if (!hasModifier && !options.length) return valueText;
+
+    const modifierName = hasModifier ? modifierKey : 'eq';
+    const modifier = modifiers[modifierName as keyof typeof modifiers];
+
+    // Fail soft: a modifier that raises resolves its placeholder, never out of `resolve`.
+    // Containment is what keeps that failure out of the caller's render path,
+    // and not a reason for the caller to hear nothing about it.
+    try {
+      // Every layer names the modifiers it configures, and a modifier reads the
+      // slice its own name holds rather than the table those layers are: what
+      // one modifier is configured with is not what the next reads, and a
+      // modifier nobody configured reads an object all the same.
+      const modifierProps = ownLayer(mergeProps(mergeProps(modifierDefaults, props, raised), ownValue(wrapper, 'props', raised), raised), modifierName, raised);
+
+      // A modifier answers with a host value like any other, so it becomes text
+      // by the conversion a payload entry does: an object it built stays
+      // structured instead of collapsing to the host's own word for an object.
+      // An answer no conversion can describe is not an answer, and neither is
+      // nothing, so the placeholder takes the fallback chain — the whole of the
+      // treatment a value that is not a value gets, the report included, and
+      // an answer that is nothing is absent rather than undescribable.
+      // The default reaches the modifier as a property it reads, not as work
+      // done before it was called: a modifier that never asks leaves the chain
+      // unresolved, so a link nobody consulted is never described as missing.
+      const input = { value: valueText, options, props: modifierProps, get defaultValue() { return defaultText(); }, locale, parserOptions };
+
+      return describedText(modifier(input), raised, conversions) ?? defaultText();
+    } catch (failure) {
+      // A built-in modifier that cannot answer says why by raising, the way a
+      // host-defined one already does; a raise that says nothing is the
+      // failure it has always been.
+      const code = failureCode(failure) ?? 'failed-modifier';
+
+      report(code, placeholder, messageKey, onReport);
+
+      // A locale nobody supplied is the one failure the chain does not answer:
+      // a declared default stands in for a value the modifier cannot read,
+      // never for the locale it would have formatted in.
+      return code === 'missing-locale' ? '' : defaultText();
+    }
+  };
+
+  // A pass already past the output limit is discarded whole, and what follows
+  // it can shrink to nothing but no further, so resolving the rest only builds
+  // text nobody reads — and a value that multiplies its own placeholder builds
+  // text no string can hold.
+  const source = `${message}`;
+  const parts: string[] = [];
+  let growth = 0;
+  let from = 0;
+
+  for (let match = nextPlaceholder(source, from); match; match = nextPlaceholder(source, from)) {
+    const [open, end] = match;
+    const placeholder = source.slice(open, end);
+    const resolved = open + growth > MAX_INTERPOLATION_LENGTH ? placeholder : resolvePlaceholder(placeholder);
+
+    parts.push(source.slice(from, open), resolved);
+
+    growth += resolved.length - placeholder.length;
+    from = end;
+  }
+
+  return [...parts, source.slice(from)].join('');
+};
 
 const MAX_INTERPOLATION_PASSES = 10;
 
@@ -57,22 +412,74 @@ const MAX_INTERPOLATION_LENGTH = 100000;
 
 const MAX_REPORTED_LENGTH = 120;
 
-const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value);
+// `JSON.stringify` leaves a terminator it has no short escape for raw, so
+// every terminator the format holds is escaped again on top of it. The ones
+// it did escape are two characters by then and no longer match.
+const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value).slice(1, -1).replace(EVERY_TERMINATOR, unicodeEscape);
 
-const interpolate: Interpolate = ({ value, props, payload, parserOptions, locale }) => {
+const REPORT_MESSAGES: Record<Report['code'], string> = {
+  'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
+  'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
+  'missing-options': 'A comparison was given no options to select from, so the placeholder took its fallback chain.',
+  'unserializable-value': 'A value could not become text, so resolution read it as missing.',
+  'missing-locale': 'A formatting modifier was given no locale, so the placeholder resolved to the empty string.',
+  'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
+  'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
+};
+
+// A code that reached no limit names one all the same, because a table read by
+// a key it does not carry answers for its prototype, and a report would then
+// carry out whatever somebody else had written there.
+const REPORT_LIMITS: Record<Report['code'], number | undefined> = {
+  'unknown-modifier': undefined,
+  'failed-modifier': undefined,
+  'missing-options': undefined,
+  'unserializable-value': undefined,
+  'missing-locale': undefined,
+  'pass-limit': MAX_INTERPOLATION_PASSES,
+  'output-limit': MAX_INTERPOLATION_LENGTH,
+};
+
+// The axis is a property of the code rather than of the site that reported it,
+// so every code names its own here and no report site chooses one. The table
+// names them all for the reason the limits do.
+const REPORT_ORIGINS: Record<Report['code'], Report['origin']> = {
+  'unknown-modifier': 'message',
+  'failed-modifier': 'message',
+  'missing-options': 'message',
+  'unserializable-value': 'payload',
+  'missing-locale': 'payload',
+  'pass-limit': 'limit',
+  'output-limit': 'limit',
+};
+
+const report = (code: Report['code'], reported: string, key: Parser.Key | undefined, onReport: Parser.OnReport | undefined) => {
+  if (!onReport) return;
+
+  try {
+    onReport({ code, origin: REPORT_ORIGINS[code], message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(reported) });
+  } catch {
+    // Reporting is an observation, not a step of the resolution. A host whose
+    // logger fails must still get its message back.
+  }
+};
+
+const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key, conversions }) => {
+  const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
+
   let output = value;
 
   for (let pass = 0; hasPlaceholders(output); pass += 1) {
     if (pass === MAX_INTERPOLATION_PASSES) {
-      console.warn(`[i18n]: Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder: ${excerpt(output)}.`);
+      report('pass-limit', output, key, onReport);
 
       break;
     }
 
-    const next = placeholders({ value: output, payload, props, parserOptions, locale });
+    const next = placeholders({ value: output, payload, props, parserOptions, locale, key, conversions });
 
     if (next.length > MAX_INTERPOLATION_LENGTH) {
-      console.warn(`[i18n]: Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder: ${excerpt(output)}.`);
+      report('output-limit', output, key, onReport);
 
       break;
     }
@@ -80,24 +487,56 @@ const interpolate: Interpolate = ({ value, props, payload, parserOptions, locale
     output = next;
   }
 
-  return unesc(output);
+  return text(unesc(output), conversions) ?? '';
 };
 
-const parser: Parser.Factory = (parserOptions) => ({
-  parse: (value, [payload, props], locale, key) => {
+export const createParser: Parser.Factory = (parserOptions) => ({
+  resolve: (message, context) => {
+    // The context is caller-supplied like the payload inside it, and is read
+    // the same way: own entries only. A prototype somebody else wrote to is
+    // not a context a caller passed, and a caller that passed `null` for one
+    // is a caller that passed none.
+    const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
+    // A context entry that refuses to be read is the call's own defect rather
+    // than a placeholder's, and the key that would name the message is one of
+    // the entries, so the message is what a report of one carries — as text
+    // where the caller wrote text, because nothing has converted it yet.
+    const reported = typeof message === 'string' ? message : '';
+    const key: Parser.Key | undefined = ownValue(context, 'key', () => report('unserializable-value', reported, undefined, onReport));
+    const contextRaised = () => report('unserializable-value', reported, key, onReport);
+    const payload: Parser.Payload | undefined = ownValue(context, 'payload', contextRaised);
+    const props: Modifier.Props | undefined = ownValue(context, 'props', contextRaised);
+    const locale: Locale | undefined = ownValue(context, 'locale', contextRaised);
+    // A report about the chain a message resolves through names no placeholder,
+    // and the link it is about is one nothing describes, so it carries no
+    // excerpt: the key is what says which message went looking.
+    const raised = () => report('unserializable-value', '', key, onReport);
 
-    const payloadDefault = ownValue(payload, 'default');
+    // One value converts once, however many placeholders read it: the walk is
+    // the costly step. The call is the scope — a payload the host mutates
+    // between two of them must not be answered with the older text.
+    const conversions: Conversions = new Map();
 
-    if (payloadDefault && value === undefined) {
-      value = payloadDefault;
-    }
+    // Everything the format carries is text, and the message becomes text
+    // before anything reads it rather than after everything has: a host that
+    // wrote its message as something else gets it interpolated and unescaped
+    // like any other. A link no conversion can describe does not exist, the
+    // same way such a value is not a value, so the chain steps past it — a
+    // message default that cannot become text must not swallow the key echo.
+    // Stepping past the payload's link is reported, because that link is a
+    // payload value like any other; stepping past the message is not, because
+    // a message nothing describes is a message nobody wrote.
+    const value = text(message, conversions) ?? describedText(ownValue(payload, 'default', raised), raised, conversions);
 
-    if (value === undefined) {
-      value = key;
-    }
+    // What is left when the chain runs out is not a message the format resolves
+    // over: it is the format naming the message that went looking. A value, an
+    // option value, an inline default and a payload `default` are what may
+    // carry placeholders; a key is not one of them, so it leaves as the caller
+    // spelled it, neither resolved nor unescaped. It still becomes text,
+    // because `resolve` answers with text, and a caller that named no key has
+    // nothing to echo.
+    if (value === undefined) return text(key, conversions) ?? '';
 
-    return interpolate({ value, payload, props, parserOptions, locale });
+    return interpolate({ value, payload, props, parserOptions, locale, key, conversions });
   },
 });
-
-export default parser;
