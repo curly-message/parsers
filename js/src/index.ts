@@ -197,10 +197,10 @@ const describedText = (declared: any, onUndescribed: () => void, conversions: Co
 // Reserved by the payload for a value's own configuration.
 const WRAPPED = ['value', 'default', 'props'];
 
-const isWrapped = (value: any) => {
+const isWrapped = (value: any, onRaise?: () => void) => {
   if (!isPlainObject(value)) return false;
 
-  const keys = ownKeys(value);
+  const keys = ownKeys(value, onRaise);
 
   return !!keys.length && keys.every((key) => WRAPPED.includes(key));
 };
@@ -214,13 +214,13 @@ const isLayer = (value: any) => !!value && typeof value === 'object';
 // A `props` layer copied down to the objects it names. What a modifier
 // receives is the parser's own object, so a modifier that writes into what it
 // was handed reaches neither the next placeholder nor the caller.
-const ownProps = (layer: any) => {
+const ownProps = (layer: any, onRaise?: () => void) => {
   const output: Record<string, any> = Object.create(null);
 
-  ownKeys(layer).forEach((name) => {
-    const value = ownValue(layer, name);
+  ownKeys(layer, onRaise).forEach((name) => {
+    const value = ownValue(layer, name, onRaise);
 
-    output[name] = isLayer(value) ? mergeLayer(value, undefined) : value;
+    output[name] = isLayer(value) ? mergeLayer(value, undefined, undefined, onRaise) : value;
   });
 
   return { ...output };
@@ -228,10 +228,10 @@ const ownProps = (layer: any) => {
 
 // Layers of `props` compose the way the parser's own defaults and the call's
 // already do: each names what it overrides and leaves the rest standing.
-const mergeProps = (base: any, override: any) => {
-  if (!isLayer(override)) return isLayer(base) ? ownProps(base) : base;
+const mergeProps = (base: any, override: any, onRaise?: () => void) => {
+  if (!isLayer(override)) return isLayer(base) ? ownProps(base, onRaise) : base;
 
-  return ownProps(mergeLayer(base, override, (from, to) => isLayer(to) ? mergeLayer(from, to) : to));
+  return ownProps(mergeLayer(base, override, (from, to) => isLayer(to) ? mergeLayer(from, to, undefined, onRaise) : to, onRaise), onRaise);
 };
 
 // The names this format defines as comparisons. A message that writes one has
@@ -241,15 +241,19 @@ const mergeProps = (base: any, override: any) => {
 const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'];
 
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey, conversions }) => {
-  const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers');
-  const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults');
   const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
+  // A configuration entry that refuses to be read is read once for the whole
+  // pass rather than at a placeholder, so what a report names it by is the
+  // text that pass went looking through.
+  const configRaised = () => report('unserializable-value', typeof message === 'string' ? message : '', messageKey, onReport);
+  const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', configRaised);
+  const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', configRaised);
   // The modifier module's exports are the registry a host's table composes
   // with, and each layer contributes the modifiers it holds and nothing else:
   // an entry that cannot be called is not one a message can name and not one
   // that shadows the name it would replace. Filtered after the merge instead,
   // a host's bad entry would take the built-in down with it.
-  const modifiers = mergeLayer(ownModifiers(defaultModifiers), ownModifiers(customModifiers));
+  const modifiers = mergeLayer(ownModifiers(defaultModifiers), ownModifiers(customModifiers, configRaised));
   const modifierKeys = Object.keys(modifiers);
 
   const resolvePlaceholder = (placeholder: string) => {
@@ -264,7 +268,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     const raised = () => report('unserializable-value', placeholder, messageKey, onReport);
     const entry = ownValue(payload, key, raised);
     // The payload's root `default` is the fallback itself, never configuration.
-    const wrapper = key !== 'default' && isWrapped(entry) ? entry : undefined;
+    const wrapper = key !== 'default' && isWrapped(entry, raised) ? entry : undefined;
     const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
 
     const options: Modifier.ModifierOption[] = [];
@@ -349,7 +353,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // slice its own name holds rather than the table those layers are: what
       // one modifier is configured with is not what the next reads, and a
       // modifier nobody configured reads an object all the same.
-      const modifierProps = ownLayer(mergeProps(mergeProps(modifierDefaults, props), ownValue(wrapper, 'props')), modifierName);
+      const modifierProps = ownLayer(mergeProps(mergeProps(modifierDefaults, props, raised), ownValue(wrapper, 'props', raised), raised), modifierName, raised);
 
       // A modifier answers with a host value like any other, so it becomes text
       // by the conversion a payload entry does: an object it built stays
@@ -492,12 +496,17 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // the same way: own entries only. A prototype somebody else wrote to is
     // not a context a caller passed, and a caller that passed `null` for one
     // is a caller that passed none.
-    const payload: Parser.Payload | undefined = ownValue(context, 'payload');
-    const props: Modifier.Props | undefined = ownValue(context, 'props');
-    const locale: Locale | undefined = ownValue(context, 'locale');
-    const key: Parser.Key | undefined = ownValue(context, 'key');
-
     const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
+    // A context entry that refuses to be read is the call's own defect rather
+    // than a placeholder's, and the key that would name the message is one of
+    // the entries, so the message is what a report of one carries — as text
+    // where the caller wrote text, because nothing has converted it yet.
+    const reported = typeof message === 'string' ? message : '';
+    const key: Parser.Key | undefined = ownValue(context, 'key', () => report('unserializable-value', reported, undefined, onReport));
+    const contextRaised = () => report('unserializable-value', reported, key, onReport);
+    const payload: Parser.Payload | undefined = ownValue(context, 'payload', contextRaised);
+    const props: Modifier.Props | undefined = ownValue(context, 'props', contextRaised);
+    const locale: Locale | undefined = ownValue(context, 'locale', contextRaised);
     // A report about the chain a message resolves through names no placeholder,
     // and the link it is about is one nothing describes, so it carries no
     // excerpt: the key is what says which message went looking.
