@@ -103,18 +103,23 @@ The types say as much, but a JavaScript caller reaches the table regardless.
 `onReport` is where diagnostics go. The parser writes to no channel of its own,
 so unset it reports nowhere; resolution still fails soft, it just does so
 silently. It is called with a `Report` describing what the parser could not do
-— `code`, an English `message` carrying nothing from the payload, the `limit`
-reached where the report is about one, the message's `key` where one was
-passed, and `text`, the source of the trouble: the placeholder that named it
-for `unknown-modifier`, `failed-modifier` and `unserializable-value`, the
-output that would not settle for `pass-limit` and `output-limit`, and nothing
-at all where what could not be described is the chain the message itself
-resolves through, which names no placeholder. Only `text` derives from the
-payload. It is cut to 120 characters of what reached it, marked with a trailing
-`...` of the parser's own where the cut took something, and escaped after that
-— quotes, backslashes, and every line terminator. So a cut excerpt arrives at
-123 characters at the shortest, one carrying something to escape arrives longer
-still, and no payload can forge a line where a report is written.
+— `code`, the `origin` that code declares, an English `message` carrying
+nothing from the payload, the `limit` reached where the report is about one,
+the message's `key` where one was passed, and `text`, the source of the
+trouble: the placeholder that named it for `unknown-modifier`,
+`failed-modifier` and `unserializable-value`, the output that would not settle
+for `pass-limit` and `output-limit`, and nothing at all where what could not be
+described is the chain the message itself resolves through, which names no
+placeholder. `origin` says who fixes what `code` names — `'message'` for a
+defect in the message that was written, `'payload'` for one in what the caller
+passed, and `'limit'` for a bound this parser set. Every code declares one, and
+it ranks nothing: a report is no graver for coming from one of the three than
+from another. Only `text` derives from the payload. It is cut to 120 characters
+of what reached it, marked with a trailing `...` of the parser's own where the
+cut took something, and escaped after that — quotes, backslashes, and every
+line terminator. So a cut excerpt arrives at 123 characters at the shortest,
+one carrying something to escape arrives longer still, and no payload can forge
+a line where a report is written.
 
 Two guards bound resolution, and reaching either is what the two limit codes
 report. A payload value may name another placeholder, so interpolation runs

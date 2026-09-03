@@ -51,7 +51,14 @@ export type Interpolation = Interpolate;
  */
 export type Report = {
   /** What stopped resolution. */
-  code: 'unknown-modifier' | 'failed-modifier' | 'unserializable-value' | 'pass-limit' | 'output-limit';
+  code: 'unknown-modifier' | 'failed-modifier' | 'missing-options' | 'unserializable-value' | 'missing-locale' | 'pass-limit' | 'output-limit';
+  /**
+   * Which of the three the defect belongs to, and so who fixes it: the message
+   * that was written, what the caller passed, or a limit this parser set. Every
+   * code declares one. It ranks nothing — a report is no graver for coming from
+   * one of the three than from another.
+   */
+  origin: 'message' | 'payload' | 'limit';
   /**
    * The same in English. It is self-contained and carries nothing from the
    * payload, so writing it anywhere is safe without further thought.

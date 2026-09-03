@@ -601,10 +601,10 @@ describe('parser', () => {
       return reports.map(({ code, limit }) => `${code}=${limit}`).join(' ');
     };
 
-    // A report about no limit carries none, and the three codes that are about
-    // no limit are the three the table behind that field does not name. Read
-    // through a prototype, a name somebody else wrote there answers for the
-    // table, and a host prints it as the limit this parser reached.
+    // A report about no limit carries none, and a code that is about no limit
+    // is one the table behind that field names with nothing. Read through a
+    // prototype, a name somebody else wrote there answers for the table, and a
+    // host prints it as the limit this parser reached.
     const clean = 'unknown-modifier=undefined failed-modifier=undefined unserializable-value=undefined pass-limit=10 output-limit=100000';
 
     expect(read()).toBe(clean);
@@ -612,6 +612,40 @@ describe('parser', () => {
     for (const code of ['unknown-modifier', 'failed-modifier', 'unserializable-value', 'pass-limit', 'output-limit']) {
       expect(polluted(code, 'HIJACKED', read)).toBe(clean);
     }
+  });
+  it('every code declares one origin, and a report carries the one its code declares', () => {
+    const reports: Report[] = [];
+    const raising = { 'x-raise': () => { throw new Error('MODIFIER FAILURE'); } };
+    const { resolve } = createParser({ customModifiers: raising, onReport: (report) => { reports.push(report); } });
+
+    // The whole vocabulary, against the table the parser reads: a code added
+    // there without an origin stops compiling here rather than reaching a
+    // caller carrying none.
+    const origins: Record<Report['code'], Report['origin']> = {
+      'unknown-modifier': 'message',
+      'failed-modifier': 'message',
+      'missing-options': 'message',
+      'unserializable-value': 'payload',
+      'missing-locale': 'payload',
+      'pass-limit': 'limit',
+      'output-limit': 'limit',
+    };
+
+    resolve('{{v:nosuch}}', { payload: { v: 'V' } });
+    resolve('{{v:x-raise}}', { payload: { v: 'V' } });
+    resolve(circular, { payload: { default: circular } });
+    resolve('{{v}}', { payload: { v: '{{v}}' } });
+    resolve('{{v}}', { payload: { v: 'x'.repeat(100001) } });
+
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier', 'failed-modifier', 'unserializable-value', 'pass-limit', 'output-limit']);
+
+    // A report carries the origin its own code declares, so the axis a caller
+    // reads is the code's and never the reporting site's.
+    for (const { code, origin } of reports) expect(origin).toBe(origins[code]);
+
+    // The two nothing emits yet are declared all the same: the axis belongs to
+    // the vocabulary, not to what a resolution has happened to reach.
+    expect([origins['missing-options'], origins['missing-locale']]).toEqual(['message', 'payload']);
   });
   it('the scanner reads no character past the end of the message', () => {
     const { resolve } = createParser({});
@@ -926,6 +960,7 @@ describe('parser', () => {
 
     expect(reports).toEqual([{
       code: 'unserializable-value',
+      origin: 'payload',
       message: 'A value could not become text, so resolution read it as missing.',
       key: 'common.opaque',
       text: '{{v:x-circ; default:D}}',
@@ -1023,6 +1058,7 @@ describe('parser', () => {
     expect(reports).toHaveLength(5);
     expect(reports[0]).toEqual({
       code: 'unknown-modifier',
+      origin: 'message',
       message: 'A placeholder named a modifier this parser does not know.',
       key: 'common.plural',
       text: '{{value:plural; 1:one; default:many}}',
@@ -1108,6 +1144,7 @@ describe('parser', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toEqual({
       code: 'unserializable-value',
+      origin: 'payload',
       message: 'A value could not become text, so resolution read it as missing.',
       key: 'common.opaque',
       text: '{{v; default:INLINE}}',
@@ -1327,6 +1364,7 @@ describe('parser', () => {
     expect(resolve(circular, { payload: { default: circular }, key: 'common.key' })).toBe('common.key');
     expect(reports).toEqual([{
       code: 'unserializable-value',
+      origin: 'payload',
       message: 'A value could not become text, so resolution read it as missing.',
       key: 'common.key',
       limit: undefined,
@@ -1950,6 +1988,7 @@ describe('parser', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toEqual({
       code: 'pass-limit',
+      origin: 'limit',
       message: 'Interpolation stopped after 10 passes. A payload value probably references its own placeholder.',
       key: 'common.placeholder_chain',
       limit: 10,
@@ -2288,6 +2327,7 @@ describe('parser', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({
       code: 'output-limit',
+      origin: 'limit',
       message: 'Interpolation stopped before exceeding 100000 characters. A payload value probably multiplies its own placeholder.',
       limit: 100000,
       key: 'common.placeholder_chain',
@@ -2325,7 +2365,7 @@ describe('parser', () => {
     expect(output).toBe(multiplied);
 
     expect(reports).toHaveLength(1);
-    expect(reports[0]).toMatchObject({ code: 'output-limit', limit: 100000, key: 'common.placeholder_chain' });
+    expect(reports[0]).toMatchObject({ code: 'output-limit', origin: 'limit', limit: 100000, key: 'common.placeholder_chain' });
   });
   it('an `onReport` that throws does not take the resolution down', () => {
     const seen: string[] = [];
