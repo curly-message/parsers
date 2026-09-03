@@ -21,7 +21,7 @@ type Given<T> = [T][T extends any ? 0 : never];
  */
 type AtLeastOne<T> = { [Key in keyof T]-?: Record<Key, T[Key]> & Omit<T, Key> }[keyof T];
 
-export type CommonProps<CustomModifierProps = Modifier.DefaultProps> = { value: any, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, CustomModifierProps> };
+export type CommonProps<CustomModifierProps = Modifier.DefaultProps, Value = any> = { value: Value, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, CustomModifierProps> };
 
 /**
  * The text every value a resolution has converted came out as, by identity, the
@@ -110,13 +110,6 @@ export module Modifier {
   export type ModifierOption = Record<'key' | 'value', string>;
 
   /**
-   * What a placeholder falls back to. It reaches a modifier as text whether
-   * the message declared it or the payload carried it — a payload default is
-   * coerced exactly like a value.
-   */
-  export type DefaultValue = any;
-
-  /**
    * A value's own configuration, standing in the payload where the value
    * would. An entry is a wrapper only when it is a plain object that owns at
    * least one key and every key it owns is one of these; an entry with a
@@ -127,12 +120,17 @@ export module Modifier {
     /** The value itself. A wrapper carrying none falls back like a missing key. */
     value?: Value;
     /** Tried before the payload's own `default` and before the inline one. */
-    default?: DefaultValue;
+    default?: any;
     /** Layered over the `props` the call passes, property by property. */
     props?: Props<CustomModifierProps>;
   }>;
 
-  export type T<CustomModifierProps = DefaultProps> = (config: CommonProps<CustomModifierProps> & {
+  /**
+   * A modifier is handed text and nothing else: a placeholder whose value is
+   * absent takes its fallback chain before any modifier is called, and that
+   * chain ends in the empty string.
+   */
+  export type T<CustomModifierProps = DefaultProps> = (config: CommonProps<CustomModifierProps, string> & {
     options: ModifierOption[];
     /**
      * The fallback chain, resolved by the read rather than before the modifier
@@ -143,7 +141,7 @@ export module Modifier {
      * `JSON.stringify` — so a modifier with no use for the default takes the
      * keys it needs by name.
      */
-    defaultValue?: DefaultValue;
+    defaultValue: string;
   }) => any;
 
   export type DefaultModifiers = typeof modifiers;

@@ -267,4 +267,13 @@ describe('modifier typing', () => {
 
     expect(registered).toBe(true);
   });
+
+  it('rejects a config that hands a modifier anything but the text it reads', () => {
+    const choose: Modifier.T = ({ value, defaultValue }) => value || defaultValue;
+
+    // @ts-expect-error a config always carries the fallback chain, whether the modifier reads it or not
+    expect(choose({ value: '', options: [] })).toBe(undefined);
+    // @ts-expect-error a value reaches a modifier as text, whatever the payload carried
+    expect(choose({ value: 42, options: [], defaultValue: 'D' })).toBe(42);
+  });
 });
