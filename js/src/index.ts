@@ -390,7 +390,9 @@ const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LE
 const REPORT_MESSAGES: Record<Report['code'], string> = {
   'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
   'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
+  'missing-options': 'A comparison was given no options to select from, so the placeholder took its fallback chain.',
   'unserializable-value': 'A value could not become text, so resolution read it as missing.',
+  'missing-locale': 'A formatting modifier was given no locale, so the placeholder resolved to the empty string.',
   'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
   'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
 };
@@ -401,16 +403,31 @@ const REPORT_MESSAGES: Record<Report['code'], string> = {
 const REPORT_LIMITS: Record<Report['code'], number | undefined> = {
   'unknown-modifier': undefined,
   'failed-modifier': undefined,
+  'missing-options': undefined,
   'unserializable-value': undefined,
+  'missing-locale': undefined,
   'pass-limit': MAX_INTERPOLATION_PASSES,
   'output-limit': MAX_INTERPOLATION_LENGTH,
+};
+
+// The axis is a property of the code rather than of the site that reported it,
+// so every code names its own here and no report site chooses one. The table
+// names them all for the reason the limits do.
+const REPORT_ORIGINS: Record<Report['code'], Report['origin']> = {
+  'unknown-modifier': 'message',
+  'failed-modifier': 'message',
+  'missing-options': 'message',
+  'unserializable-value': 'payload',
+  'missing-locale': 'payload',
+  'pass-limit': 'limit',
+  'output-limit': 'limit',
 };
 
 const report = (code: Report['code'], reported: string, key: Parser.Key | undefined, onReport: Parser.OnReport | undefined) => {
   if (!onReport) return;
 
   try {
-    onReport({ code, message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(reported) });
+    onReport({ code, origin: REPORT_ORIGINS[code], message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(reported) });
   } catch {
     // Reporting is an observation, not a step of the resolution. A host whose
     // logger fails must still get its message back.

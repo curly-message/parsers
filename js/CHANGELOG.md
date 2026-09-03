@@ -17,6 +17,12 @@ Initial version line for `@curly-message/parser`.
   soft either way. A report's excerpt of the unsettled text arrives truncated
   and with every line terminator escaped, U+2028 and U+2029 included, so a
   payload cannot forge a line wherever the caller writes it.
+* A report says who fixes it. `Report.origin` accompanies `code` — `'message'`
+  for a defect in the message that was written, `'payload'` for one in what the
+  caller passed, `'limit'` for a bound this parser set. Every code declares
+  one, so the axis is the code's own and never the reporting site's. It ranks
+  nothing: a report is no graver for coming from one of the three than from
+  another.
 * A modifier the parser does not know is a defect in the message, not a
   comparison. `{{count:plural; 1:message; default:messages}}` used to run `eq`
   in its place and render `'message'`, answering a question the message never
