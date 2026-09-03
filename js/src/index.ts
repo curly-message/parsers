@@ -329,7 +329,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     const modifierName = hasModifier ? modifierKey : 'eq';
     const modifier = modifiers[modifierName as keyof typeof modifiers];
 
-    // Fail soft: a modifier that raises resolves to the fallback chain, never out of `resolve`.
+    // Fail soft: a modifier that raises resolves its placeholder, never out of `resolve`.
     // Containment is what keeps that failure out of the caller's render path,
     // and not a reason for the caller to hear nothing about it.
     try {
@@ -356,9 +356,14 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // A built-in modifier that cannot answer says why by raising, the way a
       // host-defined one already does; a raise that says nothing is the
       // failure it has always been.
-      report(failureCode(failure) ?? 'failed-modifier', placeholder, messageKey, onReport);
+      const code = failureCode(failure) ?? 'failed-modifier';
 
-      return defaultText();
+      report(code, placeholder, messageKey, onReport);
+
+      // A locale nobody supplied is the one failure the chain does not answer:
+      // a declared default stands in for a value the modifier cannot read,
+      // never for the locale it would have formatted in.
+      return code === 'missing-locale' ? '' : defaultText();
     }
   };
 

@@ -659,19 +659,20 @@ describe('parser', () => {
 
     resolve('{{v:nosuch}}', { payload: { v: 'V' } });
     resolve('{{v:x-raise}}', { payload: { v: 'V' } });
+    resolve('{{v:number}}', { payload: { v: 1 } });
     resolve(circular, { payload: { default: circular } });
     resolve('{{v}}', { payload: { v: '{{v}}' } });
     resolve('{{v}}', { payload: { v: 'x'.repeat(100001) } });
 
-    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier', 'failed-modifier', 'unserializable-value', 'pass-limit', 'output-limit']);
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier', 'failed-modifier', 'missing-locale', 'unserializable-value', 'pass-limit', 'output-limit']);
 
     // A report carries the origin its own code declares, so the axis a caller
     // reads is the code's and never the reporting site's.
     for (const { code, origin } of reports) expect(origin).toBe(origins[code]);
 
-    // The two nothing emits yet are declared all the same: the axis belongs to
+    // The one nothing emits yet is declared all the same: the axis belongs to
     // the vocabulary, not to what a resolution has happened to reach.
-    expect([origins['missing-options'], origins['missing-locale']]).toEqual(['message', 'payload']);
+    expect(origins['missing-options']).toBe('message');
   });
   it('the scanner reads no character past the end of the message', () => {
     const { resolve } = createParser({});
@@ -1306,7 +1307,6 @@ describe('parser', () => {
 
     expect(answering.resolve('{{v:x-none; default:D}}', { payload: { v: 'X' } })).toBe('D');
     expect(answering.resolve('{{v:x-text; default:D}}', { payload: { v: 'X' } })).toBe('OK');
-    expect(answering.resolve('{{v:number; default:D}}', { payload: { v: 1 } })).toBe('');
     expect(reports).toEqual([]);
   });
   it('a formatting modifier resolves to the empty string where no locale is available', () => {
@@ -1328,6 +1328,48 @@ describe('parser', () => {
     }
 
     expect(resolve(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 } })).toBe('');
+  });
+  it('a formatting modifier given no locale reports', () => {
+    const reports: Report[] = [];
+    const seen = { 'x-locale': ({ locale }: { locale?: string }) => `[${locale ?? ''}]` };
+    const { resolve } = createParser({ customModifiers: seen, onReport: (report) => { reports.push(report); } });
+
+    const answer = (placeholder: string, context: Parser.Context) => {
+      reports.length = 0;
+
+      const text = resolve(placeholder, context);
+
+      return { text, reported: reports.map(({ code, origin }) => `${code}/${origin}`) };
+    };
+
+    // The empty string is what the specification asks for, and the report is
+    // what says why the placeholder came out empty. Its origin is the payload:
+    // a locale nobody supplied is a defect in what the caller passed, not in
+    // the message that was written.
+    for (const modifier of ['number', 'date', 'ago', 'currency']) {
+      for (const locale of [undefined, '']) {
+        expect(answer(`{{v:${modifier}; default:FALLBACK}}`, { payload: { v: 10 }, locale })).toEqual({ text: '', reported: ['missing-locale/payload'] });
+      }
+    }
+
+    // The locale is read before the value, so a value the modifier could not
+    // have formatted either reports the locale and nothing else.
+    expect(answer('{{v:number; default:FALLBACK}}', { payload: { v: 'not a number' } })).toEqual({ text: '', reported: ['missing-locale/payload'] });
+
+    expect(answer('{{v:date}}', { payload: { v: 10 } })).toEqual({ text: '', reported: ['missing-locale/payload'] });
+    expect(reports[0].message).toBe('A formatting modifier was given no locale, so the placeholder resolved to the empty string.');
+    expect(reports[0].text).toBe('{{v:date}}');
+
+    // A placeholder whose value is absent takes its chain before any modifier
+    // is called, so there is no modifier there to be given a locale.
+    expect(answer('{{v:number; default:FALLBACK}}', { payload: {} })).toEqual({ text: 'FALLBACK', reported: [] });
+    expect(answer('{{v:number; default:FALLBACK}}', { payload: { v: undefined } })).toEqual({ text: 'FALLBACK', reported: [] });
+
+    // A comparison reads no locale, and a host-defined modifier reads whatever
+    // it likes: the report belongs to the four that format.
+    expect(answer('{{v:eq; 10:TEN}}', { payload: { v: 10 } })).toEqual({ text: 'TEN', reported: [] });
+    expect(answer('{{v; 10:TEN}}', { payload: { v: 10 } })).toEqual({ text: 'TEN', reported: [] });
+    expect(answer('{{v:x-locale}}', { payload: { v: 10 } })).toEqual({ text: '[]', reported: [] });
   });
   it('a value that cannot become text resolves to the fallback chain', () => {
     const { resolve } = defaultParser;

@@ -52,6 +52,15 @@ Initial version line for `@curly-message/parser`.
   Both halves of the failure report now. The output is unchanged: the chain the
   modifier returned for itself and the chain the parser resolves to are the
   same read.
+* A formatting modifier given no locale reports `missing-locale`. It resolves
+  to the empty string as it always did — a declared default stands in for a
+  value the modifier cannot read, never for the locale it would have formatted
+  in — and the caller now hears why the placeholder came out empty. The origin
+  is the payload: a locale that is absent and one that is empty are alike a
+  defect in what the caller passed. The report is reached only where a
+  placeholder reaches a modifier at all, so an absent value takes its chain
+  before any of it and reports nothing, and a comparison, which reads no
+  locale, never reports it.
 * Everything a modifier reads is text. A value used to reach a modifier at the
   type the payload gave it while a default arrived as text; both are converted
   the same way now, so a modifier has one kind of input to read. A plain object
