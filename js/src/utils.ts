@@ -59,30 +59,39 @@ export const ownValue = (target: any, key?: PropertyKey, onRaise?: () => void) =
   }
 };
 
-export const ownKeys = (target: any) => {
+/**
+ * The names a target carries of its own. Enumerating them reads the target as
+ * surely as reading one does, so a target that refuses the question answers
+ * nothing and says so the same way.
+ */
+export const ownKeys = (target: any, onRaise?: () => void) => {
+  if (!target) return [];
+
   try {
     return Object.keys(target);
   } catch {
+    onRaise?.();
+
     return [];
   }
 };
 
-export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any) => any) => {
+export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any) => any, onRaise?: () => void) => {
   // A null prototype takes `__proto__` as an own key instead of routing the
   // name through the prototype setter, and the merged layer keeps that
   // prototype on the way out: whatever reads it — a host formatter, a modifier
   // — then answers for the entries it was configured with and for no others.
   const output: Record<string, any> = Object.create(null);
 
-  ownKeys(base).forEach((name) => { output[name] = ownValue(base, name); });
+  ownKeys(base, onRaise).forEach((name) => { output[name] = ownValue(base, name, onRaise); });
 
-  ownKeys(override).forEach((name) => {
-    const to = ownValue(override, name);
+  ownKeys(override, onRaise).forEach((name) => {
+    const to = ownValue(override, name, onRaise);
 
     // A name the override sets to `undefined` names nothing, like one it omits.
     if (to === undefined) return;
 
-    output[name] = merge ? merge(ownValue(base, name), to) : to;
+    output[name] = merge ? merge(ownValue(base, name, onRaise), to) : to;
   });
 
   return output;
@@ -94,11 +103,11 @@ export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any
  * holds under that name. A name no layer holds a modifier under is a name
  * nobody registered, which is what a message writing it reads.
  */
-export const ownModifiers = (registry: any) => {
+export const ownModifiers = (registry: any, onRaise?: () => void) => {
   const output: Record<string, any> = Object.create(null);
 
-  ownKeys(registry).forEach((name) => {
-    const entry = ownValue(registry, name);
+  ownKeys(registry, onRaise).forEach((name) => {
+    const entry = ownValue(registry, name, onRaise);
 
     if (typeof entry === 'function') output[name] = entry;
   });
@@ -109,11 +118,11 @@ export const ownModifiers = (registry: any) => {
 // A configuration layer is read the way the payload is: own properties only,
 // one level at a time. Nobody writes configuration onto a prototype, so
 // anything a prototype offers here was put there by someone else.
-export const ownLayer = (target: any, key: PropertyKey) => {
-  const layer = ownValue(target, key);
+export const ownLayer = (target: any, key: PropertyKey, onRaise?: () => void) => {
+  const layer = ownValue(target, key, onRaise);
   const output: Record<string, any> = Object.create(null);
 
-  ownKeys(layer).forEach((name) => { output[name] = ownValue(layer, name); });
+  ownKeys(layer, onRaise).forEach((name) => { output[name] = ownValue(layer, name, onRaise); });
 
   return output;
 };

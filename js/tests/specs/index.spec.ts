@@ -1649,8 +1649,9 @@ describe('parser', () => {
     expect(resolve('{{v; default:FALLBACK}}', { payload: { v: proxy } })).toBe('FALLBACK');
     expect(resolve('{{v; default:FALLBACK}}', { payload: { v: new Proxy({}, { ownKeys: () => { throw new Error('OWN KEYS FAILURE'); } }) } })).toBe('FALLBACK');
   });
-  it('a wrapper prop that raises when read reads as missing', () => {
-    const { resolve } = defaultParser;
+  it('a wrapper prop that raises when read reads as missing and reports', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (entry) => reports.push(entry) });
     const value = 1234.56;
 
     expect(resolve('{{v:number}}', {
@@ -1658,6 +1659,72 @@ describe('parser', () => {
       props: { number: { useGrouping: true } },
       locale: defaultLocale,
     })).toBe(new Intl.NumberFormat(defaultLocale, { useGrouping: true }).format(value));
+
+    // The property is missing, which is what the formatting request says; that
+    // it is missing because it refused to be read is what the report says.
+    expect(reports.map(({ code, origin, text }) => `${code}/${origin}/${text}`)).toEqual(['unserializable-value/payload/{{v:number}}']);
+  });
+  it('every read of the caller\'s own structure that raises reports', () => {
+    const reports: Report[] = [];
+    const boom = (name: string) => ({ get [name](): never { throw new Error(`${name.toUpperCase()} FAILURE`); } });
+
+    // A spread reads every property it copies, and half of these raise when
+    // read: the entries a case needs alongside the raising one are defined
+    // rather than copied.
+    const withOwn = (target: any, entries: Record<string, any>) => {
+      Object.entries(entries).forEach(([name, value]) => Object.defineProperty(target, name, { value, enumerable: true, configurable: true }));
+
+      return target;
+    };
+
+    const answer = (message: string | undefined, context: any, options: any = {}) => {
+      reports.length = 0;
+
+      const text = createParser(withOwn(options, { onReport: (entry: Report) => reports.push(entry) })).resolve(message, context);
+
+      return { text, reported: reports.map(({ code, origin, text: excerpt }) => `${code}/${origin}/${excerpt}`) };
+    };
+
+    const formatted = new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 2 }).format(1234.5678);
+    const payload = { v: 1234.5678 };
+
+    // A layer entry is read at the placeholder that needed it, so that is what
+    // the report names it by. The formatting request is the one the layer
+    // beneath it describes, exactly as it was before the report existed.
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale, props: boom('number') }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale, props: { number: boom('maximumFractionDigits') } }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v:number}}', { payload: { v: { value: 1234.5678, props: boom('number') } }, locale: defaultLocale }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale }, { modifierDefaults: boom('number') }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+
+    // A configuration entry and a context entry are read once for the call
+    // rather than at a placeholder, so the text that went looking is what
+    // names them — and a key that refuses to be read names nothing at all.
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale }, boom('customModifiers')))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v:number}}', withOwn(boom('props'), { payload, locale: defaultLocale })))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v}}', boom('payload'))).toEqual({ text: '', reported: ['unserializable-value/payload/{{v}}'] });
+    expect(answer('{{v:number}}', withOwn(boom('locale'), { payload })))
+      .toEqual({ text: '', reported: ['unserializable-value/payload/{{v:number}}', 'missing-locale/payload/{{v:number}}'] });
+
+    expect(reports[0].key).toBeUndefined();
+    expect(answer('{{v}}', withOwn(boom('key'), { payload }))).toEqual({ text: '1234.5678', reported: ['unserializable-value/payload/{{v}}'] });
+    expect(reports[0].key).toBeUndefined();
+
+    // Enumerating a target reads it as surely as reading one entry does. This
+    // entry is enumerated twice — once to ask whether it configures a value,
+    // once to describe it — and each read that raised is a report of its own.
+    expect(answer('{{v; default:FALLBACK}}', { payload: { v: new Proxy({}, { ownKeys: () => { throw new Error('OWN KEYS FAILURE'); } }) } }))
+      .toEqual({ text: 'FALLBACK', reported: ['unserializable-value/payload/{{v; default:FALLBACK}}', 'unserializable-value/payload/{{v; default:FALLBACK}}'] });
+
+    // Nothing raised, so nothing is reported: the layers a caller passes are
+    // read the same way whether they answer or not.
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale, props: { number: { maximumFractionDigits: 1 } } }, { modifierDefaults: { number: { useGrouping: false } } }))
+      .toEqual({ text: new Intl.NumberFormat(defaultLocale, { maximumFractionDigits: 1, useGrouping: false }).format(1234.5678), reported: [] });
   });
   it('a formatting modifier that cannot format its input resolves to the fallback chain', () => {
     const resolve = resolverFor<{ value?: any, default?: string }>(defaultLocale);
