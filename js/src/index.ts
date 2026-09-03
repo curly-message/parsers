@@ -1,6 +1,6 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report } from './types';
-import { isBlank, LINE_TERM, mergeLayer, ownKeys, ownLayer, ownModifiers, ownValue, unicodeEscape } from './utils';
+import { failureCode, isBlank, LINE_TERM, mergeLayer, ownKeys, ownLayer, ownModifiers, ownValue, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
@@ -352,8 +352,11 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       const input = { value: valueText, options, props: modifierProps, get defaultValue() { return defaultText(); }, locale, parserOptions };
 
       return describedText(modifier(input), raised, conversions) ?? defaultText();
-    } catch {
-      report('failed-modifier', placeholder, messageKey, onReport);
+    } catch (failure) {
+      // A built-in modifier that cannot answer says why by raising, the way a
+      // host-defined one already does; a raise that says nothing is the
+      // failure it has always been.
+      report(failureCode(failure) ?? 'failed-modifier', placeholder, messageKey, onReport);
 
       return defaultText();
     }

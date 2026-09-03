@@ -43,6 +43,15 @@ Initial version line for `@curly-message/parser`.
   its default read exactly like one that had no value to render. The
   specification asks for both halves: the failure is contained and it is
   reported.
+* A formatting modifier that rejects its input reports it too. `number`,
+  `date`, `ago` and `currency` each test the value before the host's formatter
+  sees it, and one that fails that test — blank text, text that is not a
+  number, a date nothing can parse, a `ratio` that leaves no finite product —
+  resolved the placeholder to the fallback chain and said nothing, where the
+  same placeholder under a locale the host rejects reported `failed-modifier`.
+  Both halves of the failure report now. The output is unchanged: the chain the
+  modifier returned for itself and the chain the parser resolves to are the
+  same read.
 * Everything a modifier reads is text. A value used to reach a modifier at the
   type the payload gave it while a default arrived as text; both are converted
   the same way now, so a modifier has one kind of input to read. A plain object

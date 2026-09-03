@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { AGO_LADDER, getDateInput, getModifierInput, mergeLayer, ownValue } from './utils';
+import { AGO_LADDER, getDateInput, getModifierInput, mergeLayer, ModifierFailure, ownValue } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back, and the fallback is read off the
@@ -56,14 +56,22 @@ export const lte: Modifier.T = (config) => eq({ value: config.value, options: co
 
 export const gte: Modifier.T = (config) => eq({ value: config.value, options: config.options, get defaultValue() { return gt(config); } });
 
+// A value the modifier's own input test rejects is one it cannot format, and a
+// modifier that cannot answer says so by raising: the parser reports that and
+// resolves the placeholder to the fallback chain the modifier used to read for
+// itself.
+const formattable = (input: number | undefined) => {
+  if (input === undefined) throw new ModifierFailure('failed-modifier');
+
+  return input;
+};
+
 export const number: Modifier.T<Modifier.NumberProps> = (config) => {
   const { value, props, locale = '' } = config;
 
   if (!locale) return '';
 
-  const input = getModifierInput(value);
-
-  if (input === undefined) return config.defaultValue;
+  const input = formattable(getModifierInput(value));
 
   // Two fraction digits is what this modifier formats when nobody named a
   // maximum: a default, not a cap. `Intl` widens its own default maximum to
@@ -81,9 +89,7 @@ export const date: Modifier.T<Modifier.DateProps> = (config) => {
 
   if (!locale) return '';
 
-  const input = getDateInput(value);
-
-  if (input === undefined) return config.defaultValue;
+  const input = formattable(getDateInput(value));
 
   return new Intl.DateTimeFormat(locale, mergeLayer(props, undefined)).format(input);
 };
@@ -116,9 +122,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
 
   if (!locale) return '';
 
-  const input = getModifierInput(value);
-
-  if (input === undefined) return config.defaultValue;
+  const input = formattable(getModifierInput(value));
 
   const numeric = ownValue(props, 'numeric') ?? 'auto';
   const formatParams = agoFormat(input, ownValue(props, 'format') ?? 'auto');
@@ -131,13 +135,8 @@ export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
 
   if (!locale) return '';
 
-  const amount = getModifierInput(value);
-
-  if (amount === undefined) return config.defaultValue;
-
-  const input = getModifierInput(amount * (ownValue(props, 'ratio') ?? 1));
-
-  if (input === undefined) return config.defaultValue;
+  const amount = formattable(getModifierInput(value));
+  const input = formattable(getModifierInput(amount * (ownValue(props, 'ratio') ?? 1)));
 
   // The currency style is what this modifier is, not one of the options it
   // layers: a layer naming another style asks it to stop being the modifier the
