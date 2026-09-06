@@ -120,18 +120,20 @@ the message's `key` where one was passed, and `text`, the source of the
 trouble: the placeholder that named it for `unknown-modifier`,
 `failed-modifier`, `missing-options`, `missing-locale` and
 `unserializable-value`, the output that would not settle for `pass-limit` and
-`output-limit`, and nothing at all where what could not be described is the
-chain the message itself resolves through, which names no placeholder. `origin`
-says who fixes what `code` names — `'message'` for a
-defect in the message that was written, `'payload'` for one in what the caller
-passed, and `'limit'` for a bound this parser set. Every code declares one, and
-it ranks nothing: a report is no graver for coming from one of the three than
-from another. Only `text` derives from the payload. It is cut to 120 characters
-of what reached it, marked with a trailing `...` of the parser's own where the
-cut took something, and escaped after that — quotes, backslashes, and every
-line terminator. So a cut excerpt arrives at 123 characters at the shortest,
-one carrying something to escape arrives longer still, and no payload can forge
-a line where a report is written.
+`output-limit`, the message as it was passed where the read that refused is of
+the call's own structure — a context entry, an entry of the option bag — and
+nothing at all where what could not be described is the chain the message
+itself resolves through. The last two name no placeholder, and a message that
+is not text carries none of itself either. `origin` says who fixes what `code`
+names — `'message'` for a defect in the message that was written, `'payload'`
+for one in what the caller passed, and `'limit'` for a bound this parser set.
+Every code declares one, and it ranks nothing: a report is no graver for coming
+from one of the three than from another. Only `text` derives from the payload.
+It is cut to 120 characters of what reached it, marked with a trailing `...` of
+the parser's own where the cut took something, and escaped after that — quotes,
+backslashes, and every line terminator. So a cut excerpt arrives at 123
+characters at the shortest, one carrying something to escape arrives longer
+still, and no payload can forge a line where a report is written.
 
 Two guards bound resolution, and reaching either is what the two limit codes
 report. A payload value may name another placeholder, so interpolation runs

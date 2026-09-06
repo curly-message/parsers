@@ -78,11 +78,14 @@ export type Report = {
   limit?: number;
   /**
    * Where the trouble came from: the placeholder for a report about one, the
-   * output that would not settle for the two limits, and nothing at all where
-   * what could not be described is the chain a message itself resolves
-   * through, which names no placeholder. Truncated — a cut is marked with a
-   * trailing `...` of the parser's own — and with its line terminators
-   * escaped, so payload content cannot forge a line wherever this is written.
+   * output that would not settle for the two limits, the message as the caller
+   * wrote it where a read of the call's own structure refused — a context
+   * entry, an entry of the option bag — and nothing at all where what could
+   * not be described is the chain a message itself resolves through. The last
+   * two name no placeholder, and a message that is not text carries none of
+   * itself either. Truncated — a cut is marked with a trailing `...` of the
+   * parser's own — and with its line terminators escaped, so payload content
+   * cannot forge a line wherever this is written.
    */
   text: string;
 };
