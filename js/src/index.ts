@@ -170,11 +170,15 @@ const convert = (value: any): string | undefined => {
 const text = (value: any, conversions: Conversions): string | undefined => {
   if (value === undefined) return undefined;
 
-  // A primitive's conversion runs no host code and cannot answer twice over, so
-  // recording one buys nothing and costs an entry per distinct value.
-  const carries = value !== null && (typeof value === 'object' || typeof value === 'function');
+  // Recording pays where converting costs. An object or a function runs host
+  // code, which can answer differently the second time as readily as it can
+  // cost twice; a bigint runs none, but the digits it converts to are work the
+  // engine charges for again on every read. Every other primitive converts for
+  // free, so an entry for one buys nothing and costs an entry per distinct
+  // value.
+  const recorded = value !== null && (typeof value === 'object' || typeof value === 'function' || typeof value === 'bigint');
 
-  if (!carries) return convert(value);
+  if (!recorded) return convert(value);
 
   if (!conversions.has(value)) conversions.set(value, convert(value));
 

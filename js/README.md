@@ -154,9 +154,11 @@ placeholders name it, so what a resolution spends converting is bounded by the
 values it reaches rather than by the reads it makes of them. That covers the
 host's own conversion as well as the JSON walk, so a class instance whose
 `toString` runs host code runs it once for the resolution rather than once for
-each placeholder, and one that raises is not asked a second time. A value built
-afresh on each read — by a payload getter, or by a custom modifier — is a new
-value every time and is converted every time.
+each placeholder, and one that raises is not asked a second time. It covers a
+bigint as well, which runs no host code at all but converts to digits the
+engine works out afresh on every read. A value built afresh on each read — by
+a payload getter, or by a custom modifier — is a new value every time and is
+converted every time.
 
 All three bounds belong to the call rather than to the parser, and a call is
 what a host begins by calling `resolve` again while one is running — from a

@@ -24,12 +24,14 @@ type AtLeastOne<T> = { [Key in keyof T]-?: Record<Key, T[Key]> & Omit<T, Key> }[
 export type CommonProps<CustomModifierProps = Modifier.DefaultProps, Value = any> = { value: Value, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, CustomModifierProps> };
 
 /**
- * The text every value a resolution has converted came out as, by identity, the
- * answer that a value has no text included. Converting is the costly step, and
- * a value is read once for every placeholder that names it, so one resolution
- * converts one value once. A primitive is not recorded: its conversion runs no
- * host code and cannot answer twice over, so converting it again is neither
- * observable nor worth an entry.
+ * The text every value a resolution has converted came out as, keyed by the
+ * value the conversion read, the answer that a value has no text included.
+ * Converting is the costly step, and a value is read once for every placeholder
+ * that names it, so one resolution converts one value once. A primitive whose
+ * conversion runs no host code and costs nothing to repeat is not recorded:
+ * converting it again is neither observable nor worth an entry. A bigint is,
+ * because the digits it converts to are work the engine charges for on every
+ * read.
  */
 export type Conversions = Map<any, string | undefined>;
 

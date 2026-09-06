@@ -2399,6 +2399,34 @@ describe('parser', () => {
     expect(resolve('{{v}}{{v}}{{v}}', { payload: { v: carrier } })).toBe('FNFNFN');
     expect(coercions).toBe(1);
   });
+  it('a bigint converts once for the resolution, like every value carrying host code', () => {
+    const { resolve } = defaultParser;
+    const value = 10n ** 40n;
+    const recorded: any[] = [];
+    const Native = globalThis.Map;
+
+    // Every other conversion this suite counts runs host code the payload can
+    // count for itself. A bigint's runs none — `String` reads it through the
+    // engine and not through `BigInt.prototype` — so what the resolution
+    // recorded is the only account there is of how often it converted one.
+    class Recording extends Native<any, any> {
+      set(key: any, entry: any) {
+        recorded.push(key);
+
+        return super.set(key, entry);
+      }
+    }
+
+    globalThis.Map = Recording;
+
+    try {
+      expect(resolve('{{v}}|{{v}}|{{v}}', { payload: { v: value } })).toBe(`${value}|${value}|${value}`);
+    } finally {
+      globalThis.Map = Native;
+    }
+
+    expect(recorded.filter((key) => typeof key === 'bigint')).toEqual([value]);
+  });
   it('a conversion is recorded for the call that made it, not for the parser', () => {
     const { resolve } = defaultParser;
 

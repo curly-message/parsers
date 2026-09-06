@@ -345,10 +345,12 @@ Initial version line for `@curly-message/parser`.
   runs it once for the resolution, and one whose `toString` raises is not asked
   a second time, so a value cannot be absent at one placeholder and present at
   the next. A `toString` that answers differently on each call therefore answers
-  every placeholder with the text the first read produced. A primitive is not
-  recorded — its conversion runs no host code and cannot answer twice over. A
-  value built afresh on each read — by a payload getter, or by a custom
-  modifier — is a new value every time and is converted every time. The report
+  every placeholder with the text the first read produced. A primitive whose
+  conversion costs nothing to repeat is not recorded — it runs no host code
+  and cannot answer twice over — but a bigint is, because the digits it
+  converts to are work the engine charges for on every read. A value built
+  afresh on each read — by a payload getter, or by a custom modifier — is a
+  new value every time and is converted every time. The report
   is not recorded with the text: each link that finds none is a defect of its
   own and still reports.
 * The call's own inputs are read as own properties. `payload`, `props`,
