@@ -389,9 +389,10 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
   };
 
   // A pass already past the output limit is discarded whole, and what follows
-  // it can shrink to nothing but no further, so resolving the rest only builds
-  // text nobody reads — and a value that multiplies its own placeholder builds
-  // text no string can hold.
+  // it can shrink to nothing but no further, so a pass that reaches the limit
+  // has nothing left worth building: what it would resolve, nobody reads, and
+  // what it would assemble is text no string can hold. Such a pass answers
+  // with its length alone.
   const source = `${message}`;
   const parts: string[] = [];
   let growth = 0;
@@ -399,16 +400,27 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
   for (let match = nextPlaceholder(source, from); match; match = nextPlaceholder(source, from)) {
     const [open, end] = match;
+
+    // Where this placeholder falls in the output is what the pass has produced
+    // up to it, and a pass produces its text in order, so past the limit here
+    // is past it at the end.
+    if (open + growth > MAX_INTERPOLATION_LENGTH) return undefined;
+
     const placeholder = source.slice(open, end);
-    const resolved = open + growth > MAX_INTERPOLATION_LENGTH ? placeholder : resolvePlaceholder(placeholder);
+    const resolved = resolvePlaceholder(placeholder);
 
     parts.push(source.slice(from, open), resolved);
 
     growth += resolved.length - placeholder.length;
     from = end;
+
+    // And the same measure taken where the source it has left begins, so a
+    // pass over the limit is not scanned to its end for placeholders it has
+    // already decided not to resolve.
+    if (from + growth > MAX_INTERPOLATION_LENGTH) return undefined;
   }
 
-  return [...parts, source.slice(from)].join('');
+  return source.length + growth > MAX_INTERPOLATION_LENGTH ? undefined : [...parts, source.slice(from)].join('');
 };
 
 const MAX_INTERPOLATION_PASSES = 10;
@@ -483,7 +495,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
 
     const next = placeholders({ value: output, payload, props, parserOptions, locale, key, conversions });
 
-    if (next.length > MAX_INTERPOLATION_LENGTH) {
+    if (next === undefined) {
       report('output-limit', output, key, onReport);
 
       break;

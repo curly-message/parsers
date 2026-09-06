@@ -353,6 +353,15 @@ Initial version line for `@curly-message/parser`.
   new value every time and is converted every time. The report
   is not recorded with the text: each link that finds none is a defect of its
   own and still reports.
+* A pass past the output limit is measured rather than built. The limit read
+  the length of a pass the parser had already assembled, so a message half of
+  this host's longest string that named itself asked for a pass twice that
+  long: `resolve` raised `RangeError: Invalid string length` where every other
+  output over the bound reports `output-limit` and hands back the last output
+  under it. A pass produces its text in order and what it has produced only
+  grows, so a pass that reaches the limit is past it whatever the rest of the
+  message holds — it is measured from there, and text nobody would read is
+  neither resolved nor assembled. What resolves and what reports is unchanged.
 * The call's own inputs are read as own properties. `payload`, `props`,
   `locale` and `key` were read off the context by plain member access, so a
   polluted `Object.prototype` supplied a payload to a call that passed none —

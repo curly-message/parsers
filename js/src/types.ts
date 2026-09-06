@@ -36,15 +36,23 @@ export type CommonProps<CustomModifierProps = Modifier.DefaultProps, Value = any
 export type Conversions = Map<any, string | undefined>;
 
 /**
- * A single interpolation pass. It sees the message's key on top of what a pass
- * needs to substitute, because a report names the message it came from, and the
+ * What a pass reads. It sees the message's key on top of what a pass needs to
+ * substitute, because a report names the message it came from, and the
  * conversions the resolution around it has already made. A pass carries the
  * host's props without reading one, so it names no props type of its own.
  */
-export type Interpolate = (config: CommonProps<any> & { payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions }) => string;
+type PassProps = CommonProps<any> & { payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions };
 
-/** The interpolation loop. */
-export type Interpolation = Interpolate;
+/**
+ * A single interpolation pass, answering with nothing where the pass runs past
+ * the output limit: the loop discards such a pass whole, so it is measured
+ * rather than assembled — the text it would assemble can be longer than a
+ * string this host will hold.
+ */
+export type Interpolate = (config: PassProps) => string | undefined;
+
+/** The interpolation loop, which answers with the last pass it kept. */
+export type Interpolation = (config: PassProps) => string;
 
 /**
  * A diagnostic the parser hands to its caller. The format does not specify a

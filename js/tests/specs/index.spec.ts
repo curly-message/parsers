@@ -2689,6 +2689,22 @@ describe('parser', () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ code: 'output-limit', origin: 'limit', limit: 100000, key: 'common.placeholder_chain' });
   });
+  it('a pass no string could hold is measured rather than built', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    // The longest string this host will hold, spelled out rather than probed
+    // for: a message half that long naming itself asks for a pass longer than
+    // any string, and the bound the pass is discarded by is far below both.
+    const held = 536870888;
+    const message = `{{v}}${'a'.repeat(Math.ceil(held / 2) + 50)}`;
+
+    const output = resolve(message, { payload: { v: message }, key: 'common.key' });
+
+    // Lengths rather than the text: a mismatch prints a number here and a
+    // quarter of a gigabyte of `a` anywhere else.
+    expect(output.length).toBe(message.length);
+    expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
+  });
   it('an `onReport` that throws does not take the resolution down', () => {
     const seen: string[] = [];
     const { resolve } = createParser({
