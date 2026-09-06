@@ -114,12 +114,12 @@ describe('payload typing', () => {
   });
 
   it('accepts implementation defaults for a host-defined modifier', () => {
-    const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }>({
+    const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }, 'x-temp'>({
       customModifiers: {
         // A modifier is handed the properties its own name holds, composed out
-        // of the layers a table declares; the config type still names the
-        // table, so a modifier reads its own slice through an assertion.
-        'x-temp': ({ value, props }) => `${value}${(props as { unit?: 'C' | 'F' } | undefined)?.unit}`,
+        // of the layers a table declares, and reads them by name: the table it
+        // is registered in is what types the slice it is given.
+        'x-temp': ({ value, props }) => `${value}${props?.unit}`,
       },
       modifierDefaults: { 'x-temp': { unit: 'C' } },
     });
@@ -129,19 +129,33 @@ describe('payload typing', () => {
   });
 
   it('accepts a wrapper declaring props for a host-defined modifier', () => {
-    const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }>({
+    const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }, 'x-temp'>({
       customModifiers: {
-        'x-temp': ({ value, props }) => `${value}${(props as { unit?: 'C' | 'F' } | undefined)?.unit}`,
+        'x-temp': ({ value, props }) => `${value}${props?.unit}`,
       },
     });
 
     expect(resolve('{{v:x-temp}}', { payload: { v: { value: '21', props: { 'x-temp': { unit: 'F' } } } }, props: { 'x-temp': { unit: 'C' } } })).toBe('21F');
   });
 
+  it('rejects a modifier reading the table its own name sits in', () => {
+    const table: Modifier.CustomModifiers<'x-temp', { 'x-temp'?: { unit: 'C' | 'F' } }> = {
+      // @ts-expect-error a modifier is handed the properties its name holds, not the table holding that name
+      'x-temp': ({ value, props }) => `${value}${props?.['x-temp']?.unit}`,
+    };
+    const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }, 'x-temp'>({
+      customModifiers: table,
+      modifierDefaults: { 'x-temp': { unit: 'C' } },
+    });
+
+    // The name it read is one the slice does not hold, so it reads nothing —
+    // which is what the type says before the resolution shows it.
+    expect(resolve('{{v:x-temp}}', { payload: { v: '21' } })).toBe('21undefined');
+  });
   it('rejects a props name a modifier declaring none cannot read', () => {
-    const digits: Modifier.T = ({ value, props }) => `${value}@${(props as Intl.NumberFormatOptions | undefined)?.maximumFractionDigits ?? 0}`;
-    // @ts-expect-error a modifier that declares no props of its own reads the built-in table, which names no `x-own`
-    const own: Modifier.T = ({ value, props }) => `${value}@${props?.['x-own']?.width}`;
+    const digits: Modifier.T<Intl.NumberFormatOptions> = ({ value, props }) => `${value}@${props?.maximumFractionDigits ?? 0}`;
+    // @ts-expect-error a modifier declaring no props of its own is handed none it can read by name
+    const own: Modifier.T = ({ value, props }) => `${value}@${props?.width}`;
     // A modifier reads the slice its own name holds, so the one reading the
     // built-in table's `number` properties is the one registered under that
     // name — a caller's table stands over the built-in it names.
@@ -153,8 +167,8 @@ describe('payload typing', () => {
   });
 
   it('rejects a props name a modifier table declaring none cannot read', () => {
-    // @ts-expect-error a table declaring no props holds modifiers reading the built-in one, which names no `x-own`
-    const table: Modifier.CustomModifiers<'x-own'> = { 'x-own': ({ value, props }) => `${value}@${props?.['x-own']?.width}` };
+    // @ts-expect-error a table declaring no props under `x-own` holds a modifier there that is handed none it can read
+    const table: Modifier.CustomModifiers<'x-own'> = { 'x-own': ({ value, props }) => `${value}@${props?.width}` };
     const { resolve } = createParser({ customModifiers: table });
 
     expect(resolve('{{v:x-own}}', { payload: { v: '1' } })).toBe('1@undefined');

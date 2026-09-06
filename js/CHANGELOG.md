@@ -458,7 +458,7 @@ Initial version line for `@curly-message/parser`.
   unchanged.
 * A modifier declares the props it reads. `Modifier.T` and
   `Modifier.CustomModifiers` defaulted their props type parameter to `any`
-  where `CommonProps`, `Modifier.Wrapper`, `Parser.PayloadEntry`,
+  where `Modifier.Wrapper`, `Parser.PayloadEntry`,
   `Parser.Payload` and `Parser.Context` all default theirs to
   `Modifier.DefaultProps`, so a modifier written down without one read its
   `props` unchecked: `props?.['x-own']?.width` compiled against a layer
@@ -467,6 +467,21 @@ Initial version line for `@curly-message/parser`.
   names them — `Modifier.T<MyProps>`, `Modifier.CustomModifiers<Key, MyProps>`
   — as the factory's own props parameter already had to. Nothing about
   resolution changes; a parser that names its props type is unaffected.
+* A modifier is typed by the properties it is handed, not by the table they
+  come from. What a modifier receives is the composition under its own name,
+  but its config named the whole table, so a modifier reached its own
+  properties through an assertion — `(props as { unit?: 'C' | 'F' })?.unit`
+  where `props?.unit` is what it was given. `Modifier.T` names that
+  composition now, a table types each entry by what the name it sits under
+  holds, and the built-in modifiers name theirs beside the layer that carries
+  them: `Modifier.NumberProperties` for `Modifier.NumberProps`, and the same
+  pair for `date`, `ago` and `currency`. A name a table carries no properties
+  for holds a modifier handed the empty composition, which is what such a name
+  composes to, so a modifier declaring no props still reads none by name. For
+  the composition to reach a modifier's type the parser names the modifier's
+  name as well as its props — `createParser<Payload, MyProps, 'x-temp'>` —
+  and `parserOptions` stays typed by the table, so a modifier still reaches
+  its own `modifierDefaults` entry. Resolution is unchanged.
 * The option bag declares the props its modifiers read. `Parser.Options` kept
   defaulting its props type parameter to `any` after the entries it holds
   stopped, so a bag written down without one typed nothing it carried:

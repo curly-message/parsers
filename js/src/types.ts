@@ -21,8 +21,6 @@ type Given<T> = [T][T extends any ? 0 : never];
  */
 type AtLeastOne<T> = { [Key in keyof T]-?: Record<Key, T[Key]> & Omit<T, Key> }[keyof T];
 
-export type CommonProps<CustomModifierProps = Modifier.DefaultProps, Value = any> = { value: Value, props?: CustomModifierProps, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, CustomModifierProps> };
-
 /**
  * The text every value a resolution has converted came out as, keyed by the
  * value the conversion read, the answer that a value has no text included.
@@ -41,7 +39,7 @@ export type Conversions = Map<any, string | undefined>;
  * conversions the resolution around it has already made. A pass carries the
  * host's props without reading one, so it names no props type of its own.
  */
-type PassProps = CommonProps<any> & { payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions };
+type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions };
 
 /**
  * A single interpolation pass, answering with nothing where the pass runs past
@@ -105,13 +103,26 @@ export module Modifier {
    */
   export type AgoUnit = AgoStep | `${AgoStep}s`;
 
-  export type AgoProps = { ago?: Intl.RelativeTimeFormatOptions & { format?: AgoUnit | 'auto' } };
+  /**
+   * What a modifier of this name is handed: the properties composed under it,
+   * which is what the layers keyed by that name carry. The `*Props` type
+   * beside each is the layer itself — one name, holding those properties.
+   */
+  export type AgoProperties = Intl.RelativeTimeFormatOptions & { format?: AgoUnit | 'auto' };
 
-  export type DateProps = { date?: Intl.DateTimeFormatOptions };
+  export type AgoProps = { ago?: AgoProperties };
 
-  export type NumberProps = { number?: Intl.NumberFormatOptions };
+  export type DateProperties = Intl.DateTimeFormatOptions;
 
-  export type CurrencyProps = { currency?: Intl.NumberFormatOptions & { ratio?: number } };
+  export type DateProps = { date?: DateProperties };
+
+  export type NumberProperties = Intl.NumberFormatOptions;
+
+  export type NumberProps = { number?: NumberProperties };
+
+  export type CurrencyProperties = Intl.NumberFormatOptions & { ratio?: number };
+
+  export type CurrencyProps = { currency?: CurrencyProperties };
 
   export type DefaultProps = NumberProps & AgoProps & DateProps & CurrencyProps;
 
@@ -139,8 +150,27 @@ export module Modifier {
    * A modifier is handed text and nothing else: a placeholder whose value is
    * absent takes its fallback chain before any modifier is called, and that
    * chain ends in the empty string.
+   *
+   * `OwnProps` is what this modifier's own name holds, because that
+   * composition is what it is handed; `CustomModifierProps` is the table that
+   * name sits in, which is what `parserOptions` is read under. A modifier
+   * registered through `customModifiers` is given both by the table it is
+   * registered in, so only one written down away from its table names them.
+   * The empty composition is the default, because that is what a name nobody
+   * configured holds.
    */
-  export type T<CustomModifierProps = DefaultProps> = (config: CommonProps<CustomModifierProps, string> & {
+  export type T<OwnProps = {}, CustomModifierProps = DefaultProps> = (config: {
+    value: string;
+    /**
+     * The properties composed under this modifier's own name, layered from the
+     * implementation defaults up through the wrapper's own and copied, so a
+     * modifier that writes into what it was handed reaches neither the next
+     * placeholder nor the caller. A modifier nobody configured is handed an
+     * empty object.
+     */
+    props?: OwnProps;
+    locale?: Locale;
+    parserOptions?: Parser.Options<Modifier.Key, CustomModifierProps>;
     options: ModifierOption[];
     /**
      * The fallback chain, resolved by the read rather than before the modifier
@@ -156,7 +186,14 @@ export module Modifier {
 
   export type DefaultModifiers = typeof modifiers;
 
-  export type CustomModifiers<K extends string = any, ModifierProps = DefaultProps> = Record<K, Modifier.T<ModifierProps>>;
+  /**
+   * Modifiers by the name each answers to. A name the table declares
+   * properties for holds a modifier reading that slice; one it declares none
+   * for holds a modifier reading none by name.
+   */
+  export type CustomModifiers<K extends string = any, ModifierProps = DefaultProps> = {
+    [Name in K]: Modifier.T<Name extends keyof Props<ModifierProps> ? NonNullable<Props<ModifierProps>[Name]> : {}, ModifierProps>
+  };
 }
 
 export module Parser {

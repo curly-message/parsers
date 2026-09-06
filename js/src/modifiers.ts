@@ -66,7 +66,7 @@ const formattable = (input: number | undefined) => {
   return input;
 };
 
-export const number: Modifier.T<Modifier.NumberProps> = (config) => {
+export const number: Modifier.T<Modifier.NumberProperties> = (config) => {
   const { value, props, locale = '' } = config;
 
   if (!locale) throw new ModifierFailure('missing-locale');
@@ -84,7 +84,7 @@ export const number: Modifier.T<Modifier.NumberProps> = (config) => {
   return new Intl.NumberFormat(locale, mergeLayer(props, { maximumFractionDigits })).format(input);
 };
 
-export const date: Modifier.T<Modifier.DateProps> = (config) => {
+export const date: Modifier.T<Modifier.DateProperties> = (config) => {
   const { value, props, locale = '' } = config;
 
   if (!locale) throw new ModifierFailure('missing-locale');
@@ -123,7 +123,7 @@ const agoFormat = (millis: number, resolution?: Intl.RelativeTimeFormatUnit | 'a
   return [value, currentKey];
 }, [millis, '' as Intl.RelativeTimeFormatUnit]);
 
-export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
+export const ago: Modifier.T<Modifier.AgoProperties> = (config) => {
   const { value, locale = '', props } = config;
 
   if (!locale) throw new ModifierFailure('missing-locale');
@@ -140,7 +140,7 @@ export const ago: Modifier.T<Modifier.AgoProps> = (config) => {
   return new Intl.RelativeTimeFormat(locale, mergeLayer(props, { numeric })).format(...formatParams);
 };
 
-export const currency: Modifier.T<Modifier.CurrencyProps> = (config) => {
+export const currency: Modifier.T<Modifier.CurrencyProperties> = (config) => {
   const { value, locale = '', props } = config;
 
   if (!locale) throw new ModifierFailure('missing-locale');
