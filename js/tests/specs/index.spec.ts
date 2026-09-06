@@ -1353,15 +1353,20 @@ describe('parser', () => {
   it('a modifier that could not produce a result reports', () => {
     const reports: Report[] = [];
     const onReport = (entry: Report) => reports.push(entry);
-    const raising = { 'x-raise': () => { throw new Error('MODIFIER FAILURE'); } };
+    // Reading the raise is the first thing containment asks of it, and a raise
+    // can refuse: telling one of the parser's own from anything else walks a
+    // prototype chain, which a proxy answers by raising again.
+    const hostile = new Proxy(new Error('MODIFIER FAILURE'), { getPrototypeOf() { throw new Error('WHAT IT IS FAILURE'); } });
+    const raising = { 'x-raise': () => { throw new Error('MODIFIER FAILURE'); }, 'x-hostile': () => { throw hostile; } };
     const { resolve } = createParser({ customModifiers: raising, onReport });
 
     // Containment is what keeps a modifier out of the caller's render path; it
     // is not a reason for the caller to hear nothing about it.
     expect(resolve('{{v:x-raise; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    expect(resolve('{{v:x-hostile; default:D}}', { payload: { v: 'X' } })).toBe('D');
     expect(resolve('{{v:number; default:D}}', { payload: { v: 1 }, locale: 'not a locale' })).toBe('D');
     expect(resolve('{{v:currency; default:D}}', { payload: { v: 1 }, locale: defaultLocale })).toBe('D');
-    expect(reports.map(({ code }) => code)).toEqual(['failed-modifier', 'failed-modifier', 'failed-modifier']);
+    expect(reports.map(({ code }) => code)).toEqual(['failed-modifier', 'failed-modifier', 'failed-modifier', 'failed-modifier']);
 
     // The report names the placeholder that named the modifier, like the one a
     // name nobody registered earns. Its `message` is the text a host prints,
@@ -1725,6 +1730,38 @@ describe('parser', () => {
     expect(reports[0].key).toBeUndefined();
     expect(answer('{{v}}', withOwn(boom('key'), { payload }))).toEqual({ text: '1234.5678', reported: ['unserializable-value/payload/{{v}}'] });
     expect(reports[0].key).toBeUndefined();
+
+    // A wrapper is read entry by entry like the payload holding it, so each of
+    // its own keys refuses on its own: the chain steps past the value it would
+    // not give up and past the default alike.
+    expect(answer('{{v; default:INLINE}}', { payload: { v: withOwn(boom('value'), { default: 'WRAPPED' }) } }))
+      .toEqual({ text: 'WRAPPED', reported: ['unserializable-value/payload/{{v; default:INLINE}}'] });
+    expect(answer('{{v; default:INLINE}}', { payload: { v: withOwn(boom('default'), { value: undefined }) } }))
+      .toEqual({ text: 'INLINE', reported: ['unserializable-value/payload/{{v; default:INLINE}}'] });
+    expect(answer('{{nope}}', withOwn({}, { payload: withOwn(boom('default'), { v: 1 }) })))
+      .toEqual({ text: '', reported: ['unserializable-value/payload/{{nope}}'] });
+
+    // A layer refuses to be enumerated as readily as it refuses one property,
+    // wherever it sits: the layer beneath stands and the formatting request is
+    // what that one describes.
+    const keysRaise = (label: string) => new Proxy({}, { ownKeys: () => { throw new Error(`${label} KEYS FAILURE`); } });
+
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale, props: keysRaise('PROPS') }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale, props: { number: keysRaise('LAYER') } }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v:number}}', { payload: { v: { value: 1234.5678, props: { number: keysRaise('WRAPPER') } } }, locale: defaultLocale }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('{{v:number}}', { payload, locale: defaultLocale }, { modifierDefaults: { number: boom('maximumFractionDigits') } }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+
+    // The bag's own entries are read once for the call, so the report names
+    // the whole message rather than the placeholder that was being resolved
+    // when the read happened.
+    expect(answer('A {{v:number}} B', { payload, locale: defaultLocale }, boom('modifierDefaults')))
+      .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/A {{v:number}} B'] });
+    expect(answer('A {{v:number}} B', withOwn(boom('props'), { payload, locale: defaultLocale })))
+      .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/A {{v:number}} B'] });
 
     // Enumerating a target reads it as surely as reading one entry does. This
     // entry is enumerated twice — once to ask whether it configures a value,
