@@ -358,11 +358,13 @@ Initial version line for `@curly-message/parser`.
   the payload. They are read like the payload now, and a context of `null` is a
   context nobody passed rather than a `TypeError`: `resolve('a{{v}}b', null)`
   renders `ab`.
-* A `props` layer is composed by its own entries, not by its prototype. The
-  layer test asked whether an object's prototype was `Object.prototype`, so a
-  `props` carried by a class instance — or by anything else with a prototype of
-  its own — was discarded whole and the layer beneath it stood alone. A layer is
-  now anything carrying entries to read, and its own entries are what compose.
+* A `props` layer is composed by its own entries, not by its prototype and not
+  by whether it can be called. The layer test asked whether an object's
+  prototype was `Object.prototype`, so a `props` carried by a class instance —
+  or by anything else with a prototype of its own — was discarded whole and the
+  layer beneath it stood alone, and a callable carrying entries was discarded
+  the same way. A layer is now anything carrying entries to read, a function
+  among them, and its own entries are what compose.
 * A polluted prototype configures no formatter. The layers were read as own
   entries and then handed to `Intl` on an ordinary object literal, and a
   formatter reads its options by name — so through that object's prototype:

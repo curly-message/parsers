@@ -565,6 +565,17 @@ describe('parser', () => {
     expect(resolve('{{v:test}}', { payload: { v: wrapper }, props: { test: { useGrouping: false } } })).toBe('{"useGrouping":false,"maximumFractionDigits":1}');
     expect(resolve('{{v:test}}', { payload: { v: { value: 1, props: inheritedBag } }, props: { test: { useGrouping: false } } })).toBe('{"useGrouping":false,"maximumFractionDigits":1}');
   });
+  it('a `props` layer composes per property whether or not it is callable', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { useGrouping: false, maximumFractionDigits: 4 } } });
+    const callable: any = () => 'a layer is read for its entries, never called';
+
+    callable.maximumFractionDigits = 0;
+
+    // The layer beneath names grouping and this one does not, so grouping stays
+    // off: a layer resets no property it leaves unnamed, whatever it is.
+    expect(resolve('{{v:number}}', { payload: { v: 1234.56789 }, props: { number: callable }, locale: defaultLocale })).toBe('1235');
+    expect(resolve('{{v:number}}', { payload: { v: 1234.56789 }, props: { number: { maximumFractionDigits: 0 } }, locale: defaultLocale })).toBe('1235');
+  });
   it('configuration is read as own properties, never through a prototype', () => {
     const payload = { v: 1.23456789 };
     const seen: Report[] = [];

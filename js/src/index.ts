@@ -207,9 +207,10 @@ const isWrapped = (value: any, onRaise?: () => void) => {
 
 // A configuration layer is anything carrying entries to read. `isPlainObject`
 // answers which conversion describes a value better, which is a question about
-// values; a layer is read for its own entries and never converted, so a
-// prototype it happens to carry decides nothing about how it composes.
-const isLayer = (value: any) => !!value && typeof value === 'object';
+// values; a layer is read for its own entries and never converted, so neither
+// a prototype nor a call signature it happens to carry decides how it
+// composes.
+const isLayer = (value: any) => !!value && (typeof value === 'object' || typeof value === 'function');
 
 // A `props` layer copied down to the objects it names. What a modifier
 // receives is the parser's own object, so a modifier that writes into what it
