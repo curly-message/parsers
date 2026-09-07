@@ -289,8 +289,8 @@ Initial version line for `@curly-message/parser`.
   where the same message without `abc` rendered `'FIVE'` — the order decided by
   an option that can never be selected. Keys that are not numeric are now left
   out of the ordering entirely, which is also the rule that keeps them
-  unselectable, and the ordering runs on a copy, so the list `lte` and `gte`
-  hand to their `eq` leg keeps the order the message wrote.
+  unselectable, and the ordering runs on a copy, so the caller's list keeps
+  the order the message wrote.
 * A zero in `modifierDefaults` is a value, not an absence. The built-in
   formatting defaults were read with `||`, so a parser-level
   `{ number: { maximumFractionDigits: 0 } }` or `{ currency: { ratio: 0 } }`
