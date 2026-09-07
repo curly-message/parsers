@@ -31,5 +31,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Before the tests build anything: a fresh checkout carries no build
+      # output, so what the tarball holds is what packing produced.
+      - name: Pack
+        shell: bash
+        run: |
+          npm pack > /dev/null
+          for file in dist/index.js dist/index.d.ts; do tar -tzf ./*.tgz | grep -qx "package/$file"; done
+          rm ./*.tgz
+
       - name: Test
         run: npm run test

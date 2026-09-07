@@ -464,6 +464,14 @@ Initial version line for `@curly-message/parser`.
   `@curly-message/parser` got a type surface with nothing written on it. The
   option never reached the runtime bundle, which esbuild writes and which comes
   out byte-identical either way — it only deleted documentation.
+* The package builds when it is packed, not only when it is published. The
+  build hung on `prepublishOnly`, which `npm publish` runs and `npm pack` does
+  not, so a tarball packed from a fresh checkout — what a `file:` or a git
+  dependency installs, and what a release pipeline packs before it publishes —
+  carried a manifest pointing at a `dist` that was not in it. The build now
+  hangs on `prepack`, which both run, and the test workflow packs the package
+  from a checkout that has built nothing and asserts the tarball holds the
+  runtime bundle and the types.
 * `Parser.Options` is the option bag, not the bag or nothing. The published
   type closed with `| undefined`, a union the `?` on the factory's own
   parameter already carried, so a consumer who indexed the type for one option
