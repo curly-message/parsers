@@ -76,7 +76,7 @@ export const ownKeys = (target: any, onRaise?: () => void) => {
   }
 };
 
-export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any) => any, onRaise?: () => void) => {
+export const mergeLayer = (base: any, override: any, onRaise?: () => void) => {
   // A null prototype takes `__proto__` as an own key instead of routing the
   // name through the prototype setter, and the merged layer keeps that
   // prototype on the way out: whatever reads it — a host formatter, a modifier
@@ -91,7 +91,7 @@ export const mergeLayer = (base: any, override: any, merge?: (from: any, to: any
     // A name the override sets to `undefined` names nothing, like one it omits.
     if (to === undefined) return;
 
-    output[name] = merge ? merge(ownValue(base, name, onRaise), to) : to;
+    output[name] = to;
   });
 
   return output;
@@ -113,18 +113,6 @@ export const ownModifiers = (registry: any, onRaise?: () => void) => {
   });
 
   return { ...output };
-};
-
-// A configuration layer is read the way the payload is: own properties only,
-// one level at a time. Nobody writes configuration onto a prototype, so
-// anything a prototype offers here was put there by someone else.
-export const ownLayer = (target: any, key: PropertyKey, onRaise?: () => void) => {
-  const layer = ownValue(target, key, onRaise);
-  const output: Record<string, any> = Object.create(null);
-
-  ownKeys(layer, onRaise).forEach((name) => { output[name] = ownValue(layer, name, onRaise); });
-
-  return output;
 };
 
 /**

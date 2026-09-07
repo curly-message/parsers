@@ -1,6 +1,6 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report } from './types';
-import { failureCode, isBlank, LINE_TERM, mergeLayer, ownKeys, ownLayer, ownModifiers, ownValue, unicodeEscape } from './utils';
+import { failureCode, isBlank, LINE_TERM, mergeLayer, ownKeys, ownModifiers, ownValue, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
@@ -216,28 +216,17 @@ const isWrapped = (value: any, onRaise?: () => void) => {
 // composes.
 const isLayer = (value: any) => !!value && (typeof value === 'object' || typeof value === 'function');
 
-// A `props` layer copied down to the objects it names. What a modifier
-// receives is the parser's own object, so a modifier that writes into what it
-// was handed reaches neither the next placeholder nor the caller.
-const ownProps = (layer: any, onRaise?: () => void) => {
-  const output: Record<string, any> = Object.create(null);
+// What a modifier reads is the properties under its own name, so that name is
+// what the layers are read for and nothing else: each contributes the entry it
+// holds under it, a layer entry overrides only the properties it names, and an
+// entry that is not a layer stands in for everything beneath it. What leaves is
+// the parser's own copy, so a modifier that writes into what it was handed
+// reaches neither the next placeholder nor the caller.
+const ownSlice = (layers: any[], name: string, onRaise?: () => void) => mergeLayer(layers.reduce((from, layer) => {
+  const to = isLayer(layer) ? ownValue(layer, name, onRaise) : undefined;
 
-  ownKeys(layer, onRaise).forEach((name) => {
-    const value = ownValue(layer, name, onRaise);
-
-    output[name] = isLayer(value) ? mergeLayer(value, undefined, undefined, onRaise) : value;
-  });
-
-  return { ...output };
-};
-
-// Layers of `props` compose the way the parser's own defaults and the call's
-// already do: each names what it overrides and leaves the rest standing.
-const mergeProps = (base: any, override: any, onRaise?: () => void) => {
-  if (!isLayer(override)) return isLayer(base) ? ownProps(base, onRaise) : base;
-
-  return ownProps(mergeLayer(base, override, (from, to) => isLayer(to) ? mergeLayer(from, to, undefined, onRaise) : to, onRaise), onRaise);
-};
+  return to === undefined ? from : isLayer(to) ? mergeLayer(from, to, onRaise) : to;
+}, undefined), undefined, onRaise);
 
 // The names this format defines as comparisons. A message that writes one has
 // asked for a selection, whatever a host registered under the name, and the
@@ -345,7 +334,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // slice its own name holds rather than the table those layers are: what
       // one modifier is configured with is not what the next reads, and a
       // modifier nobody configured reads an object all the same.
-      const modifierProps = ownLayer(mergeProps(mergeProps(modifierDefaults, props, raised), ownValue(wrapper, 'props', raised), raised), modifierName, raised);
+      const modifierProps = ownSlice([modifierDefaults, props, ownValue(wrapper, 'props', raised)], modifierName, raised);
 
       // A modifier answers with a host value like any other, so it becomes text
       // by the conversion a payload entry does: an object it built stays

@@ -266,8 +266,10 @@ Formatting options are keyed by modifier name, and their layers compose per
 property: the parser's `modifierDefaults`, then the `props` the call passes,
 then the wrapper's own `props`. Each layer overrides only the properties it
 names, so a layer cannot reset an earlier one. Only what a layer owns composes,
-and the object a modifier is handed owns every entry it is configured with and
-carries no prototype, so a prototype somebody else wrote to configures nothing.
+and only under the name the placeholder wrote: what a layer holds under other
+names is not read for it. The object a modifier is handed owns every entry it
+is configured with and carries no prototype, so a prototype somebody else wrote
+to configures nothing.
 
 ```
 modifierDefaults  { number: { maximumFractionDigits: 4, useGrouping: false } }

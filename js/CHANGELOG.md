@@ -134,9 +134,12 @@ Initial version line for `@curly-message/parser`.
   `props` of `{ number: { maximumFractionDigits: 1 } }`, `{{v:number}}` over
   `1234.56` renders `'1234.6'`.
 * A modifier reads the slice of `props` its own name holds. The three layers
-  compose as they did, and what a modifier is handed is what that composition
-  holds under the name the placeholder wrote: an object of its own properties,
-  empty where nobody configured it, rather than the whole modifier-keyed table.
+  compose as they did, under that name alone, and what a modifier is handed is
+  what they hold under the name the placeholder wrote: an object of its own
+  properties, empty where nobody configured it, rather than the whole
+  modifier-keyed table. What a layer holds under any other name is not read
+  for the placeholder, so a placeholder costs the slice its modifier reads and
+  not every name the layers configure.
   That is how `modifierDefaults` reaches a host-defined modifier at all — one
   registered as `x-temp` read `props['x-temp']` for its per-call layer and
   could reach the defaults the parser was built with only by walking

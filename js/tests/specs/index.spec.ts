@@ -1698,6 +1698,18 @@ describe('parser', () => {
     expect(reads).toEqual({ onReport: 1, customModifiers: 1, modifierDefaults: 1 });
     expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(['unserializable-value/A{{a}}Z', 'unserializable-value/A{{a}}Z']);
   });
+  it('the layers are read under the name a modifier holds and under no other', () => {
+    const reports: Report[] = [];
+    const refusing = (label: string, entries: object = {}) => ({ ...entries, get date(): never { throw new Error(`${label} DATE FAILURE`); } });
+    const { resolve } = createParser({ modifierDefaults: refusing('DEFAULTS', { number: { useGrouping: false } }), onReport: (entry) => reports.push(entry) });
+
+    // Every layer refuses under `date`, and `{{v:number}}` never asks: a read
+    // is made where a modifier needs it, and a placeholder costs the slice
+    // its modifier reads rather than every name the layers configure.
+    expect(resolve('{{v:number}}', { payload: { v: { value: 1234.5678, props: refusing('WRAPPER') } }, locale: defaultLocale, props: refusing('PROPS', { number: { maximumFractionDigits: 1 } }) }))
+      .toBe(new Intl.NumberFormat(defaultLocale, { useGrouping: false, maximumFractionDigits: 1 }).format(1234.5678));
+    expect(reports).toEqual([]);
+  });
   it('every read of the caller\'s own structure that raises reports', () => {
     const reports: Report[] = [];
     const boom = (name: string) => ({ get [name](): never { throw new Error(`${name.toUpperCase()} FAILURE`); } });
@@ -1761,11 +1773,13 @@ describe('parser', () => {
 
     // A layer refuses to be enumerated as readily as it refuses one property,
     // wherever it sits: the layer beneath stands and the formatting request is
-    // what that one describes.
+    // what that one describes. A table is asked for the name the placeholder
+    // wrote and never enumerated, so one that refuses the enumeration and
+    // answers the name has refused nothing.
     const keysRaise = (label: string) => new Proxy({}, { ownKeys: () => { throw new Error(`${label} KEYS FAILURE`); } });
 
     expect(answer('{{v:number}}', { payload, locale: defaultLocale, props: keysRaise('PROPS') }))
-      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
+      .toEqual({ text: formatted, reported: [] });
     expect(answer('{{v:number}}', { payload, locale: defaultLocale, props: { number: keysRaise('LAYER') } }))
       .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
     expect(answer('{{v:number}}', { payload: { v: { value: 1234.5678, props: { number: keysRaise('WRAPPER') } } }, locale: defaultLocale }))
