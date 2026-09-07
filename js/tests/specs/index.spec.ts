@@ -1489,15 +1489,18 @@ describe('parser', () => {
     // comparison costs grows with its options, and the two must add rather
     // than multiply: two more options that match nothing are two more
     // normalizations, the keys' own, and none of the value's.
-    const count = (options: string) => {
+    const count = (placeholder: string, value: string) => {
       lowered.mockClear();
-      resolve(`{{v:eq; ${options}; default:D}}`, { payload: { v: 'zzz' } });
+      resolve(placeholder, { payload: { v: value } });
 
       return lowered.mock.calls.length;
     };
 
     try {
-      expect(count('a:A; b:B; c:C') - count('a:A')).toBe(2);
+      expect(count('{{v:eq; a:A; b:B; c:C; default:D}}', 'zzz') - count('{{v:eq; a:A; default:D}}', 'zzz')).toBe(2);
+      // `ne` selects the first key that differs, so keys that all fold to the
+      // value are what make it read every one.
+      expect(count('{{v:ne; a:A; A:B; a:C; default:D}}', 'a') - count('{{v:ne; a:A; default:D}}', 'a')).toBe(2);
     } finally {
       lowered.mockRestore();
     }
