@@ -464,6 +464,12 @@ Initial version line for `@curly-message/parser`.
   `@curly-message/parser` got a type surface with nothing written on it. The
   option never reached the runtime bundle, which esbuild writes and which comes
   out byte-identical either way — it only deleted documentation.
+* The published types declare the library they read. `Modifier.AgoProperties`
+  is built on `Intl.RelativeTimeFormatOptions`, which TypeScript declares in
+  its ES2020 library, and nothing said so: a consumer compiling for an older
+  target with library checking on failed inside `dist/index.d.ts`, told that
+  `Intl` has no such member. The declaration bundle now opens with a reference
+  to that library, and the type resolves at every target.
 * The package builds when it is packed, not only when it is published. The
   build hung on `prepublishOnly`, which `npm publish` runs and `npm pack` does
   not, so a tarball packed from a fresh checkout — what a `file:` or a git
