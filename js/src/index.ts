@@ -236,11 +236,11 @@ const isLayer = (value: any) => !!value && (typeof value === 'object' || typeof 
 // entry that is no layer names none and overrides nothing. What leaves is the
 // parser's own copy, so a modifier that writes into what it was handed reaches
 // neither the next placeholder nor the caller.
-const ownSlice = (layers: any[], name: string, onRaise?: () => void) => mergeLayer(layers.reduce((from, layer) => {
+const ownSlice = (layers: any[], name: string, onRaise?: () => void) => layers.reduce((from, layer) => {
   const to = isLayer(layer) ? ownValue(layer, name, onRaise) : undefined;
 
   return isLayer(to) ? mergeLayer(from, to, onRaise) : from;
-}, undefined), undefined, onRaise);
+}, Object.create(null));
 
 // The names this format defines as comparisons. A message that writes one has
 // asked for a selection, whatever a host registered under the name, and the
