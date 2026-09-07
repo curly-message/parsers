@@ -58,8 +58,7 @@ export const gte: Modifier.T = (config) => eq({ value: config.value, props: conf
 
 // A value the modifier's own input test rejects is one it cannot format, and a
 // modifier that cannot answer says so by raising: the parser reports that and
-// resolves the placeholder to the fallback chain the modifier used to read for
-// itself.
+// resolves the placeholder to the fallback chain.
 const formattable = (input: number | undefined) => {
   if (input === undefined) throw new ModifierFailure('failed-modifier');
 
@@ -150,7 +149,7 @@ export const currency: Modifier.T<Modifier.CurrencyProperties> = (config) => {
 
   // The currency style is what this modifier is, not one of the options it
   // layers: a layer naming another style asks it to stop being the modifier the
-  // message named. Pinning it against the parser's defaults alone left the call
-  // and the wrapper able to render `{{v:currency}}` as a percentage.
+  // message named, so the style is pinned over every layer, the wrapper's
+  // included.
   return new Intl.NumberFormat(locale, mergeLayer(props, { style: 'currency' })).format(input);
 };
