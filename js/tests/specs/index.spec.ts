@@ -1823,6 +1823,8 @@ describe('parser', () => {
       .toEqual({ text: 'INLINE', reported: ['unserializable-value/payload/{{v; default:INLINE}}'] });
     expect(answer('{{nope}}', withOwn({}, { payload: withOwn(boom('default'), { v: 1 }) })))
       .toEqual({ text: '', reported: ['unserializable-value/payload/{{nope}}'] });
+    expect(answer('{{v:number}}', { payload: { v: withOwn(boom('props'), { value: 1234.5678 }) }, locale: defaultLocale }))
+      .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
 
     // A layer refuses to be enumerated as readily as it refuses one property,
     // wherever it sits: the layer beneath stands and the formatting request is
