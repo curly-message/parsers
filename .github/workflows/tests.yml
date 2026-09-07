@@ -32,12 +32,16 @@ jobs:
         run: npm ci
 
       # Before the tests build anything: a fresh checkout carries no build
-      # output, so what the tarball holds is what packing produced.
+      # output, so what the tarball holds is what packing produced. The listing
+      # is read whole before it is searched: a search that stops at its first
+      # hit leaves the lister writing into a closed pipe, and `pipefail` counts
+      # that as a failure.
       - name: Pack
         shell: bash
         run: |
           npm pack > /dev/null
-          for file in dist/index.js dist/index.d.ts; do tar -tzf ./*.tgz | grep -qx "package/$file"; done
+          packed=$(tar -tzf ./*.tgz)
+          for file in dist/index.js dist/index.d.ts; do grep -qx "package/$file" <<< "$packed"; done
           rm ./*.tgz
 
       - name: Test
