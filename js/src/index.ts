@@ -1,5 +1,5 @@
 import * as defaultModifiers from './modifiers';
-import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report } from './types';
+import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report, Wrappers } from './types';
 import { failureCode, isBlank, LINE_TERM, mergeLayer, ownKeys, ownModifiers, ownValue, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
@@ -201,12 +201,26 @@ const describedText = (declared: any, onUndescribed: () => void, conversions: Co
 // Reserved by the payload for a value's own configuration.
 const WRAPPED = ['value', 'default', 'props'];
 
-const isWrapped = (value: any, onRaise?: () => void) => {
+// Recognizing a wrapper enumerates the entry, which reads it as a conversion
+// does and costs what the entry holds, so the verdict is recorded for the
+// resolution the way a conversion is, the answer that the entry refused the
+// question included. The report is not: each placeholder that reads a refusing
+// entry is a defect of its own.
+const isWrapped = (value: any, wrappers: Wrappers, onRaise?: () => void) => {
   if (!isPlainObject(value)) return false;
 
-  const keys = ownKeys(value, onRaise);
+  if (!wrappers.has(value)) {
+    let refused = false;
+    const keys = ownKeys(value, () => { refused = true; });
 
-  return !!keys.length && keys.every((key) => WRAPPED.includes(key));
+    wrappers.set(value, refused ? undefined : !!keys.length && keys.every((key) => WRAPPED.includes(key)));
+  }
+
+  const wrapped = wrappers.get(value);
+
+  if (wrapped === undefined) onRaise?.();
+
+  return !!wrapped;
 };
 
 // A configuration layer is anything carrying entries to read. `isPlainObject`
@@ -234,7 +248,7 @@ const ownSlice = (layers: any[], name: string, onRaise?: () => void) => mergeLay
 // compiling here.
 const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'];
 
-const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key: messageKey, conversions }) => {
+const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key: messageKey, conversions, wrappers }) => {
   const modifierKeys = Object.keys(modifiers);
 
   const resolvePlaceholder = (placeholder: string) => {
@@ -249,7 +263,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     const raised = () => report('unserializable-value', placeholder, messageKey, onReport);
     const entry = ownValue(payload, key, raised);
     // The payload's root `default` is the fallback itself, never configuration.
-    const wrapper = key !== 'default' && isWrapped(entry, raised) ? entry : undefined;
+    const wrapper = key !== 'default' && isWrapped(entry, wrappers, raised) ? entry : undefined;
     const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
 
     const options: Modifier.ModifierOption[] = [];
@@ -457,7 +471,7 @@ const report = (code: Report['code'], reported: string, key: Parser.Key | undefi
   }
 };
 
-const interpolate: Interpolation = ({ value, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions }) => {
+const interpolate: Interpolation = ({ value, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions, wrappers }) => {
   let output = value;
 
   for (let pass = 0; hasPlaceholders(output); pass += 1) {
@@ -467,7 +481,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, modi
       break;
     }
 
-    const next = placeholders({ value: output, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions });
+    const next = placeholders({ value: output, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions, wrappers });
 
     if (next === undefined) {
       report('output-limit', output, key, onReport);
@@ -515,9 +529,12 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     const raised = () => report('unserializable-value', '', key, onReport);
 
     // One value converts once, however many placeholders read it: the walk is
-    // the costly step. The call is the scope — a payload the host mutates
-    // between two of them must not be answered with the older text.
+    // the costly step. So is one entry asked once whether it configures its
+    // value, because asking enumerates it. The call is the scope — a payload
+    // the host mutates between two of them must not be answered with the older
+    // text.
     const conversions: Conversions = new Map();
+    const wrappers: Wrappers = new Map();
 
     // Everything the format carries is text, and the message becomes text
     // before anything reads it rather than after everything has: a host that
@@ -539,6 +556,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // nothing to echo.
     if (value === undefined) return text(key, conversions) ?? '';
 
-    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions });
+    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions, wrappers });
   },
 });

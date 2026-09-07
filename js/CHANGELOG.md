@@ -356,6 +356,16 @@ Initial version line for `@curly-message/parser`.
   new value every time and is converted every time. The report
   is not recorded with the text: each link that finds none is a defect of its
   own and still reports.
+* An entry is asked once per resolution whether it configures its value.
+  Recognizing a wrapper enumerates the entry's own names, work that grows with
+  the entry as a walk does, and each placeholder that named a key asked again:
+  a value of ninety thousand names read by two thousand placeholders was
+  enumerated two thousand times and spent half a minute before a single
+  conversion of it ran. The answer is now recorded for the length of the
+  `resolve` call like a conversion, the answer that the entry refused the
+  question included, so an entry is enumerated once to ask and once to describe
+  it, however many placeholders name it. The report is not recorded: a refusing
+  entry still reports at every placeholder that reads it.
 * A pass past the output limit is measured rather than built. The limit read
   the length of a pass the parser had already assembled, so a message half of
   this host's longest string that named itself asked for a pass twice that

@@ -160,7 +160,11 @@ each placeholder, and one that raises is not asked a second time. It covers a
 bigint as well, which runs no host code at all but converts to digits the
 engine works out afresh on every read. A value built afresh on each read — by
 a payload getter, or by a custom modifier — is a new value every time and is
-converted every time.
+converted every time. Whether an entry is a wrapper is asked the same way:
+recognizing one enumerates the entry's own names, work that grows with the
+entry, so a resolution asks one entry once however many placeholders name it,
+and an entry that refuses the question is not asked again — though it reports
+at every placeholder that reads it.
 
 All three bounds belong to the call rather than to the parser, and a call is
 what a host begins by calling `resolve` again while one is running — from a

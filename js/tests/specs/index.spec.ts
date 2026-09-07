@@ -2468,6 +2468,38 @@ describe('parser', () => {
     expect(resolve('{{v}}{{v}}{{v}}', { payload: { v: carrier } })).toBe('FNFNFN');
     expect(coercions).toBe(1);
   });
+  it('an entry is asked once for the resolution whether it configures its value', () => {
+    const { resolve } = defaultParser;
+
+    // A wrapper is recognized by the names an entry owns, and enumerating a
+    // plain object reads nothing a getter could count, so a proxy's own trap is
+    // the count of how often the entry was enumerated.
+    let enumerations = 0;
+    const counted = (target: object, onEnumerate: () => void = () => {}) => new Proxy(target, { ownKeys(entry) { enumerations += 1; onEnumerate(); return Reflect.ownKeys(entry); } });
+
+    // A value is enumerated once to ask and once to describe it: two for the
+    // resolution, not two for each placeholder naming it.
+    expect(resolve('{{v}}{{v}}{{v}}', { payload: { v: counted({ a: 1 }) } })).toBe('{"a":1}'.repeat(3));
+    expect(enumerations).toBe(2);
+
+    // A wrapper is enumerated to ask alone; what it carries is read by name.
+    enumerations = 0;
+
+    expect(resolve('{{v}}{{v}}{{v}}', { payload: { v: counted({ value: 'V' }) } })).toBe('VVV');
+    expect(enumerations).toBe(1);
+
+    // The answer that the entry refused the question is recorded like the
+    // answer that no conversion describes it; the report is not, because each
+    // placeholder that reads a refusing entry is a defect of its own.
+    const reports: Report[] = [];
+    const { resolve: reporting } = createParser({ onReport: (entry) => reports.push(entry) });
+
+    enumerations = 0;
+
+    expect(reporting('{{v; default:D}}|{{v; default:D}}', { payload: { v: counted({}, () => { throw new Error('OWN KEYS FAILURE'); }) } })).toBe('D|D');
+    expect(enumerations).toBe(2);
+    expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(Array(4).fill('unserializable-value/{{v; default:D}}'));
+  });
   it('a bigint converts once for the resolution, like every value carrying host code', () => {
     const { resolve } = defaultParser;
     const value = 10n ** 40n;

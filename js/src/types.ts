@@ -34,16 +34,25 @@ type AtLeastOne<T> = { [Key in keyof T]-?: Record<Key, T[Key]> & Omit<T, Key> }[
 export type Conversions = Map<any, string | undefined>;
 
 /**
+ * Whether each entry a resolution has asked configures its value, keyed by the
+ * entry, the answer that the entry refused the question included. Recognizing
+ * a wrapper enumerates the entry's own names, which reads the entry as a
+ * conversion does and costs what the entry holds, and an entry is read once
+ * for every placeholder that names it, so one resolution asks one entry once.
+ */
+export type Wrappers = Map<object, boolean | undefined>;
+
+/**
  * What a pass reads. It sees the message's key on top of what a pass needs to
- * substitute, because a report names the message it came from, and the
- * conversions the resolution around it has already made. The option bag's own
- * entries reach it read: the modifiers a message can name and the defaults
+ * substitute, because a report names the message it came from, and what the
+ * resolution around it has already converted and recognized. The option bag's
+ * own entries reach it read: the modifiers a message can name and the defaults
  * they read are the call's own structure, read once for the call like the
  * context's entries, so a pass composes over them and asks the bag nothing. A
  * pass carries the host's props without reading one, so it names no props type
  * of its own.
  */
-type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions };
+type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions, wrappers: Wrappers };
 
 /**
  * A single interpolation pass, answering with nothing where the pass runs past
