@@ -9,10 +9,10 @@ import type { Report } from './types';
  */
 export const LINE_TERM = ['\u000a', '\u000d', '\u2028', '\u2029'];
 
-// The ladder `ago` climbs, each step a multiple of the one below it. A unit
-// `Intl` knows but this ladder does not climb can never be selected — the climb
-// simply runs out at `year` — so the ladder is also what `Modifier.AgoProps`
-// accepts as a format, read straight off this list. It lives here rather than
+// The ladder `ago` climbs, each step a multiple of the one below it. A `format`
+// naming a unit `Intl` knows but this ladder does not climb is one the
+// modifier refuses, so the ladder is also what `Modifier.AgoUnit` accepts as a
+// format, read straight off this list. It lives here rather than
 // beside `ago` because `Modifier.DefaultKeys` is the modifier module's
 // exports: a table exported there would be typed as a modifier name.
 export const AGO_LADDER = [
