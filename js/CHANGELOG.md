@@ -36,22 +36,20 @@ Initial version line for `@curly-message/parser`.
   used to answer to a private data table and resolve to the fallback chain in
   silence where `{{v:nosuch}}` reports.
 * A modifier that cannot produce a result is reported as `failed-modifier`.
-  Containment was already the behavior — a locale the host rejects, a currency
-  style with no currency code, a `customModifiers` entry that throws all
-  resolve the placeholder to its fallback chain rather than raising out of
-  `resolve` — but the caller heard nothing, so a message that quietly rendered
-  its default read exactly like one that had no value to render. The
-  specification asks for both halves: the failure is contained and it is
-  reported.
+  A locale the host rejects, a currency style with no currency code and a
+  `customModifiers` entry that throws all raised out of `resolve`. Contained,
+  each resolves the placeholder to its fallback chain, and contained alone a
+  message that quietly rendered its default would read exactly like one that
+  had no value to render. The specification asks for both halves: the failure
+  is contained and it is reported.
 * A formatting modifier that rejects its input reports it too. `number`,
   `date`, `ago` and `currency` each test the value before the host's formatter
   sees it, and one that fails that test — blank text, text that is not a
   number, a date nothing can parse, a `ratio` that leaves no finite product —
-  resolved the placeholder to the fallback chain and said nothing, where the
-  same placeholder under a locale the host rejects reported `failed-modifier`.
-  Both halves of the failure report now. The output is unchanged: the chain the
-  modifier returned for itself and the chain the parser resolves to are the
-  same read.
+  takes the fallback chain, and a chain taken in silence reads like a value
+  that was never there. It is reported now, as `failed-modifier`, like a
+  formatter that raised. Reporting changes no output: the chain the modifier
+  returned for itself and the chain the parser resolves to are the same read.
 * A formatting modifier given no locale reports `missing-locale`. It resolves
   to the empty string as it always did — a declared default stands in for a
   value the modifier cannot read, never for the locale it would have formatted
@@ -439,10 +437,9 @@ Initial version line for `@curly-message/parser`.
   with `Object.prototype.style` set to `'percent'`, `{{v:number}}` over
   `1.23456789` rendered `123.46%` instead of `1.23`, `{{v:date}}` took a
   `dateStyle` nobody passed, `{{v:currency}}` took a `currencyDisplay`, and a
-  `minimumFractionDigits` above the modifier's own maximum made `Intl` raise, so
-  the placeholder reported `failed-modifier` and rendered its fallback. What
-  carries the composed layers to a formatter now owns every entry it is
-  configured with and answers for no prototype.
+  `minimumFractionDigits` above the modifier's own maximum made `Intl` raise
+  out of the resolution. What carries the composed layers to a formatter now
+  owns every entry it is configured with and answers for no prototype.
 * A polluted prototype names no limit in a report either. `Report.limit` was
   read out of a table holding only the codes that reach a limit, so every code
   that reaches none read through that table's prototype: with
