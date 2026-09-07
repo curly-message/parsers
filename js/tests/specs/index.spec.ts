@@ -610,6 +610,10 @@ describe('parser', () => {
     expect(resolve('{{v}}', { payload: { v: { value: undefined, default: 'D' } } })).toBe('D');
     expect(resolve('{{v}}', { payload: { v: hidden('default', 'D', { value: undefined }) } })).toBe('');
 
+    // A wrapper is recognized by the names it owns, and it owns what it can
+    // enumerate: a hidden name outside the three does not make a value of it.
+    expect(resolve('{{v}}', { payload: { v: hidden('unit', 'kg', { value: 'V' }) } })).toBe('V');
+
     expect(resolve('{{v}}', { payload: { v: 'V' } })).toBe('V');
     expect(resolve('{{v}}', hidden('payload', { v: 'V' }))).toBe('');
 
@@ -1375,6 +1379,18 @@ describe('parser', () => {
     expect(reports[0].text).toBe('{{v:x-raise; default:D}}');
     expect(reports[0].message).toBe('A modifier could not produce a result, so the placeholder took its fallback chain.');
 
+    // A code is what the parser's own failures carry, and a raise that merely
+    // carries one is not among them: a host's error naming `ENOENT`, or one
+    // naming a code of this parser's, reports as the failure it is rather than
+    // as what it says.
+    reports.length = 0;
+    const coded = (code: string) => () => { throw Object.assign(new Error('MODIFIER FAILURE'), { code }); };
+    const forging = createParser({ customModifiers: { 'x-forge': coded('missing-locale'), 'x-host': coded('ENOENT') }, onReport });
+
+    expect(forging.resolve('{{v:x-forge; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    expect(forging.resolve('{{v:x-host; default:D}}', { payload: { v: 'X' } })).toBe('D');
+    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['failed-modifier/message', 'failed-modifier/message']);
+
     // A modifier that answers, with nothing or with text, has produced a
     // result: the chain it may land on is the message's own answer, not a
     // failure.
@@ -1769,6 +1785,15 @@ describe('parser', () => {
     expect(reports[0].key).toBeUndefined();
     expect(answer('{{v}}', withOwn(boom('key'), { payload }))).toEqual({ text: '1234.5678', reported: ['unserializable-value/payload/{{v}}'] });
     expect(reports[0].key).toBeUndefined();
+
+    // The two are told apart by what the report names: a read at a placeholder
+    // names the placeholder and not the message around it, and a read of the
+    // call's own structure names the message and carries the key it was
+    // resolving under.
+    expect(answer('A {{v:number}} B', { payload, locale: defaultLocale, props: boom('number') }))
+      .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/{{v:number}}'] });
+    expect(answer('A {{v}} B', withOwn(boom('payload'), { key: 'common.key' }))).toEqual({ text: 'A  B', reported: ['unserializable-value/payload/A {{v}} B'] });
+    expect(reports[0].key).toBe('common.key');
 
     // A wrapper is read entry by entry like the payload holding it, so each of
     // its own keys refuses on its own: the chain steps past the value it would
@@ -2786,6 +2811,52 @@ describe('parser', () => {
 
     expect(at(limit + 1)).toBe('{{v}}');
     expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
+
+    // The bound holds wherever in the pass it is reached. Text before a
+    // placeholder counts before the placeholder is resolved, so one past the
+    // bound is never resolved at all: the modifier it names does not run, and
+    // the message comes back as it arrived.
+    let ran = 0;
+    const counting = createParser({ customModifiers: { 'x-count': () => { ran += 1; return ''; } }, onReport: (report) => { reports.push(report); } });
+    const after = (length: number) => {
+      reports.length = 0;
+      ran = 0;
+
+      return counting.resolve(`${'x'.repeat(length)}{{v:x-count}}`, { payload: { v: 'V' }, key: 'common.key' });
+    };
+
+    expect(after(limit)).toBe('x'.repeat(limit));
+    expect(ran).toBe(1);
+    expect(reports).toHaveLength(0);
+
+    expect(after(limit + 1)).toBe(`${'x'.repeat(limit + 1)}{{v:x-count}}`);
+    expect(ran).toBe(0);
+    expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
+
+    // Text after the last placeholder counts as well, and a pass is measured
+    // whole: one landing on the bound resolves, one character further is
+    // discarded whole however little of it a placeholder produced.
+    const before = (length: number) => {
+      reports.length = 0;
+
+      return resolve(`{{v}}${'x'.repeat(length)}`, { payload: { v: 'yyyyy' }, key: 'common.key' });
+    };
+
+    expect(before(limit - 5)).toBe(`yyyyy${'x'.repeat(limit - 5)}`);
+    expect(reports).toHaveLength(0);
+
+    expect(before(limit - 4)).toBe(`{{v}}${'x'.repeat(limit - 4)}`);
+    expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
+  });
+  it('a limit report carries the text the limit stopped, not the message that began', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // The pass past the bound is discarded whole, so what resolves is the last
+    // text under it, and that is what the report describes: it is where the
+    // placeholder that overran still stands.
+    expect(resolve('{{a}}', { payload: { a: '{{b}}', b: 'x'.repeat(100001) }, key: 'common.key' })).toBe('{{b}}');
+    expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(['output-limit/{{b}}']);
   });
   it('a pass is bounded as it is built, so it cannot outgrow what a string can hold', () => {
     const reports: Report[] = [];
