@@ -272,9 +272,10 @@ describe('parser option typing', () => {
 });
 
 // `Modifier.DefaultKeys` is `keyof typeof modifiers`, so the modifier module's
-// exports are the registry — a helper exported beside the modifiers would
-// answer to its own name in a message. This is the type-level half of the
-// tripwire; `the modifier registry holds modifiers alone` is the runtime half.
+// exports are what the type names as modifiers — a helper exported beside them
+// would be typed as one, though the registry holds it under no name. This is
+// the type-level half of the tripwire; `the modifier registry holds modifiers
+// alone` is the runtime half.
 describe('modifier typing', () => {
   it('names the registered modifiers, and nothing else', () => {
     type Exact<A, B> = [A] extends [B] ? [B] extends [A] ? true : never : never;

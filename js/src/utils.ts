@@ -13,8 +13,8 @@ export const LINE_TERM = ['\u000a', '\u000d', '\u2028', '\u2029'];
 // `Intl` knows but this ladder does not climb can never be selected — the climb
 // simply runs out at `year` — so the ladder is also what `Modifier.AgoProps`
 // accepts as a format, read straight off this list. It lives here rather than
-// beside `ago` because the modifier module's exports are the modifier
-// registry: a table exported there would answer to its own name in a message.
+// beside `ago` because `Modifier.DefaultKeys` is the modifier module's
+// exports: a table exported there would be typed as a modifier name.
 export const AGO_LADDER = [
   { key: 'second', multiplier: 1000 },
   { key: 'minute', multiplier: 60 },
