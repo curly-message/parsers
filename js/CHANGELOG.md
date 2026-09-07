@@ -402,12 +402,12 @@ Initial version line for `@curly-message/parser`.
   carries the composed layers to a formatter now owns every entry it is
   configured with and answers for no prototype.
 * A polluted prototype names no limit in a report either. `Report.limit` was
-  read out of a table holding the two codes that reach a limit, so the three
-  that reach none read through that table's prototype: with
+  read out of a table holding only the codes that reach a limit, so every code
+  that reaches none read through that table's prototype: with
   `Object.prototype['unknown-modifier']` set, an `unknown-modifier` report
   carried that value as the limit this parser had reached, in a field typed as
   a number and given none of the truncation and terminator escaping `text`
-  gets. The table now names all five codes, so no read of it leaves the table.
+  gets. The table now names every code, so no read of it leaves the table.
 * A polluted prototype closes no placeholder. Both delimiters are two
   characters, so each scan read one character ahead, and past the end of the
   message that read left the string: with `Object.prototype['4']` set to `'}'`,
