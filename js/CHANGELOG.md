@@ -81,6 +81,16 @@ Initial version line for `@curly-message/parser`.
   `{"a":1}` — and every other value becomes what the host makes of it, so a
   `Date`, a `RegExp` and a class instance keep the text their own `toString`
   writes, and `{{v:date}}` over a `Date` still formats.
+* The output is that same text. A placeholder naming no modifier rendered its
+  value through the host's plain string conversion, and so did a modifier's
+  own answer: `{{tags}}` over `['a', 'b']` rendered `a,b`, `{{user}}` over a
+  plain object rendered `[object Object]`, and a custom modifier answering
+  with an array or an object rendered the same way. Both render the JSON now
+  — `["a","b"]`, `{"name":"Al"}` — so what a placeholder renders, what a
+  comparison reads and what a modifier is handed are one conversion, and an
+  `eq` key written against `a,b` no longer matches an array. A modifier that
+  answers with nothing takes the fallback chain rather than rendering the
+  text `undefined`.
 * A `Date` reaches a modifier at second precision, because that is what
   `String(date)` writes. The offset survives, so the instant does, but the
   milliseconds do not: `{{v:date}}` over `new Date('2024-03-05T10:00:00.123Z')`
@@ -238,6 +248,13 @@ Initial version line for `@curly-message/parser`.
   placeholder. A value holding `\\server\share` now resolves to
   `\server\share` and one holding `a\ b` to `a b`, so a value that has to keep
   a backslash before a reserved character doubles it; `\d+` is unaffected.
+* A modifier is selected on its unescaped name. A key and an option key were
+  matched against their unescaped spelling while the modifier name was
+  matched raw, so a host whose modifier name carries a reserved character had
+  to register the source spelling: `{{v:x-a\:b}}` reached a modifier
+  registered as `x-a\:b` and not one registered as `x-a:b`. The name is what
+  the author wrote and the escape only how a reserved character reaches the
+  parser, so it is unescaped before the lookup, like a key.
 * A backslash reaches the braces themselves, so a brace it consumed cannot be
   half of a delimiter. A pair used to open or close a placeholder whatever
   stood in front of it: `\{{v}}` resolved and rendered `\HIT` over the payload
@@ -298,6 +315,22 @@ Initial version line for `@curly-message/parser`.
   property the layer above it named, which is exactly what the layering rule
   forbids. The defaults layer is now read for presence, so `0` composes like
   any other value.
+* `number`'s two fraction digits are a default, not a cap. The modifier
+  applied its `maximumFractionDigits` of two over every layer rather than
+  under them, so a layer naming a `minimumFractionDigits` above two reached
+  `Intl` paired with a maximum that contradicted it, and `Intl` raised out of
+  the resolution: `{{v:number}}` over `1.5` under a `number` layer of
+  `{ minimumFractionDigits: 4 }` used to throw. The two digits sit under the
+  layers now — a named maximum is used as named, and where no layer names one
+  the default widens to reach a named minimum, the way `Intl.NumberFormat`
+  widens its own — so the same placeholder renders `1.5000`.
+* `currency` formats in the currency style whatever a layer names. The style
+  was pinned against the parser's `modifierDefaults` alone and the call's
+  `props` layered over the result, so a call naming a style of its own won:
+  over `0.5` with `currency: 'USD'`, a `style` of `percent` in the call's
+  `props` rendered `50%` and one of `decimal` rendered `0.5`. The style is
+  what the modifier is, not one of the options it layers, so it is applied
+  over every layer now and both render `$0.50`.
 * A failing `onReport` no longer fails the resolution. The diagnostic callback
   ran unguarded, so a host whose logger raises — a full disk, a structured
   logger that cannot serialize a field — turned every reported message into an
@@ -321,6 +354,15 @@ Initial version line for `@curly-message/parser`.
   now: the placeholder takes its fallback chain and reports `failed-modifier`,
   which is what an empty format already did on a raise from the host's own
   formatter.
+* `ago` rounds a rung on its magnitude. Each rung of the ladder was rounded
+  with the host's own rounding, which takes a half toward positive infinity,
+  so a delta and its negation read as different distances: 1.5 hours ahead
+  rendered `in 2 hours` while 1.5 hours past rendered `1 hour ago`, and half
+  an hour ahead climbed to `in 1 hour` while half an hour past stayed at
+  `30 minutes ago`. A rung is now rounded on its magnitude and given its sign
+  back, so both directions select the same unit and the same count, and a
+  delta sitting on a rung's half climbs in both: half an hour past reads
+  `1 hour ago`.
 * Turning a value into text is bounded. A plain object or an array became
   JSON with nothing watching the walk, and both interpolation guards measure a
   string that already exists, so they could not see the cost of building one: a
