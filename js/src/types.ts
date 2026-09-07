@@ -36,10 +36,14 @@ export type Conversions = Map<any, string | undefined>;
 /**
  * What a pass reads. It sees the message's key on top of what a pass needs to
  * substitute, because a report names the message it came from, and the
- * conversions the resolution around it has already made. A pass carries the
- * host's props without reading one, so it names no props type of its own.
+ * conversions the resolution around it has already made. The option bag's own
+ * entries reach it read: the modifiers a message can name and the defaults
+ * they read are the call's own structure, read once for the call like the
+ * context's entries, so a pass composes over them and asks the bag nothing. A
+ * pass carries the host's props without reading one, so it names no props type
+ * of its own.
  */
-type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions };
+type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions };
 
 /**
  * A single interpolation pass, answering with nothing where the pass runs past

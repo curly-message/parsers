@@ -245,20 +245,7 @@ const mergeProps = (base: any, override: any, onRaise?: () => void) => {
 // compiling here.
 const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'];
 
-const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, locale, key: messageKey, conversions }) => {
-  const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
-  // A configuration entry that refuses to be read is read once for the whole
-  // pass rather than at a placeholder, so what a report names it by is the
-  // text that pass went looking through.
-  const configRaised = () => report('unserializable-value', typeof message === 'string' ? message : '', messageKey, onReport);
-  const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', configRaised);
-  const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', configRaised);
-  // The modifier module's exports are the registry a host's table composes
-  // with, and each layer contributes the modifiers it holds and nothing else:
-  // an entry that cannot be called is not one a message can name and not one
-  // that shadows the name it would replace. Filtered after the merge instead,
-  // a host's bad entry would take the built-in down with it.
-  const modifiers = mergeLayer(ownModifiers(defaultModifiers), ownModifiers(customModifiers, configRaised));
+const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key: messageKey, conversions }) => {
   const modifierKeys = Object.keys(modifiers);
 
   const resolvePlaceholder = (placeholder: string) => {
@@ -481,9 +468,7 @@ const report = (code: Report['code'], reported: string, key: Parser.Key | undefi
   }
 };
 
-const interpolate: Interpolation = ({ value, props, payload, parserOptions, locale, key, conversions }) => {
-  const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
-
+const interpolate: Interpolation = ({ value, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions }) => {
   let output = value;
 
   for (let pass = 0; hasPlaceholders(output); pass += 1) {
@@ -493,7 +478,7 @@ const interpolate: Interpolation = ({ value, props, payload, parserOptions, loca
       break;
     }
 
-    const next = placeholders({ value: output, payload, props, parserOptions, locale, key, conversions });
+    const next = placeholders({ value: output, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions });
 
     if (next === undefined) {
       report('output-limit', output, key, onReport);
@@ -514,16 +499,27 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // not a context a caller passed, and a caller that passed `null` for one
     // is a caller that passed none.
     const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
-    // A context entry that refuses to be read is the call's own defect rather
-    // than a placeholder's, and the key that would name the message is one of
-    // the entries, so the message is what a report of one carries — as text
-    // where the caller wrote text, because nothing has converted it yet.
+    // A context entry or an entry of the option bag that refuses to be read is
+    // the call's own defect rather than a placeholder's, and the key that would
+    // name the message is one of the entries, so the message is what a report
+    // of one carries — as text where the caller wrote text, because nothing
+    // has converted it yet. Both are the call's own structure, read once for
+    // the call: a pass composes over what the call holds rather than asking
+    // the bag again.
     const reported = typeof message === 'string' ? message : '';
     const key: Parser.Key | undefined = ownValue(context, 'key', () => report('unserializable-value', reported, undefined, onReport));
-    const contextRaised = () => report('unserializable-value', reported, key, onReport);
-    const payload: Parser.Payload | undefined = ownValue(context, 'payload', contextRaised);
-    const props: Modifier.Props | undefined = ownValue(context, 'props', contextRaised);
-    const locale: Locale | undefined = ownValue(context, 'locale', contextRaised);
+    const callRaised = () => report('unserializable-value', reported, key, onReport);
+    const payload: Parser.Payload | undefined = ownValue(context, 'payload', callRaised);
+    const props: Modifier.Props | undefined = ownValue(context, 'props', callRaised);
+    const locale: Locale | undefined = ownValue(context, 'locale', callRaised);
+    const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', callRaised);
+    const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', callRaised);
+    // The modifier module's exports are the registry a host's table composes
+    // with, and each layer contributes the modifiers it holds and nothing else:
+    // an entry that cannot be called is not one a message can name and not one
+    // that shadows the name it would replace. Filtered after the merge instead,
+    // a host's bad entry would take the built-in down with it.
+    const modifiers = mergeLayer(ownModifiers(defaultModifiers), ownModifiers(customModifiers, callRaised));
     // A report about the chain a message resolves through names no placeholder,
     // and the link it is about is one nothing describes, so it carries no
     // excerpt: the key is what says which message went looking.
@@ -554,6 +550,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // nothing to echo.
     if (value === undefined) return text(key, conversions) ?? '';
 
-    return interpolate({ value, payload, props, parserOptions, locale, key, conversions });
+    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions });
   },
 });

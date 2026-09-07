@@ -1680,6 +1680,24 @@ describe('parser', () => {
     // it is missing because it refused to be read is what the report says.
     expect(reports.map(({ code, origin, text }) => `${code}/${origin}/${text}`)).toEqual(['unserializable-value/payload/{{v:number}}']);
   });
+  it('the option bag is read once for the call, not once for each pass', () => {
+    const reports: Report[] = [];
+    const reads = { onReport: 0, customModifiers: 0, modifierDefaults: 0 };
+    const onReport = (entry: Report) => reports.push(entry);
+    const { resolve } = createParser({
+      get onReport() { reads.onReport += 1; return onReport; },
+      get customModifiers(): never { reads.customModifiers += 1; throw new Error('CUSTOM MODIFIERS FAILURE'); },
+      get modifierDefaults(): never { reads.modifierDefaults += 1; throw new Error('MODIFIER DEFAULTS FAILURE'); },
+    });
+
+    // Three passes, and what the second and the third read is text the payload
+    // produced: an entry read once per pass would refuse three times and name
+    // payload text twice, where the message the caller wrote is what a report
+    // about the call's own structure carries.
+    expect(resolve('A{{a}}Z', { payload: { a: '1{{b}}2', b: '3{{c}}4', c: 'C' } })).toBe('A13C42Z');
+    expect(reads).toEqual({ onReport: 1, customModifiers: 1, modifierDefaults: 1 });
+    expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(['unserializable-value/A{{a}}Z', 'unserializable-value/A{{a}}Z']);
+  });
   it('every read of the caller\'s own structure that raises reports', () => {
     const reports: Report[] = [];
     const boom = (name: string) => ({ get [name](): never { throw new Error(`${name.toUpperCase()} FAILURE`); } });
