@@ -1849,6 +1849,16 @@ describe('parser', () => {
       .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/A {{v:number}} B'] });
     expect(answer('A {{v:number}} B', withOwn(boom('props'), { payload, locale: defaultLocale })))
       .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/A {{v:number}} B'] });
+    // The registry is one of them, read entry by entry: an entry that refuses
+    // registers nothing and the built-in under its name stands, one that
+    // answers registers beside it, and a registry refusing to be enumerated
+    // registers nothing at all.
+    expect(answer('A {{v:number}} B', { payload, locale: defaultLocale }, { customModifiers: boom('number') }))
+      .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/A {{v:number}} B'] });
+    expect(answer('A {{v:x-own}} B', { payload, locale: defaultLocale }, { customModifiers: withOwn(boom('number'), { 'x-own': () => 'OWN' }) }))
+      .toEqual({ text: 'A OWN B', reported: ['unserializable-value/payload/A {{v:x-own}} B'] });
+    expect(answer('A {{v:number}} B', { payload, locale: defaultLocale }, { customModifiers: keysRaise('REGISTRY') }))
+      .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/A {{v:number}} B'] });
 
     // Enumerating a target reads it as surely as reading one entry does. This
     // entry is enumerated twice — once to ask whether it configures a value,
@@ -2543,6 +2553,12 @@ describe('parser', () => {
     expect(resolve('{{v}}{{v}}{{v}}', { payload: { v: counted({ value: 'V' }) } })).toBe('VVV');
     expect(enumerations).toBe(1);
 
+    // Nor is it asked again by a later pass: the answer is the resolution's.
+    enumerations = 0;
+
+    expect(resolve('{{a}} {{v}}', { payload: { a: '{{v}}', v: counted({ value: 'V' }) } })).toBe('V V');
+    expect(enumerations).toBe(1);
+
     // The answer that the entry refused the question is recorded like the
     // answer that no conversion describes it; the report is not, because each
     // placeholder that reads a refusing entry is a defect of its own.
@@ -2851,6 +2867,24 @@ describe('parser', () => {
     expect(reports).toHaveLength(0);
 
     expect(after(limit + 1)).toBe(`${'x'.repeat(limit + 1)}{{v:x-count}}`);
+    expect(ran).toBe(0);
+    expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
+
+    // What the pass has produced counts before the next placeholder as the
+    // text before it does: a placeholder within the bound of the source is
+    // past it once the pass has grown enough ahead of it.
+    const grown = (length: number) => {
+      reports.length = 0;
+      ran = 0;
+
+      return counting.resolve(`{{g}}${'x'.repeat(length)}{{v:x-count}}`, { payload: { g: 'g'.repeat(105), v: 'V' }, key: 'common.key' });
+    };
+
+    expect(grown(limit - 105)).toHaveLength(limit);
+    expect(ran).toBe(1);
+    expect(reports).toHaveLength(0);
+
+    expect(grown(limit - 104)).toBe(`{{g}}${'x'.repeat(limit - 104)}{{v:x-count}}`);
     expect(ran).toBe(0);
     expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
 
