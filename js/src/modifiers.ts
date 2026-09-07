@@ -7,20 +7,21 @@ import { AGO_LADDER, getDateInput, getModifierInput, mergeLayer, ModifierFailure
 // reader, and a modifier that matched never became one.
 const selected = (option: Modifier.ModifierOption | undefined, config: { defaultValue: string }) => (option ? option.value : config.defaultValue);
 
+// The value is normalized once, ahead of the options: what that costs grows
+// with the value, and a comparison's cost adds it to its options rather than
+// multiplying the two.
 export const eq: Modifier.T = (config) => {
   const { value, options = [] } = config;
+  const needle = `${value}`.toLowerCase();
 
-  return selected(options.find(
-    ({ key }) => `${key}`.toLowerCase() === `${value}`.toLowerCase(),
-  ), config);
+  return selected(options.find(({ key }) => `${key}`.toLowerCase() === needle), config);
 };
 
 export const ne: Modifier.T = (config) => {
   const { value, options = [] } = config;
+  const needle = `${value}`.toLowerCase();
 
-  return selected(options.find(
-    ({ key }) => `${key}`.toLowerCase() !== `${value}`.toLowerCase(),
-  ), config);
+  return selected(options.find(({ key }) => `${key}`.toLowerCase() !== needle), config);
 };
 
 // A numeric comparison reads only the options it can order. A key that is not
@@ -34,18 +35,16 @@ const ordered = (options: Modifier.ModifierOption[], compare: (a: number, b: num
 
 export const lt: Modifier.T = (config) => {
   const { value, options = [] } = config;
+  const input = +value;
 
-  return selected(ordered(options, (a, b) => a - b).find(
-    ({ key }) => +value < +key,
-  ), config);
+  return selected(ordered(options, (a, b) => a - b).find(({ key }) => input < +key), config);
 };
 
 export const gt: Modifier.T = (config) => {
   const { value, options = [] } = config;
+  const input = +value;
 
-  return selected(ordered(options, (a, b) => b - a).find(
-    ({ key }) => +value > +key,
-  ), config);
+  return selected(ordered(options, (a, b) => b - a).find(({ key }) => input > +key), config);
 };
 
 // The equality leg answers first and the strict leg second, and each stays

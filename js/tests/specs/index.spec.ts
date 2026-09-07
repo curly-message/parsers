@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createParser, Parser, Report } from '../../src';
 import { getDateInput, getModifierInput, LINE_TERM } from '../../src/utils';
 import { MESSAGES } from '../data';
@@ -1481,6 +1481,26 @@ describe('parser', () => {
     expect(answer('{{v:eq; 10:TEN}}', { payload: { v: 10 } })).toEqual({ text: 'TEN', reported: [] });
     expect(answer('{{v; 10:TEN}}', { payload: { v: 10 } })).toEqual({ text: 'TEN', reported: [] });
     expect(answer('{{v:x-locale}}', { payload: { v: 10 } })).toEqual({ text: '[]', reported: [] });
+  });
+  it('a comparison normalizes its value once, not once per option', () => {
+    const { resolve } = defaultParser;
+    const lowered = vi.spyOn(String.prototype, 'toLowerCase');
+    // What a value costs to normalize grows with the value and what a
+    // comparison costs grows with its options, and the two must add rather
+    // than multiply: two more options that match nothing are two more
+    // normalizations, the keys' own, and none of the value's.
+    const count = (options: string) => {
+      lowered.mockClear();
+      resolve(`{{v:eq; ${options}; default:D}}`, { payload: { v: 'zzz' } });
+
+      return lowered.mock.calls.length;
+    };
+
+    try {
+      expect(count('a:A; b:B; c:C') - count('a:A')).toBe(2);
+    } finally {
+      lowered.mockRestore();
+    }
   });
   it('a comparison given no options to select from reports', () => {
     const reports: Report[] = [];
