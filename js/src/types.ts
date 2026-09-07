@@ -184,7 +184,7 @@ export module Modifier {
      * placeholder nor the caller. A modifier nobody configured is handed an
      * empty object.
      */
-    props?: OwnProps;
+    props: OwnProps;
     locale?: Locale;
     parserOptions?: Parser.Options<Modifier.Key, CustomModifierProps>;
     options: ModifierOption[];

@@ -494,7 +494,7 @@ Initial version line for `@curly-message/parser`.
   come from. What a modifier receives is the composition under its own name,
   but its config named the whole table, so a modifier reached its own
   properties through an assertion — `(props as { unit?: 'C' | 'F' })?.unit`
-  where `props?.unit` is what it was given. `Modifier.T` names that
+  where `props.unit` is what it was given. `Modifier.T` names that
   composition now, a table types each entry by what the name it sits under
   holds, and the built-in modifiers name theirs beside the layer that carries
   them: `Modifier.NumberProperties` for `Modifier.NumberProps`, and the same

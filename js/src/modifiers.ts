@@ -52,9 +52,9 @@ export const gt: Modifier.T = (config) => {
 // unread until the one before it comes back empty. The config is handed over
 // key by key rather than spread: a spread reads every property it copies, and
 // the default is the one property reading costs something.
-export const lte: Modifier.T = (config) => eq({ value: config.value, options: config.options, get defaultValue() { return lt(config); } });
+export const lte: Modifier.T = (config) => eq({ value: config.value, props: config.props, options: config.options, get defaultValue() { return lt(config); } });
 
-export const gte: Modifier.T = (config) => eq({ value: config.value, options: config.options, get defaultValue() { return gt(config); } });
+export const gte: Modifier.T = (config) => eq({ value: config.value, props: config.props, options: config.options, get defaultValue() { return gt(config); } });
 
 // A value the modifier's own input test rejects is one it cannot format, and a
 // modifier that cannot answer says so by raising: the parser reports that and

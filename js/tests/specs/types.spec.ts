@@ -119,7 +119,7 @@ describe('payload typing', () => {
         // A modifier is handed the properties its own name holds, composed out
         // of the layers a table declares, and reads them by name: the table it
         // is registered in is what types the slice it is given.
-        'x-temp': ({ value, props }) => `${value}${props?.unit}`,
+        'x-temp': ({ value, props }) => `${value}${props.unit}`,
       },
       modifierDefaults: { 'x-temp': { unit: 'C' } },
     });
@@ -131,7 +131,7 @@ describe('payload typing', () => {
   it('accepts a wrapper declaring props for a host-defined modifier', () => {
     const { resolve } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }, 'x-temp'>({
       customModifiers: {
-        'x-temp': ({ value, props }) => `${value}${props?.unit}`,
+        'x-temp': ({ value, props }) => `${value}${props.unit}`,
       },
     });
 
@@ -153,7 +153,7 @@ describe('payload typing', () => {
     expect(resolve('{{v:x-temp}}', { payload: { v: '21' } })).toBe('21undefined');
   });
   it('rejects a props name a modifier declaring none cannot read', () => {
-    const digits: Modifier.T<Intl.NumberFormatOptions> = ({ value, props }) => `${value}@${props?.maximumFractionDigits ?? 0}`;
+    const digits: Modifier.T<Intl.NumberFormatOptions> = ({ value, props }) => `${value}@${props.maximumFractionDigits ?? 0}`;
     // @ts-expect-error a modifier declaring no props of its own is handed none it can read by name
     const own: Modifier.T = ({ value, props }) => `${value}@${props?.width}`;
     // A modifier reads the slice its own name holds, so the one reading the
