@@ -576,6 +576,25 @@ describe('parser', () => {
     expect(resolve('{{v:number}}', { payload: { v: 1234.56789 }, props: { number: callable }, locale: defaultLocale })).toBe('1235');
     expect(resolve('{{v:number}}', { payload: { v: 1234.56789 }, props: { number: { maximumFractionDigits: 0 } }, locale: defaultLocale })).toBe('1235');
   });
+  it('an entry under a modifier\'s name that is no layer names no property', () => {
+    const seen: unknown[] = [];
+    const { resolve } = createParser<{ v: any }, { test?: unknown }>({
+      customModifiers: { test: ({ props }) => { seen.push(props); return 'DONE'; } },
+      modifierDefaults: { number: { useGrouping: false, maximumFractionDigits: 4 } },
+    });
+    const entries: any[] = [null, 0, false, '', 'ab'];
+
+    // A layer composes per property, and an entry that is no layer holds no
+    // property to compose: it overrides nothing beneath it, and it is not
+    // what a modifier is handed either.
+    entries.forEach((entry) => {
+      expect(resolve('{{v:number}}', { payload: { v: 1234.56789 }, props: { number: entry }, locale: defaultLocale })).toBe('1234.5679');
+      expect(resolve('{{v:number}}', { payload: { v: { value: 1234.56789, props: { number: entry } } }, props: { number: { maximumFractionDigits: 1 } }, locale: defaultLocale })).toBe('1234.6');
+      expect(resolve('{{v:test}}', { payload: { v: 1 }, props: { test: entry } })).toBe('DONE');
+    });
+
+    expect(seen).toEqual([{}, {}, {}, {}, {}]);
+  });
   it('configuration is read as own properties, never through a prototype', () => {
     const payload = { v: 1.23456789 };
     const seen: Report[] = [];

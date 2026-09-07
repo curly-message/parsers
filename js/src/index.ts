@@ -232,14 +232,14 @@ const isLayer = (value: any) => !!value && (typeof value === 'object' || typeof 
 
 // What a modifier reads is the properties under its own name, so that name is
 // what the layers are read for and nothing else: each contributes the entry it
-// holds under it, a layer entry overrides only the properties it names, and an
-// entry that is not a layer stands in for everything beneath it. What leaves is
-// the parser's own copy, so a modifier that writes into what it was handed
-// reaches neither the next placeholder nor the caller.
+// holds under it, and an entry overrides only the properties it names, so an
+// entry that is no layer names none and overrides nothing. What leaves is the
+// parser's own copy, so a modifier that writes into what it was handed reaches
+// neither the next placeholder nor the caller.
 const ownSlice = (layers: any[], name: string, onRaise?: () => void) => mergeLayer(layers.reduce((from, layer) => {
   const to = isLayer(layer) ? ownValue(layer, name, onRaise) : undefined;
 
-  return to === undefined ? from : isLayer(to) ? mergeLayer(from, to, onRaise) : to;
+  return isLayer(to) ? mergeLayer(from, to, onRaise) : from;
 }, undefined), undefined, onRaise);
 
 // The names this format defines as comparisons. A message that writes one has
