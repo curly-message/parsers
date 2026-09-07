@@ -38,7 +38,9 @@ the inline `default` is the fallback itself rather than something to select, so
 as it always did, and reports `missing-options`. That is a defect in how the
 placeholder was written, so it reports whether or not the payload carries the
 key, and the six names are the ones this format defines as comparisons: a host
-that registers its own `eq` does not change what the message asked for.
+that registers its own `eq` does not change what the message asked for. A
+placeholder naming no key has nothing to compare, so `{{:eq}}` is no selection
+and reports nothing; `{{:zz}}` still reports the modifier nobody registered.
 Given no locale the formatting modifiers resolve to the empty string, not to
 the fallback chain: a declared default does not stand in for a locale nobody
 supplied. A caller that passes none and a caller that passes the empty string

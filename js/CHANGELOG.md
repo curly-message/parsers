@@ -71,7 +71,9 @@ Initial version line for `@curly-message/parser`.
   the key, and it reads the six names this format defines as comparisons, so a
   host that registered its own `eq` does not change what the message asked for.
   A placeholder naming no modifier is not a comparison: `{{count}}`
-  interpolates and reports nothing.
+  interpolates and reports nothing. Neither is one naming no key, which has
+  nothing to compare: `{{:eq}}` takes the fallback chain and reports nothing,
+  though `{{:zz}}` still reports the modifier nobody registered.
 * Everything a modifier reads is text. A value used to reach a modifier at the
   type the payload gave it while a default arrived as text; both are converted
   the same way now, so a modifier has one kind of input to read. A plain object

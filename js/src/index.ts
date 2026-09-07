@@ -327,8 +327,10 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // A comparison selects among the options a placeholder declares, so one
     // declaring none was asked to select from nothing. It is how the
     // placeholder is written that says so, which is why the reading comes
-    // before the value is consulted at all.
-    if (COMPARISONS.includes(modifierKey) && !options.length) report('missing-options', placeholder, messageKey, onReport);
+    // before the value is consulted at all. A placeholder naming no key has
+    // nothing to compare and is no selection, so a comparison it names was
+    // asked nothing.
+    if (key !== undefined && COMPARISONS.includes(modifierKey) && !options.length) report('missing-options', placeholder, messageKey, onReport);
 
     // An absent value is nothing to compare against, whatever the modifier
     // asks: the placeholder takes the fallback chain rather than measuring the

@@ -1491,6 +1491,15 @@ describe('parser', () => {
     expect(answer('{{v; default:FALLBACK}}', { payload: {} })).toEqual({ text: 'FALLBACK', reported: [] });
     expect(answer('{{v:number}}', { payload: { v: 10 }, locale: defaultLocale })).toEqual({ text: '10', reported: [] });
 
+    // A placeholder naming no key has nothing to compare, so it is not a
+    // selection and a comparison it names was asked to select from nothing
+    // about nothing: it takes the fallback chain and reports nothing. The name
+    // it carries is still a modifier's name, so one nobody registered reports
+    // as it does anywhere.
+    expect(answer('{{:eq; default:FALLBACK}}', { payload: { v: 10 } })).toEqual({ text: 'FALLBACK', reported: [] });
+    expect(answer('{{ :gte }}', { payload: { default: 'CHAIN' } })).toEqual({ text: 'CHAIN', reported: [] });
+    expect(answer('{{:zz}}', { payload: { default: 'CHAIN' } })).toEqual({ text: 'CHAIN', reported: ['unknown-modifier/message'] });
+
     // The six names are the ones this format defines as comparisons, so the
     // check reads the name the message wrote: a host that registered its own
     // `eq` answers in the built-in's place and does not change what the
