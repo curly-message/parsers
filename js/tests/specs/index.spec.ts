@@ -2939,6 +2939,16 @@ describe('parser', () => {
     });
     expect(reports[0].text.length).toBeLessThan(300);
   });
+  it('escape removal still runs over the text a limit stopped', () => {
+    const { resolve } = defaultParser;
+
+    // A limit ends the process the way a pass producing no placeholders does,
+    // so what it settles is unescaped once like any other output: the last
+    // pass's text at the pass limit, and the message as it reached the
+    // discarded pass at the output limit.
+    expect(resolve('a\\;b {{v}}', { payload: { v: '{{v}}' } })).toBe('a;b {{v}}');
+    expect(resolve('a\\;b {{v}}', { payload: { v: 'x'.repeat(100000) } })).toBe('a;b {{v}}');
+  });
   it('the output budget is a length a pass may reach, not one it may not', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
