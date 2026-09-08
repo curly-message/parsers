@@ -383,6 +383,19 @@ describe('parser', () => {
     // maximum is used as named.
     expect(resolve('{{v:number}}', { payload: { v: { value: 1.23456, props: { number: { minimumFractionDigits: 1 } } } }, locale: defaultLocale })).toBe('1.23');
     expect(resolve('{{v:number}}', { payload: { v: { value: 1.23456, props: { number: { maximumFractionDigits: 5 } } } }, locale: defaultLocale })).toBe('1.23456');
+    // The default widens to the minimum exactly, not past it: a minimum of
+    // three over more digits than three is three digits.
+    expect(resolve('{{v:number}}', { payload: { v: 1.23456789 }, props: { number: { minimumFractionDigits: 3 } }, locale: defaultLocale })).toBe('1.235');
+  });
+  it('a layer that names the maximum decides it, even under a larger minimum', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ modifierDefaults: { number: { minimumFractionDigits: 4 } }, onReport: (report) => { reports.push(report); } });
+
+    // Only the default widens. A named maximum is what the host is asked for,
+    // and a maximum under the minimum is a request the host rejects, so the
+    // placeholder takes the chain and says so.
+    expect(resolve('{{v:number; default:D}}', { payload: { v: 1.5 }, props: { number: { maximumFractionDigits: 1 } }, locale: defaultLocale })).toBe('D');
+    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['failed-modifier/message']);
   });
   it('a zero in `modifierDefaults` is a value, not an absence', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 0 }, currency: { ratio: 0, currency: 'EUR' } } });
