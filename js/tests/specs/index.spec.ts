@@ -906,6 +906,29 @@ describe('parser', () => {
       expect(answer(format)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
     }
   });
+  it('a falsy `numeric` reaches the host formatter as written', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const day = 1000 * 60 * 60 * 24;
+
+    const answer = (numeric: any) => {
+      reports.length = 0;
+
+      const text = resolve('{{v:ago; default:FALLBACK}}', { payload: { v: -day }, props: { ago: { numeric } }, locale: defaultLocale });
+
+      return { text, reported: reports.map(({ code, origin }) => `${code}/${origin}`) };
+    };
+
+    expect(answer('always')).toEqual({ text: '1 day ago', reported: [] });
+    expect(answer(undefined)).toEqual({ text: 'yesterday', reported: [] });
+
+    // The empty string and zero are values, not absences, and values the
+    // host's formatter rejects: the placeholder takes the chain rather than
+    // reading either as the `auto` a layer naming no `numeric` leaves in place.
+    for (const numeric of ['', 0]) {
+      expect(answer(numeric)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+    }
+  });
   it('`ago` reads a delta and its negation the same way', () => {
     const { resolve } = createParser({});
     const relative = new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'auto' });
