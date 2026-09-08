@@ -2209,6 +2209,16 @@ describe('parser', () => {
     expect(resolve('{{v; 2; default:D}}', { payload: { v: 1 } })).toBe('D');
     expect(resolve('{{v:ne; z; default:D}}', { payload: { v: 'a' } })).toBe('z');
   });
+  it('a valueless option stands for its source spelling, unescaped once with the output', () => {
+    const { resolve } = defaultParser;
+
+    // The key is unescaped to be compared; the value is the spelling the
+    // author wrote, and the output's single removal of escape sequences is
+    // what reads it. `a\\\\b` compares as `a\\b` and resolves to `a\\b`, not to
+    // the `a\b` unescaping it twice would leave.
+    expect(resolve('{{v:eq; a\\\\\\\\b}}', { payload: { v: 'a\\\\b' } })).toBe('a\\\\b');
+    expect(resolve('{{v; a\\\\\\\\b}}', { payload: { v: 'a\\\\b' } })).toBe('a\\\\b');
+  });
   it('an option value and an inline default are trimmed on both sides', () => {
     const { resolve } = defaultParser;
 
