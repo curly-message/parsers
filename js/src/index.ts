@@ -418,6 +418,10 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
 
 const MAX_INTERPOLATION_PASSES = 10;
 
+// The modifier module's exports are the registry a host's table composes with.
+// They are a constant of the module, so the registry is read off them once.
+const builtInModifiers = ownModifiers(defaultModifiers);
+
 const MAX_INTERPOLATION_LENGTH = 100000;
 
 const MAX_REPORTED_LENGTH = 120;
@@ -520,12 +524,13 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     const locale: Locale | undefined = ownValue(context, 'locale', callRaised);
     const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', callRaised);
     const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', callRaised);
-    // The modifier module's exports are the registry a host's table composes
-    // with, and each layer contributes the modifiers it holds and nothing else:
-    // an entry that cannot be called is not one a message can name and not one
-    // that shadows the name it would replace. Filtered after the merge instead,
-    // a host's bad entry would take the built-in down with it.
-    const modifiers = mergeLayer(ownModifiers(defaultModifiers), ownModifiers(customModifiers, callRaised));
+    // Each layer of the registry contributes the modifiers it holds and nothing
+    // else: an entry that cannot be called is not one a message can name and
+    // not one that shadows the name it would replace. Filtered after the merge
+    // instead, a host's bad entry would take the built-in down with it. A call
+    // that holds no table composes nothing over the built-in registry, which
+    // nothing writes to.
+    const modifiers = customModifiers === undefined ? builtInModifiers : mergeLayer(builtInModifiers, ownModifiers(customModifiers, callRaised));
     // A report about the chain a message resolves through names no placeholder,
     // and the link it is about is one nothing describes, so it carries no
     // excerpt: the key is what says which message went looking.

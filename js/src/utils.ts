@@ -112,7 +112,7 @@ export const ownModifiers = (registry: any, onRaise?: () => void) => {
     if (typeof entry === 'function') output[name] = entry;
   });
 
-  return { ...output };
+  return output;
 };
 
 /**
