@@ -1023,6 +1023,13 @@ describe('parser', () => {
     // the top rung is pinned where that rounding parts instead.
     expect(at(17 * month)).toBe(relative.format(1, 'year'));
     expect(at(18 * month)).toBe(relative.format(2, 'year'));
+
+    // The month is thirteen thirds of a week, and 24 weeks is where that
+    // multiple parts from the nearby ones: it is 5.54 months, six, and six
+    // months are half a year and so a year, where 24 weeks over 4.4 is 5.45
+    // months, five.
+    expect(at(24 * week)).toBe(relative.format(1, 'year'));
+    expect(at(-24 * week)).toBe(relative.format(-1, 'year'));
   });
   it('`currency` modifier works', () => {
     const resolve = resolverFor<{ value?: number }>(defaultLocale);
