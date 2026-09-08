@@ -2477,6 +2477,15 @@ describe('parser', () => {
     expect(resolve('{{v; default:10:30}}')).toBe('10:30');
     expect(resolve('{{v; default:https://example.com/a:b}}')).toBe('https://example.com/a:b');
   });
+  it('a backslash at the end of the text denotes itself', () => {
+    const { resolve } = defaultParser;
+
+    // It has no character to cancel, so both a message and a value ending in
+    // one keep it.
+    expect(resolve('abc\\')).toBe('abc\\');
+    expect(resolve('{{v}}', { payload: { v: 'abc\\' } })).toBe('abc\\');
+    expect(resolve('{{v; default:D}}\\', { payload: {} })).toBe('D\\');
+  });
   it('the first segment named `default` is the inline default', () => {
     const { resolve } = defaultParser;
 
