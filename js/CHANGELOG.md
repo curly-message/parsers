@@ -164,16 +164,15 @@ Initial version line for `@curly-message/parser`.
 * A wrapper's `props` is checked like the two layers beneath it. The factory's
   props type parameter reaches the wrapper through the payload, so a wrapper
   carries the same modifier-keyed table `modifierDefaults` and a call's `props`
-  carry — the built-in modifiers' options plus whatever the host registered.
-  A wrapper's `props` of `{ number: { maximumFractionDigits: 'lots' } }` used
-  to compile, and then resolved to the fallback chain at runtime.
+  carry — the built-in modifiers' options plus whatever the host registered,
+  and `{ number: { maximumFractionDigits: 'lots' } }` does not compile in one.
 * A `Modifier.Wrapper` owns at least one wrapper key. All three of `value`,
-  `default` and `props` are optional, so the type admitted the empty object,
-  which resolution reads as a value and renders as the JSON text `{}` — the
-  opposite of what the annotation promised. It is now the union of its three
-  branches, each requiring one key and leaving the other two optional. The
-  constraint bites where a wrapper is written out or the payload is typed; an
-  entry of an untyped payload still collapses to `any`, as it always has.
+  `default` and `props` are optional, and a type admitting the empty object
+  would promise a wrapper where resolution reads a value and renders the JSON
+  text `{}`, so the type is the union of its three branches, each requiring
+  one key and leaving the other two optional. The constraint bites where a
+  wrapper is written out or the payload is typed; an entry of an untyped
+  payload collapses to `any`, as it always has.
 * Resolution never raises. A modifier that cannot produce a result now resolves
   its placeholder to the fallback chain instead of propagating out of
   `resolve`: `{{price:currency}}` with no currency code configured, and any
@@ -523,18 +522,19 @@ Initial version line for `@curly-message/parser`.
 * `Parser.Options` is the option bag, not the bag or nothing. The published
   type closed with `| undefined`, a union the `?` on the factory's own
   parameter already carried, so a consumer who indexed the type for one option
-  — `Parser.Options['onReport']` — or took the bag as a parameter got errors
+  — `Parser.Options['customModifiers']` — or took the bag as a parameter got
+  errors
   about a type that might be absent. Assigning a bag to it and intersecting it
   were unaffected, and whether the factory takes an argument at all is
   unchanged.
 * A modifier declares the props it reads. `Modifier.T` and
-  `Modifier.CustomModifiers` defaulted their props type parameter to `any`
-  where `Modifier.Wrapper`, `Parser.PayloadEntry`,
-  `Parser.Payload` and `Parser.Context` all default theirs to
-  `Modifier.DefaultProps`, so a modifier written down without one read its
-  `props` unchecked: `props?.['x-own']?.width` compiled against a layer
-  carrying no such name, in the modifier and in a table of them alike. Both
-  now default to that same table, and a modifier reading props of its own
+  `Modifier.CustomModifiers` defaulted their props type parameter to `any`,
+  so a modifier written down without one read its `props` unchecked:
+  `props?.['x-own']?.width` compiled against a layer carrying no such name,
+  in the modifier and in a table of them alike. Both now default to
+  `Modifier.DefaultProps`, the table every other position —
+  `Modifier.Wrapper`, `Parser.PayloadEntry`, `Parser.Payload`,
+  `Parser.Context` — defaults to, and a modifier reading props of its own
   names them — `Modifier.T<MyProps>`, `Modifier.CustomModifiers<Key, MyProps>`
   — as the factory's own props parameter already had to. The table's names
   defaulted to `any` as well, which typed every entry's `props` as `any`
@@ -546,10 +546,10 @@ Initial version line for `@curly-message/parser`.
   resolution changes; a parser that names its props type is unaffected.
 * A modifier is typed by the properties it is handed, not by the table they
   come from. What a modifier receives is the composition under its own name,
-  but its config named the whole table, so a modifier reached its own
-  properties through an assertion — `(props as { unit?: 'C' | 'F' })?.unit`
-  where `props.unit` is what it was given. `Modifier.T` names that
-  composition now, a table written with its names types each entry by what
+  and its config named the whole table, which is what it used to be handed:
+  a modifier read `props?.['x-temp']?.unit` where `props.unit` is what it is
+  given now. `Modifier.T` names that composition, a table written with its
+  names types each entry by what
   the name it sits under holds, and the built-in modifiers name theirs beside
   the layer that carries
   them: `Modifier.NumberProperties` for `Modifier.NumberProps`, and the same
@@ -560,25 +560,25 @@ Initial version line for `@curly-message/parser`.
   name as well as its props — `createParser<Payload, MyProps, 'x-temp'>` —
   and `parserOptions` stays typed by the table, so a modifier still reaches
   its own `modifierDefaults` entry. Resolution is unchanged.
-* The option bag declares the props its modifiers read. `Parser.Options` kept
-  defaulting its props type parameter to `any` after the entries it holds
-  stopped, so a bag written down without one typed nothing it carried:
-  `customModifiers` took a modifier reading `props?.['x-own']?.width` and
-  `modifierDefaults` took a layer named `x-own`, both against a built-in table
-  naming neither. It defaults to `Modifier.DefaultProps` now, like every other
+* The option bag declares the props its modifiers read. `Parser.Options`
+  defaulted its props type parameter to `any`, so a bag written down without
+  one typed nothing its `customModifiers` carried: an entry reading
+  `props?.['x-own']?.width` compiled against a built-in table naming no such
+  name. It defaults to `Modifier.DefaultProps` now, like every other
   position, and a bag carrying props of its own names them —
   `Parser.Options<Key, MyProps>`. The `parserOptions` a modifier receives is
   typed by the same table that modifier reads, so a host-defined modifier
   reaches its own `modifierDefaults` entry without a cast. The factory supplies
   the parameter itself, so a parser built through `createParser` is unaffected.
-* A modifier's config is typed as the text it is handed. `value` and
-  `defaultValue` were `any` and optional where resolution has always passed a
-  string for both — a placeholder whose value is absent takes its fallback
-  chain before any modifier is called, and that chain ends in the empty string
-  — so every built-in carried a `?? ''` that could never fire and a
-  host-defined modifier had to write one of its own to read a default as text.
-  Both are `string` and required now, and the `Modifier.DefaultValue` alias,
-  which said as much in prose, is gone. A wrapper's `default` is untouched: a
+* A modifier's config is typed as the text it is handed. `value` was `any` and
+  `defaultValue` an optional `string | undefined` where resolution has always
+  passed a string for both — a placeholder whose value is absent takes its
+  fallback chain before any modifier is called, and that chain ends in the
+  empty string — so every built-in defaulted `defaultValue` to the empty
+  string in its own signature, a default that could never fire, and a
+  host-defined modifier had to do the same to read a default as text. Both
+  are `string` and required now, and the `Modifier.DefaultValue` alias that
+  carried the `undefined` is gone. A wrapper's `default` is untouched: a
   payload may declare any value as a fallback, and it is the config that always
   sees text. Nothing about resolution changes.
 * Every entry is read the way the value conversion reads one. "Own" meant two
