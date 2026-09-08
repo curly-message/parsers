@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createParser, Parser, Report } from '../../src';
+import { createParser, Modifier, Parser, Report } from '../../src';
 import { getDateInput, getModifierInput, LINE_TERM } from '../../src/utils';
 import { MESSAGES } from '../data';
 
@@ -907,6 +907,27 @@ describe('parser', () => {
     expect(at(-hour / 2)).toBe(relative.format(-1, 'hour'));
     expect(at(500)).toBe(relative.format(1, 'second'));
     expect(at(-500)).toBe(relative.format(-1, 'second'));
+  });
+  it('`ago` counts zero at a named unit and under half a second', () => {
+    const { resolve } = createParser({});
+    const relative = (delta: number, unit: Intl.RelativeTimeFormatUnit, numeric: 'auto' | 'always' = 'auto') => new Intl.RelativeTimeFormat(defaultLocale, { numeric }).format(delta, unit);
+    const at = (value: number, ago?: Modifier.AgoProperties) => resolve('{{v:ago; default:FALLBACK}}', { payload: { v: value }, props: { ago }, locale: defaultLocale });
+    const minute = 1000 * 60;
+    const hour = 60 * minute;
+
+    // A named unit stops at the unit it names whatever the count is there, so
+    // three hours is a count of zero days, not one of three hours.
+    expect(at(-3 * hour, { format: 'day' })).toBe(relative(0, 'day'));
+    expect(at(3 * hour, { format: 'day', numeric: 'always' })).toBe(relative(0, 'day', 'always'));
+    expect(at(-2 * minute, { format: 'hour' })).toBe(relative(0, 'hour'));
+
+    // The climb starts at the count of seconds whatever it is, so a delta
+    // under half a second is a count of zero seconds, which the host reads as
+    // the present.
+    expect(at(0)).toBe(relative(0, 'second'));
+    expect(at(499)).toBe(relative(0, 'second'));
+    expect(at(-499)).toBe(relative(0, 'second'));
+    expect(at(0, { numeric: 'always' })).toBe(relative(0, 'second', 'always'));
   });
   it('`ago` climbs every step of its unit ladder', () => {
     const { resolve } = createParser({});
