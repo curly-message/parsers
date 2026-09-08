@@ -131,18 +131,21 @@ names — `'message'` for a defect in the message that was written, `'payload'`
 for one in what the caller passed, and `'limit'` for a bound this parser set.
 Every code declares one, and it ranks nothing: a report is no graver for coming
 from one of the three than from another. Only `text` derives from the payload.
-It is cut to 120 characters of what reached it, marked with a trailing `...` of
-the parser's own where the cut took something, and escaped after that — quotes,
-backslashes, and every line terminator. So a cut excerpt arrives at 123
-characters at the shortest, one carrying something to escape arrives longer
-still, and no payload can forge a line where a report is written.
+It is cut to 120 UTF-16 code units of what reached it — what a string's
+`length` counts — marked with a trailing `...` of the parser's own where the
+cut took something, and escaped after that — quotes, backslashes, and every
+line terminator. So a cut excerpt arrives at 123 code units at the shortest,
+one carrying something to escape arrives longer still, and no payload can
+forge a line where a report is written.
 
 Two guards bound resolution, and reaching either is what the two limit codes
 report. A payload value may name another placeholder, so interpolation runs
 again over what the last pass produced — at most **10 passes**, after which the
 output is returned with its remaining placeholders unresolved. And the output
-may not exceed **100000 characters**; a pass that would carry it past that
-stops, and the last output under the bound is what resolves. Both are what make
+may not exceed **100000 UTF-16 code units** — what a string's `length` counts,
+so a character outside the Basic Multilingual Plane counts twice; a pass that
+would carry it past that stops, and the last output under the bound is what
+resolves. Both are what make
 a payload value that references or multiplies its own placeholder terminate
 rather than hang the caller.
 
