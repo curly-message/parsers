@@ -77,7 +77,7 @@ export const number: Modifier.T<Modifier.NumberProperties> = (config) => {
   // over a layer's `minimumFractionDigits`, it would contradict it, `Intl`
   // would raise, and the number would resolve to a fallback nobody asked for.
   const minimum = Number(ownValue(props, 'minimumFractionDigits')) || 0;
-  const maximumFractionDigits = ownValue(props, 'maximumFractionDigits') ?? Math.max(minimum, 2);
+  const maximumFractionDigits = stated(ownValue(props, 'maximumFractionDigits'), Math.max(minimum, 2));
 
   return new Intl.NumberFormat(locale, mergeLayer(props, { maximumFractionDigits })).format(input);
 };
@@ -91,6 +91,12 @@ export const date: Modifier.T<Modifier.DateProperties> = (config) => {
 
   return new Intl.DateTimeFormat(locale, mergeLayer(props, undefined)).format(input);
 };
+
+// A property a layer holds the host's null under is one the layer names: null
+// is a value, like zero or the empty string, so it is what the host formatter
+// is handed. Only a property no layer names takes the default this module
+// states for it.
+const stated = (value: any, fallback: any) => value === undefined ? fallback : value;
 
 const testResolution = (defKey: string = '', testKey: string = '') => new RegExp(`^${defKey}s?$`).test(testKey);
 
@@ -128,8 +134,8 @@ export const ago: Modifier.T<Modifier.AgoProperties> = (config) => {
 
   const input = formattable(getModifierInput(value));
 
-  const numeric = ownValue(props, 'numeric') ?? 'auto';
-  const format = ownValue(props, 'format') ?? 'auto';
+  const numeric = stated(ownValue(props, 'numeric'), 'auto');
+  const format = stated(ownValue(props, 'format'), 'auto');
 
   if (!onLadder(format)) throw new ModifierFailure('failed-modifier');
 
@@ -144,7 +150,7 @@ export const currency: Modifier.T<Modifier.CurrencyProperties> = (config) => {
   if (!locale) throw new ModifierFailure('missing-locale');
 
   const amount = formattable(getModifierInput(value));
-  const input = formattable(getModifierInput(amount * (ownValue(props, 'ratio') ?? 1)));
+  const input = formattable(getModifierInput(amount * stated(ownValue(props, 'ratio'), 1)));
 
   // The currency style is what this modifier is, not one of the options it
   // layers: a layer naming another style asks it to stop being the modifier the

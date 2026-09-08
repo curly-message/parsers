@@ -403,6 +403,37 @@ describe('parser', () => {
     expect(resolve('{{v:number}}', { payload: { v: 1234.56 }, locale: defaultLocale })).toBe('1,235');
     expect(resolve('{{v:currency}}', { payload: { v: 1234.56 }, locale: defaultLocale })).toBe('€0.00');
   });
+  it('a property a layer sets to null is named, and null is what the formatter is handed', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({
+      modifierDefaults: { number: { maximumFractionDigits: 4 }, currency: { currency: 'USD', ratio: 100 }, ago: { numeric: 'always', format: 'day' } },
+      onReport: (report) => { reports.push(report); },
+    });
+    const day = 1000 * 60 * 60 * 24;
+
+    const answer = (message: string, value: any, props: any) => {
+      reports.length = 0;
+
+      const text = resolve(message, { payload: { v: value }, props, locale: defaultLocale });
+
+      return { text, reported: reports.map(({ code, origin }) => `${code}/${origin}`) };
+    };
+
+    // A layer's `undefined` names nothing, so the layer beneath stands.
+    expect(answer('{{v:number}}', 1.23456, { number: { maximumFractionDigits: undefined } })).toEqual({ text: '1.2346', reported: [] });
+    expect(answer('{{v:currency}}', 2, { currency: { ratio: undefined } })).toEqual({ text: '$200.00', reported: [] });
+    expect(answer('{{v:ago}}', -day, { ago: { numeric: undefined, format: undefined } })).toEqual({ text: new Intl.RelativeTimeFormat(defaultLocale, { numeric: 'always' }).format(-1, 'day'), reported: [] });
+
+    // Its null is a value (SPEC.md section 3), so it is what the modifier is
+    // handed: neither the layer beneath nor the modifier's own default
+    // resurfaces. The host reads a null maximum as zero and multiplies by a
+    // null ratio to zero, and rejects a null `numeric`; a null `format` names
+    // no rung of the ladder.
+    expect(answer('{{v:number; default:D}}', 1.23456, { number: { maximumFractionDigits: null } })).toEqual({ text: '1', reported: [] });
+    expect(answer('{{v:currency; default:D}}', 2, { currency: { ratio: null } })).toEqual({ text: '$0.00', reported: [] });
+    expect(answer('{{v:ago; default:D}}', -day, { ago: { numeric: null } })).toEqual({ text: 'D', reported: ['failed-modifier/message'] });
+    expect(answer('{{v:ago; default:D}}', -7 * day, { ago: { format: null } })).toEqual({ text: 'D', reported: ['failed-modifier/message'] });
+  });
   it('`props` compose per property over the parser defaults and the call', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
     const value = 1234.56789;

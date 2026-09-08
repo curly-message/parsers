@@ -271,7 +271,9 @@ that a modifier taking the keys it needs by name leaves alone.
 Formatting options are keyed by modifier name, and their layers compose per
 property: the parser's `modifierDefaults`, then the `props` the call passes,
 then the wrapper's own `props`. Each layer overrides only the properties it
-names, so a layer cannot reset an earlier one. Only what a layer owns composes,
+names, so a layer cannot reset an earlier one: a property set to `undefined`
+names nothing, where one set to the host's null is named and null — a value,
+like zero — is what the modifier is handed. Only what a layer owns composes,
 and only under the name the placeholder wrote: what a layer holds under other
 names is not read for it. The object a modifier is handed owns every entry it
 is configured with and carries no prototype, so a prototype somebody else wrote

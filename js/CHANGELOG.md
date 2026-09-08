@@ -132,7 +132,10 @@ Initial version line for `@curly-message/parser`.
   `modifierDefaults` and the `props` a call passes keep the same modifier-keyed
   shape and compose per property: each layer overrides only the properties it
   names, so a property set to `undefined` leaves the layer beneath it standing
-  rather than erasing it. A `customModifiers` table composes with the built-in
+  rather than erasing it. One set to the host's null is named: null is a value,
+  like zero, and it is what the modifier is handed — a null
+  `maximumFractionDigits` formats no fraction digits and a null `numeric` is
+  one the host rejects. A `customModifiers` table composes with the built-in
   one the same way, and one the host will not describe reads as no custom
   modifiers at all rather than raising.
 * A wrapper's `props` layer over the `props` the call passes, property by
