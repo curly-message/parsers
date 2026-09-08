@@ -15,8 +15,9 @@ Initial version line for `@curly-message/parser`.
   Reaching either interpolation limit hands the caller a structured `Report`
   and, where no handler is set, reports nowhere at all. Resolution still fails
   soft either way. A report's excerpt of the unsettled text arrives truncated
-  and with every line terminator escaped, U+2028 and U+2029 included, so a
-  payload cannot forge a line wherever the caller writes it.
+  — never between the halves of a surrogate pair — and with every line
+  terminator escaped, U+2028 and U+2029 included, so a payload cannot forge a
+  line wherever the caller writes it.
 * A report says who fixes it. `Report.origin` accompanies `code` — `'message'`
   for a defect in the message that was written, `'payload'` for one in what the
   caller passed, `'limit'` for a bound this parser set. Every code declares

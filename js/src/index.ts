@@ -426,10 +426,14 @@ const MAX_INTERPOLATION_LENGTH = 100000;
 
 const MAX_REPORTED_LENGTH = 120;
 
+// A cut that would fall between the halves of a surrogate pair stops one unit
+// short, so an excerpt ends on a whole character and not on an escaped half.
+const cut = (value: string) => value.slice(0, (value.codePointAt(MAX_REPORTED_LENGTH - 1) ?? 0) > 0xffff ? MAX_REPORTED_LENGTH - 1 : MAX_REPORTED_LENGTH);
+
 // `JSON.stringify` leaves a terminator it has no short escape for raw, so
 // every terminator the format holds is escaped again on top of it. The ones
 // it did escape are two characters by then and no longer match.
-const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${value.slice(0, MAX_REPORTED_LENGTH)}...` : value).slice(1, -1).replace(EVERY_TERMINATOR, unicodeEscape);
+const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${cut(value)}...` : value).slice(1, -1).replace(EVERY_TERMINATOR, unicodeEscape);
 
 const REPORT_MESSAGES: Record<Report['code'], string> = {
   'unknown-modifier': 'A placeholder named a modifier this parser does not know.',

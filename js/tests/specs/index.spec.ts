@@ -2901,6 +2901,29 @@ describe('parser', () => {
     expect(named(name)).toBe(`{{v:${name}}}`);
     expect(named(`${name}x`)).toBe(`${cut}...`);
   });
+  it('the cut stops short of a surrogate pair it would otherwise sever', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    const limit = 120;
+    const named = (name: string) => {
+      reports.length = 0;
+      resolve(`{{v:${name}}}`, { payload: { v: 1 }, locale: defaultLocale });
+
+      return reports[0].text;
+    };
+    // `{{v:` is four units, so a pair after this many fills has its high half
+    // as the bound's last unit and its low half as the first past it. A cut
+    // at the bound would keep the high half alone, and the escaping would
+    // write the half it kept as `\ud83d`.
+    const fill = 'x'.repeat(limit - '{{v:'.length - 1);
+
+    expect(named(`${fill}\u{1F600}y`)).toBe(`{{v:${fill}...`);
+    // One fill fewer and the whole pair is within the bound; one more and the
+    // whole pair is past it. Neither moves the cut.
+    expect(named(`${fill.slice(1)}\u{1F600}y`)).toBe(`{{v:${fill.slice(1)}\u{1F600}...`);
+    expect(named(`${fill}x\u{1F600}y`)).toBe(`{{v:${fill}x...`);
+  });
   it('the cut counts what reached the report, and the escaping happens after it', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });

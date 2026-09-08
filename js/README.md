@@ -132,11 +132,12 @@ for one in what the caller passed, and `'limit'` for a bound this parser set.
 Every code declares one, and it ranks nothing: a report is no graver for coming
 from one of the three than from another. Only `text` derives from the payload.
 It is cut to 120 UTF-16 code units of what reached it — what a string's
-`length` counts — marked with a trailing `...` of the parser's own where the
-cut took something, and escaped after that — quotes, backslashes, and every
-line terminator. So a cut excerpt arrives at 123 code units at the shortest,
-one carrying something to escape arrives longer still, and no payload can
-forge a line where a report is written.
+`length` counts — or one fewer where the last of them is the high half of a
+surrogate pair, so the cut never severs a character. A cut is marked with a
+trailing `...` of the parser's own, and the excerpt is escaped after that —
+quotes, backslashes, and every line terminator. So a cut excerpt arrives at
+122 code units at the shortest, one carrying something to escape arrives
+longer still, and no payload can forge a line where a report is written.
 
 Two guards bound resolution, and reaching either is what the two limit codes
 report. A payload value may name another placeholder, so interpolation runs
