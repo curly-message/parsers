@@ -2486,6 +2486,19 @@ describe('parser', () => {
     expect(resolve('{{v}}', { payload: { v: 'abc\\' } })).toBe('abc\\');
     expect(resolve('{{v; default:D}}\\', { payload: {} })).toBe('D\\');
   });
+  it('where two options share a key, the first wins', () => {
+    const { resolve } = defaultParser;
+
+    // A comparison selects the first option its key matches, in source order,
+    // so a later option under the same key is never the one selected — the
+    // equality leg of `lte` and `gte` included, and `ne`, which selects the
+    // first key that differs.
+    expect(resolve('{{v:eq; a:first; a:second}}', { payload: { v: 'a' } })).toBe('first');
+    expect(resolve('{{v:eq; a:first; A:second}}', { payload: { v: 'A' } })).toBe('first');
+    expect(resolve('{{v:lte; 2:first; 2:second}}', { payload: { v: 2 } })).toBe('first');
+    expect(resolve('{{v:gte; 2:first; 2:second}}', { payload: { v: 2 } })).toBe('first');
+    expect(resolve('{{v:ne; a:first; b:second; b:third}}', { payload: { v: 'a' } })).toBe('second');
+  });
   it('the first segment named `default` is the inline default', () => {
     const { resolve } = defaultParser;
 
