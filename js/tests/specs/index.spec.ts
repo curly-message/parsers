@@ -1653,15 +1653,24 @@ describe('parser', () => {
     expect(answer('{{ :gte }}', { payload: { default: 'CHAIN' } })).toEqual({ text: 'CHAIN', reported: [] });
     expect(answer('{{:zz}}', { payload: { default: 'CHAIN' } })).toEqual({ text: 'CHAIN', reported: ['unknown-modifier/message'] });
 
-    // The six names are the ones this format defines as comparisons, so the
-    // check reads the name the message wrote: a host that registered its own
-    // `eq` answers in the built-in's place and does not change what the
-    // message asked for.
+    // The six names are the format's comparisons while the format's own
+    // modifier answers to them. A host that registered its own `eq` replaced
+    // the comparison, so the placeholder asks the host's modifier and whether
+    // that one needs options is its own business, the way it is for any other
+    // name the host registered.
     reports.length = 0;
     const hosted = createParser({ customModifiers: { eq: () => 'HOST', 'x-pick': () => 'PICKED' }, onReport });
 
     expect(hosted.resolve('{{v:eq}}', { payload: { v: 10 } })).toBe('HOST');
     expect(hosted.resolve('{{v:x-pick}}', { payload: { v: 10 } })).toBe('PICKED');
+    expect(reports).toEqual([]);
+
+    // A host entry that is no modifier registers nothing under the name, so
+    // the format's own comparison still answers to it and is reported as it
+    // was.
+    const unregistered = createParser({ customModifiers: { eq: 'HOST' as any }, onReport });
+
+    expect(unregistered.resolve('{{v:eq}}', { payload: { v: 10 } })).toBe('');
     expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['missing-options/message']);
   });
   it('a value that cannot become text resolves to the fallback chain', () => {

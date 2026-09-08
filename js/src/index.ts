@@ -242,11 +242,16 @@ const ownSlice = (layers: any[], name: string, onRaise?: () => void) => layers.r
   return isLayer(to) ? mergeLayer(from, to, onRaise) : from;
 }, Object.create(null));
 
-// The names this format defines as comparisons. A message that writes one has
-// asked for a selection, whatever a host registered under the name, and the
-// list is typed off the registry so a name that stops being a built-in stops
-// compiling here.
+// The names this format defines as comparisons, typed off the registry so a
+// name that stops being a built-in stops compiling here. A message that writes
+// one has asked for a selection while the format's own modifier answers to the
+// name; a host that registered its own has replaced the comparison, and
+// whether that modifier needs options is its own business.
 const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'];
+
+// Whether the modifier answering to a name is the comparison this format
+// defines under it, and not one a host registered in its place.
+const isComparison = (name: string, modifiers: Record<string, unknown>) => COMPARISONS.includes(name as Modifier.DefaultKeys) && modifiers[name] === defaultModifiers[name as Modifier.DefaultKeys];
 
 const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key: messageKey, conversions, wrappers }) => {
   const modifierKeys = Object.keys(modifiers);
@@ -330,8 +335,10 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // wait on the value: a placeholder whose value is absent takes the chain
     // below and is reported all the same. A placeholder naming no key has
     // nothing to compare and is no selection, so a comparison it names was
-    // asked nothing.
-    if (key !== undefined && COMPARISONS.includes(modifierKey) && !options.length) report('missing-options', placeholder, messageKey, onReport);
+    // asked nothing. A host that registered its own modifier under the name
+    // replaced the comparison, so the placeholder asks the host's modifier
+    // and is no selection either.
+    if (key !== undefined && !options.length && isComparison(modifierKey, modifiers)) report('missing-options', placeholder, messageKey, onReport);
 
     // An absent value is nothing to compare against, whatever the modifier
     // asks: the placeholder takes the fallback chain rather than measuring the

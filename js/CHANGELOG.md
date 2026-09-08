@@ -67,8 +67,10 @@ Initial version line for `@curly-message/parser`.
   unchanged — the placeholder takes the fallback chain it always took — and the
   caller now hears that the message described no selection. The check reads how
   the placeholder is written, so it reports whether or not the payload carries
-  the key, and it reads the six names this format defines as comparisons, so a
-  host that registered its own `eq` does not change what the message asked for.
+  the key. It reads the six names this format defines as comparisons while the
+  format's own modifier answers to them: a host that registered its own `eq`
+  has replaced the comparison, and whether that modifier needs options is its
+  own business, so `{{count:eq}}` over that registration reports nothing.
   A placeholder naming no modifier is not a comparison: `{{count}}`
   interpolates and reports nothing. Neither is one naming no key, which has
   nothing to compare: `{{:eq}}` takes the fallback chain and reports nothing,
