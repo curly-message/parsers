@@ -2504,6 +2504,10 @@ describe('parser', () => {
 
     expect(resolve('{{v; default:FIRST; default:SECOND}}')).toBe('FIRST');
     expect(resolve('{{v; default:; default:SECOND}}')).toBe('');
+    // `default` alone — no colon — declares the key itself, the text
+    // `default`, the way any valueless option stands for its own spelling.
+    expect(resolve('{{v; default}}')).toBe('default');
+    expect(resolve('{{v; default; default:SECOND}}')).toBe('default');
   });
   it('`default` is reserved in lowercase only', () => {
     const { resolve } = defaultParser;
