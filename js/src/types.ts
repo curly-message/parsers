@@ -205,9 +205,13 @@ export module Modifier {
   /**
    * Modifiers by the name each answers to. A name the table declares
    * properties for holds a modifier reading that slice; one it declares none
-   * for holds a modifier reading none by name.
+   * for holds a modifier reading none by name. The slice reaches an entry
+   * through the names the table is typed with — the ones the factory infers
+   * from the table it is given, or the ones an annotation names — so a table
+   * or an option bag annotated without them types every entry, one under a
+   * built-in name included, as reading none.
    */
-  export type CustomModifiers<K extends string = any, ModifierProps = DefaultProps> = {
+  export type CustomModifiers<K extends string = Key, ModifierProps = DefaultProps> = {
     [Name in K]: Modifier.T<Name extends keyof Props<ModifierProps> ? NonNullable<Props<ModifierProps>[Name]> : {}, ModifierProps>
   };
 }

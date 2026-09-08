@@ -536,15 +536,22 @@ Initial version line for `@curly-message/parser`.
   carrying no such name, in the modifier and in a table of them alike. Both
   now default to that same table, and a modifier reading props of its own
   names them — `Modifier.T<MyProps>`, `Modifier.CustomModifiers<Key, MyProps>`
-  — as the factory's own props parameter already had to. Nothing about
+  — as the factory's own props parameter already had to. The table's names
+  defaulted to `any` as well, which typed every entry's `props` as `any`
+  whatever the table was set to; they default to `Modifier.Key` now, so a
+  table written down without its names types every entry as reading no props
+  by name, a built-in name's included — the slice a name holds reaches an
+  entry through the names the factory infers from the table it is given, or
+  the ones an annotation names, `Parser.Options<'number'>`. Nothing about
   resolution changes; a parser that names its props type is unaffected.
 * A modifier is typed by the properties it is handed, not by the table they
   come from. What a modifier receives is the composition under its own name,
   but its config named the whole table, so a modifier reached its own
   properties through an assertion — `(props as { unit?: 'C' | 'F' })?.unit`
   where `props.unit` is what it was given. `Modifier.T` names that
-  composition now, a table types each entry by what the name it sits under
-  holds, and the built-in modifiers name theirs beside the layer that carries
+  composition now, a table written with its names types each entry by what
+  the name it sits under holds, and the built-in modifiers name theirs beside
+  the layer that carries
   them: `Modifier.NumberProperties` for `Modifier.NumberProps`, and the same
   pair for `date`, `ago` and `currency`. A name a table carries no properties
   for holds a modifier handed the empty composition, which is what such a name
