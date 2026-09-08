@@ -467,10 +467,12 @@ const REPORT_LIMITS: Record<Report['code'], number | undefined> = {
 
 // The axis is a property of the code rather than of the site that reported it,
 // so every code names its own here and no report site chooses one. The table
-// names them all for the reason the limits do.
+// names them all for the reason the limits do. A modifier that could not
+// produce a result was handed the caller's value, props and locale, or is the
+// caller's own, so what it reports is the payload's.
 const REPORT_ORIGINS: Record<Report['code'], Report['origin']> = {
   'unknown-modifier': 'message',
-  'failed-modifier': 'message',
+  'failed-modifier': 'payload',
   'missing-options': 'message',
   'unserializable-value': 'payload',
   'missing-locale': 'payload',

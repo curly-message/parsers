@@ -55,7 +55,10 @@ message that was written.
 Given a locale, each formatting modifier reads its value as a particular kind
 of number, and a value that is not one resolves the placeholder to its
 `default` and is reported as `failed-modifier`, like any other result a
-modifier could not produce:
+modifier could not produce. Its origin is the payload too: the value, the props
+and the locale a modifier is handed are the caller's, and so is a
+`customModifiers` entry that raised, so none of it is a defect in the message
+that was written. The kind each reads:
 
 | Modifier | Value |
 | --- | --- |

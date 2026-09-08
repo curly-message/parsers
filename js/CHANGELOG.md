@@ -42,7 +42,10 @@ Initial version line for `@curly-message/parser`.
   each resolves the placeholder to its fallback chain, and contained alone a
   message that quietly rendered its default would read exactly like one that
   had no value to render. The specification asks for both halves: the failure
-  is contained and it is reported.
+  is contained and it is reported. The origin is the payload: the value, the
+  props and the locale a modifier is handed are the caller's, and so is a
+  `customModifiers` entry that raised, so none of it is a defect in the
+  message that was written.
 * A formatting modifier that rejects its input reports it too. `number`,
   `date`, `ago` and `currency` each test the value before the host's formatter
   sees it, and one that fails that test — blank text, text that is not a

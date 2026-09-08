@@ -395,7 +395,7 @@ describe('parser', () => {
     // and a maximum under the minimum is a request the host rejects, so the
     // placeholder takes the chain and says so.
     expect(resolve('{{v:number; default:D}}', { payload: { v: 1.5 }, props: { number: { maximumFractionDigits: 1 } }, locale: defaultLocale })).toBe('D');
-    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['failed-modifier/message']);
+    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['failed-modifier/payload']);
   });
   it('a zero in `modifierDefaults` is a value, not an absence', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 0 }, currency: { ratio: 0, currency: 'EUR' } } });
@@ -431,8 +431,8 @@ describe('parser', () => {
     // no rung of the ladder.
     expect(answer('{{v:number; default:D}}', 1.23456, { number: { maximumFractionDigits: null } })).toEqual({ text: '1', reported: [] });
     expect(answer('{{v:currency; default:D}}', 2, { currency: { ratio: null } })).toEqual({ text: '$0.00', reported: [] });
-    expect(answer('{{v:ago; default:D}}', -day, { ago: { numeric: null } })).toEqual({ text: 'D', reported: ['failed-modifier/message'] });
-    expect(answer('{{v:ago; default:D}}', -7 * day, { ago: { format: null } })).toEqual({ text: 'D', reported: ['failed-modifier/message'] });
+    expect(answer('{{v:ago; default:D}}', -day, { ago: { numeric: null } })).toEqual({ text: 'D', reported: ['failed-modifier/payload'] });
+    expect(answer('{{v:ago; default:D}}', -7 * day, { ago: { format: null } })).toEqual({ text: 'D', reported: ['failed-modifier/payload'] });
   });
   it('`props` compose per property over the parser defaults and the call', () => {
     const { resolve } = createParser({ modifierDefaults: { number: { maximumFractionDigits: 4, useGrouping: false } } });
@@ -753,7 +753,7 @@ describe('parser', () => {
     // caller carrying none.
     const origins: Record<Report['code'], Report['origin']> = {
       'unknown-modifier': 'message',
-      'failed-modifier': 'message',
+      'failed-modifier': 'payload',
       'missing-options': 'message',
       'unserializable-value': 'payload',
       'missing-locale': 'payload',
@@ -934,7 +934,7 @@ describe('parser', () => {
     // the empty one already took the chain, on a raise from the host's own
     // formatter.
     for (const format of ['YEAR', 'Day', 'quarter', 'fortnight', '', ' day', 'dayss', 42]) {
-      expect(answer(format)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+      expect(answer(format)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/payload'] });
     }
   });
   it('a falsy `numeric` reaches the host formatter as written', () => {
@@ -957,7 +957,7 @@ describe('parser', () => {
     // host's formatter rejects: the placeholder takes the chain rather than
     // reading either as the `auto` a layer naming no `numeric` leaves in place.
     for (const numeric of ['', 0]) {
-      expect(answer(numeric)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+      expect(answer(numeric)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/payload'] });
     }
   });
   it('`ago` reads a delta and its negation the same way', () => {
@@ -1503,7 +1503,7 @@ describe('parser', () => {
 
     expect(forging.resolve('{{v:x-forge; default:D}}', { payload: { v: 'X' } })).toBe('D');
     expect(forging.resolve('{{v:x-host; default:D}}', { payload: { v: 'X' } })).toBe('D');
-    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['failed-modifier/message', 'failed-modifier/message']);
+    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(['failed-modifier/payload', 'failed-modifier/payload']);
 
     // A modifier that answers, with nothing or with text, has produced a
     // result: the chain it may land on is the message's own answer, not a
@@ -2027,15 +2027,15 @@ describe('parser', () => {
     // read for itself: the same chain, resolved by the same read.
     for (const modifier of ['number', 'date', 'ago', 'currency']) {
       for (const value of ['not a number', '', '   ']) {
-        expect(answer(`{{v:${modifier}; default:FALLBACK}}`, value)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+        expect(answer(`{{v:${modifier}; default:FALLBACK}}`, value)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/payload'] });
       }
 
-      expect(answer(`{{v:${modifier}}}`, 'not a number')).toEqual({ text: '', reported: ['failed-modifier/message'] });
+      expect(answer(`{{v:${modifier}}}`, 'not a number')).toEqual({ text: '', reported: ['failed-modifier/payload'] });
     }
 
     // `currency` reads its value and then multiplies it by its ratio, so the
     // product is a second input it can reject.
-    expect(answer('{{v:currency; default:FALLBACK}}', 1e308)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/message'] });
+    expect(answer('{{v:currency; default:FALLBACK}}', 1e308)).toEqual({ text: 'FALLBACK', reported: ['failed-modifier/payload'] });
     expect(reports[0].text).toBe('{{v:currency; default:FALLBACK}}');
   });
   it('the formatting modifiers answer a value none of them can format alike', () => {
