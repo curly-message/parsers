@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-next.2
 
 * `onReport` accepts `null`, which says the same as leaving it out: the parser
   reports nowhere. A host can state the silence rather than omit it.
