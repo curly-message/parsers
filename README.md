@@ -14,7 +14,8 @@ of options and a fallback.
 
 ## Status
 
-This repository is being seeded. **Nothing here is published yet.**
+**Prerelease.** The JavaScript implementation is on npm as
+`@curly-message/parser` under the `next` dist-tag.
 
 The specification is a working draft, and the JavaScript implementation
 resolves over the format's own inputs and depends on no host library. Until the
@@ -24,7 +25,7 @@ specification reaches version 1, treat the public surface as unstable.
 
 | Path | Package | State |
 | --- | --- | --- |
-| [`js/`](./js) | `@curly-message/parser` | Unreleased |
+| [`js/`](./js) | `@curly-message/parser` | Prerelease, `next` |
 
 One directory per language, each a standalone package with its own build,
 tests and version line. Release tags are namespaced by directory
@@ -51,10 +52,10 @@ in the package's settings on npmjs.com or with
 `npm trust github --file publish-js.yml --repository curly-message/parsers --allow-publish`
 — the calling workflow's filename, which is the one the registry checks — and
 the registry attaches provenance itself. A trusted publisher can be
-registered only for a package that exists, so the first version is published
-by hand once, from `main`, by a maintainer of the scope
+registered only for a package that exists, so the first version,
+`1.0.0-next.0`, was published by hand from `main` by a maintainer of the scope
 (`cd js && npm ci && npm publish --access public --tag next`); the workflow
-refuses to run before that.
+refuses to run for a package the registry does not know.
 
 ## Specification
 

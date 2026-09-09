@@ -72,6 +72,15 @@ host's own numeric conversion makes of them: `{{v:number}}` over `{ v: '' }`
 takes the fallback chain rather than formatting a zero, and `{{v:date}}` over
 the same value takes it rather than formatting the epoch.
 
+## Installation
+
+```bash
+npm install @curly-message/parser@next
+```
+
+The package is a prerelease, published under the `next` dist-tag until a
+stable version reaches `latest`.
+
 ## Usage
 
 ```js
@@ -387,7 +396,7 @@ wants as an ordinary string value, with every backslash doubled.
 
 ## Status
 
-**Unreleased, and the public surface is unstable.**
+**Prerelease under the `next` dist-tag, and the public surface is unstable.**
 
 Nothing here references a host framework: `resolve` takes the format's own
 inputs, and an adapter that presents this parser to a host library belongs in
