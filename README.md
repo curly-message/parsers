@@ -31,6 +31,31 @@ tests and version line. Release tags are namespaced by directory
 (`js-v1.0.0`), so an implementation can leave for its own repository without
 that being a breaking change for the others.
 
+## Releasing
+
+A release is cut from `main` by the **JavaScript parser publish** workflow
+(`.github/workflows/publish-js.yml`, started by hand). `next` bumps the
+prerelease counter and publishes under the `next` dist-tag; `patch`, `minor`
+and `major` cut a release under `latest`, closing any prerelease line. The
+workflow runs the test matrix, bumps the version, turns the changelog's
+`## Unreleased` section into the version's, commits, tags (`js-v1.0.0`),
+pushes, publishes to npm, and publishes a GitHub release carrying that
+changelog section. A release whose changelog has no `## Unreleased` section
+is refused.
+
+The commit, the tag and the release are made as a GitHub App, whose id and
+private key the repository holds as the `APP_ID` variable and the
+`APP_PRIVATE_KEY` secret. npm holds no token: the workflow is the package's
+[trusted publisher](https://docs.npmjs.com/trusted-publishers), registered
+in the package's settings on npmjs.com or with
+`npm trust github --file publish-js.yml --repository curly-message/parsers --allow-publish`
+— the calling workflow's filename, which is the one the registry checks — and
+the registry attaches provenance itself. A trusted publisher can be
+registered only for a package that exists, so the first version is published
+by hand once, from `main`, by a maintainer of the scope
+(`cd js && npm ci && npm publish --access public --tag next`); the workflow
+refuses to run before that.
+
 ## Specification
 
 The format is defined in [`curly-message/spec`](https://github.com/curly-message/spec).

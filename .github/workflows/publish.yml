@@ -1,0 +1,122 @@
+name: Publish
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: 'Package directory to publish'
+        required: true
+        type: string
+      release:
+        description: 'next (a prerelease under the next dist-tag), patch, minor or major'
+        required: true
+        type: string
+    secrets:
+      APP_PRIVATE_KEY:
+        required: true
+
+jobs:
+  Publish:
+    runs-on: ubuntu-latest
+    concurrency: publish-${{ inputs.package }}
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing
+    defaults:
+      run:
+        working-directory: ${{ inputs.package }}
+
+    steps:
+      - name: Refuse anything but main
+        working-directory: .
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::A release is cut from main only, not from $GITHUB_REF_NAME."; exit 1; }
+
+      # The release commit, its tag and the GitHub release are the app's: its
+      # token passes the rules on main, and unlike the workflow's own token, a
+      # push made with it starts the workflows that watch the branch.
+      - name: Mint the release token
+        id: app
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          token: ${{ steps.app.outputs.token }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+
+      # The registry registers a trusted publisher only for a package that
+      # exists, so the first version is published by hand (see the README).
+      - name: Check the package is on the registry
+        run: |
+          name=$(node -p "require('./package.json').name")
+          npm view "$name" name > /dev/null || { echo "::error::$name is not on the registry. Publish the first version by hand, register this workflow as its trusted publisher, then run again."; exit 1; }
+
+      - name: Install dependencies
+        run: npm ci
+
+      # `next` bumps the prerelease counter (1.0.0-next.0 -> 1.0.0-next.1, and
+      # 1.0.0 -> 1.0.1-next.0); the others cut a release, which also closes a
+      # prerelease line (1.0.0-next.3 -> 1.0.0 under `patch`). The changelog's
+      # Unreleased section becomes the version's, so a release without one fails.
+      - name: Bump the version
+        id: version
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          case "$RELEASE" in
+            next) bump='prerelease --preid=next'; tag=next ;;
+            patch|minor|major) bump="$RELEASE"; tag=latest ;;
+            *) echo "::error::Unknown release type '$RELEASE'; expected next, patch, minor or major."; exit 1 ;;
+          esac
+          version=$(npm version $bump --no-git-tag-version)
+          version=${version#v}
+          grep -qx '## Unreleased' CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## Unreleased' section to release as $version."; exit 1; }
+          sed -i "s/^## Unreleased$/## $version/" CHANGELOG.md
+          echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      # The pre-commit hook lints the package; the tests job already did. One
+      # atomic push carries the commit and the tag: either both land or neither,
+      # and --follow-tags would have left a lightweight tag behind.
+      - name: Commit, tag and push
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP: ${{ steps.app.outputs.app-slug }}
+          PACKAGE: ${{ inputs.package }}
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          id=$(gh api "/users/$APP[bot]" --jq .id)
+          git config user.name "$APP[bot]"
+          git config user.email "$id+$APP[bot]@users.noreply.github.com"
+          git commit --all --no-verify --message "chore($PACKAGE): release $NAME@$VERSION"
+          git tag --annotate --message "$NAME@$VERSION" "$PACKAGE-v$VERSION"
+          git push --atomic origin main "$PACKAGE-v$VERSION"
+
+      # No token: the registry trusts the calling workflow's OIDC identity (the
+      # package's trusted publisher names its filename) and adds provenance.
+      - name: Publish to npm
+        run: npm publish --access public --tag ${{ steps.version.outputs.tag }}
+
+      # The release notes are the changelog section the bump just named.
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          PACKAGE: ${{ inputs.package }}
+          NAME: ${{ steps.version.outputs.name }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          awk -v heading="## $VERSION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          [ "$TAG" = next ] && prerelease=--prerelease || prerelease=
+          gh release create "$PACKAGE-v$VERSION" --verify-tag --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" $prerelease
