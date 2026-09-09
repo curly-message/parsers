@@ -24,6 +24,11 @@ Initial version line for `@curly-message/parser`.
   one, so the axis is the code's own and never the reporting site's. It ranks
   nothing: a report is no graver for coming from one of the three than from
   another.
+* The specification's conformance set drives this implementation. The
+  adapter of section 14.3 (`tests/conformance/adapter.ts`) presents the parser
+  to `@curly-message/conformance`, and the test run executes every case the
+  set ships — Core, Intl and Extensions, the generated boundary cases at this
+  parser's documented limits included.
 * A modifier the parser does not know is a defect in the message, not a
   comparison. `{{count:plural; 1:message; default:messages}}` used to run `eq`
   in its place and render `'message'`, answering a question the message never

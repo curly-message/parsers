@@ -252,7 +252,9 @@ risks are **DoS / robustness / prototype-chain**, not RCE/XSS.
 ## 13. Tests
 
 - For `js/`, tests live in `tests/specs/` — `index.spec.ts` for resolution,
-  `types.spec.ts` for the type surface — with fixtures in `tests/data/`.
+  `types.spec.ts` for the type surface, `conformance.spec.ts` for the
+  specification's conformance set, driven through the adapter in
+  `tests/conformance/adapter.ts` — with fixtures in `tests/data/`.
 - Drive behavior through the **public API** (`createParser(options).resolve`).
   Pure helpers may be imported directly from `src/` when that yields a more
   deterministic test.
