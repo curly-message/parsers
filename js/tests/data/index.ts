@@ -1,1 +1,1 @@
-export { default as TRANSLATIONS } from './translations';
+export { default as MESSAGES } from './messages';

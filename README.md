@@ -16,12 +16,9 @@ of options and a fallback.
 
 This repository is being seeded. **Nothing here is published yet.**
 
-The specification is a working draft, and the JavaScript implementation is
-currently a verbatim copy of
-[`@sveltekit-i18n/parser-curly`](https://github.com/sveltekit-i18n/parsers/tree/master/parser-curly),
-still shaped around the host library it grew up in. Reshaping it around the
-format's own resolution inputs is the next step; until that lands, treat the
-public surface as unstable.
+The specification is a working draft, and the JavaScript implementation
+resolves over the format's own inputs and depends on no host library. Until the
+specification reaches version 1, treat the public surface as unstable.
 
 ## Implementations
 
