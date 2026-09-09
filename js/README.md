@@ -400,7 +400,10 @@ message resolves to rather than merely what it can do — without Intl, `number`
 `date`, `ago` and `currency` are modifier names nobody registered.
 
 The specification is normative — where this implementation and the
-specification disagree, this implementation is wrong.
+specification disagree, this implementation is wrong. The specification's
+conformance set (`@curly-message/conformance`) holds it to that: the adapter of
+section 14.3 lives in `tests/conformance/adapter.ts`, and `npm test` runs
+every case the set ships against it, at every level.
 
 ## Development
 
