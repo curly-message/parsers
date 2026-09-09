@@ -22,6 +22,8 @@ Official implementations of the [Curly Message Format](https://github.com/curly-
   line. There is no root package manifest and no workspace.
 - **Release tags are namespaced by directory** — `js-v1.0.0`, `py-v0.9.0` — so
   moving an implementation to its own repository later is not a breaking event.
+  The publish workflow cuts them (`.github/workflows/publish-js.yml`; the
+  README's Releasing section says what it does).
 - The root holds only `README.md`, this file, `CLAUDE.md`, `LICENSE`,
   `.gitignore`, and `.github/workflows/`.
 
