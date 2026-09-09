@@ -2,6 +2,8 @@ name: JavaScript parser tests
 
 on:
   push:
+    # Branches only: a release tag names a tree the publish workflow has just tested.
+    branches: ['**']
     paths:
       - js/**
       - .github/workflows/tests-js.yml
