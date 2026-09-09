@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-next.1
 
 Initial version line for `@curly-message/parser`.
 
