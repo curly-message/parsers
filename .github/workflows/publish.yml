@@ -77,8 +77,9 @@ jobs:
             patch|minor|major) bump="$RELEASE"; tag=latest ;;
             *) echo "::error::Unknown release type '$RELEASE'; expected next, patch, minor or major."; exit 1 ;;
           esac
-          version=$(npm version $bump --no-git-tag-version)
-          version=${version#v}
+          npm version $bump --no-git-tag-version
+          # Read back from package.json: a version script prints while npm version runs.
+          version=$(node -p "require('./package.json').version")
           grep -qx '## Unreleased' CHANGELOG.md || { echo "::error::CHANGELOG.md has no '## Unreleased' section to release as $version."; exit 1; }
           sed -i "s/^## Unreleased$/## $version/" CHANGELOG.md
           echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
