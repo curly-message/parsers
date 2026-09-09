@@ -686,6 +686,13 @@ describe('parser', () => {
     expect(createParser(hidden('onReport', (entry: Report) => seen.push(entry))).resolve('{{v:nosuch}}', { payload: { v: 'V' } })).toBe('');
     expect(seen).toHaveLength(1);
   });
+  it('reports nowhere under a null `onReport`, as it does under none', () => {
+    const { resolve } = createParser({ onReport: null });
+
+    expect(resolve('{{v:nosuch}}', { payload: { v: 'V' } })).toBe('');
+    expect(resolve('{{v:nosuch; default:D}}', { payload: { v: 'V' }, key: 'common.key' })).toBe('D');
+    expect(resolve(undefined, { payload: { get default(): never { throw new Error('READ FAILURE'); } }, key: 'common.key' })).toBe('common.key');
+  });
   it('a polluted prototype configures no formatter', () => {
     const { resolve } = createParser({});
 

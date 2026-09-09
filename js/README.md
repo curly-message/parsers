@@ -128,8 +128,9 @@ did, so `{ eq: 'text' }` costs a caller the name it wrote and nothing further.
 The types say as much, but a JavaScript caller reaches the table regardless.
 
 `onReport` is where diagnostics go. The parser writes to no channel of its own,
-so unset it reports nowhere; resolution still fails soft, it just does so
-silently. It is called with a `Report` describing what the parser could not do
+so unset, or set to `null`, it reports nowhere; resolution still fails soft, it
+just does so silently. `null` is for a host that states the silence rather than
+omits it. It is called with a `Report` describing what the parser could not do
 — `code`, the `origin` that code declares, an English `message` carrying
 nothing from the payload, the `limit` reached where the report is about one,
 the message's `key` where one was passed, and `text`, the source of the

@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+* `onReport` accepts `null`, which says the same as leaving it out: the parser
+  reports nowhere. A host can state the silence rather than omit it.
+
 ## 1.0.0-next.1
 
 Initial version line for `@curly-message/parser`.
