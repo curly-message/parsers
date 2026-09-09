@@ -521,7 +521,7 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // the same way: own entries only. A prototype somebody else wrote to is
     // not a context a caller passed, and a caller that passed `null` for one
     // is a caller that passed none.
-    const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport');
+    const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport') ?? undefined;
     // A context entry or an entry of the option bag that refuses to be read is
     // the call's own defect rather than a placeholder's, and the key that would
     // name the message is one of the entries, so the message is what a report

@@ -251,6 +251,13 @@ describe('parser option typing', () => {
     expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier']);
   });
 
+  it('accepts `null` for `onReport`, the silence unset leaves spelled out', () => {
+    const silent: Parser.Options['onReport'] = null;
+    const { resolve } = createParser({ onReport: silent });
+
+    expect(resolve('{{v:nosuch; default:D}}', { payload: { v: 'X' } })).toBe('D');
+  });
+
   it('rejects an option bag carrying a key the parser does not read', () => {
     // @ts-expect-error the parser reads `customModifiers`, `modifierDefaults` and `onReport`
     const { resolve } = createParser({ onreport: () => {} });

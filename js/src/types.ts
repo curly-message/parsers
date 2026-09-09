@@ -236,10 +236,11 @@ export module Parser {
      */
     modifierDefaults?: Modifier.Props<Given<Props>>;
     /**
-     * Where diagnostics go. Unset, the parser reports nowhere — resolution
-     * still fails soft, it just does so silently.
+     * Where diagnostics go. Unset or `null`, the parser reports nowhere —
+     * resolution still fails soft, it just does so silently. `null` is for a
+     * host that states the silence rather than omits it.
      */
-    onReport?: OnReport;
+    onReport?: OnReport | null;
   };
 
   export type PayloadDefault = { [key in 'default']?: any };
