@@ -14,18 +14,17 @@ of options and a fallback.
 
 ## Status
 
-**Prerelease.** The JavaScript implementation is on npm as
-`@curly-message/parser` under the `next` dist-tag.
+**Stable.** The JavaScript implementation is on npm as
+`@curly-message/parser`, and implements `curly-message-1` — version 1 of the
+format, which the specification states is stable.
 
-The specification is a working draft, and the JavaScript implementation
-resolves over the format's own inputs and depends on no host library. Until the
-specification reaches version 1, treat the public surface as unstable.
+It resolves over the format's own inputs and depends on no host library.
 
 ## Implementations
 
 | Path | Package | State |
 | --- | --- | --- |
-| [`js/`](./js) | `@curly-message/parser` | Prerelease, `next` |
+| [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
 
 One directory per language, each a standalone package with its own build,
 tests and version line. Release tags are namespaced by directory
