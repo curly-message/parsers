@@ -4,6 +4,11 @@ import { EVERY_TERMINATOR, failureCode, mergeLayer, nextPlaceholder, ownKeys, ow
 
 export type { Parser, Modifier, Locale, Report };
 
+// The scanner is a named export of this entry rather than a subpath of its
+// own: the package is ESM and declares `sideEffects: false`, so a bundle that
+// never reaches it drops it, and a build-time caller is not bundled at all.
+export { createExtractor } from './extract';
+
 const hasPlaceholders = (value: any) => typeof value === 'string' && !!nextPlaceholder(value, 0);
 
 // A `Date`, a `RegExp` and a `Map` all say what they are through `toString`; a

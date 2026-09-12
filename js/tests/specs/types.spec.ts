@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createParser } from '../../src';
+import { createExtractor, createParser } from '../../src';
 import type { Modifier, Parser, Report } from '../../src';
 
 const GREETING = 'Hi {{applicationName}}!';
@@ -300,5 +300,49 @@ describe('modifier typing', () => {
     expect(choose({ value: '', options: [] })).toBe(undefined);
     // @ts-expect-error a value reaches a modifier as text, whatever the payload carried
     expect(choose({ value: 42, options: [], defaultValue: 'D' })).toBe(42);
+  });
+});
+
+// The extractor takes the options the parser takes and answers in types of its
+// own, so a caller that only extracts still names what it builds one from and
+// what it reads back.
+describe('extractor typing', () => {
+  it('builds an extractor from no options at all', () => {
+    const extract: Parser.Extractor = createExtractor();
+
+    expect(extract(GREETING)).toEqual([{ name: 'applicationName', kind: 'unknown', optional: false }]);
+  });
+
+  it('builds one from the options the parser beside it is built from', () => {
+    const options: Parser.Options = { customModifiers: { shout: ({ value }) => value.toUpperCase() }, onReport: null };
+    const extract = createExtractor(options);
+    const { resolve } = createParser(options);
+
+    expect(resolve('{{applicationName:shout}}', { payload: { applicationName: 'App' } })).toBe('APP');
+    expect(extract('{{applicationName:shout}}')).toEqual([{ name: 'applicationName', kind: 'unknown', optional: false }]);
+  });
+
+  it('reads the props a declared table names', () => {
+    const extract = createExtractor<{ pad?: { width?: number } }, 'pad'>({
+      customModifiers: { pad: ({ value, props }) => value.padStart(props.width ?? 0, '0') },
+      modifierDefaults: { pad: { width: 3 } },
+    });
+
+    expect(extract('{{count:pad}}')).toEqual([{ name: 'count', kind: 'unknown', optional: false }]);
+  });
+
+  it('rejects an option bag the parser does not read', () => {
+    // @ts-expect-error the extractor is built from `Parser.Options`, which names no `messages`
+    const extract = createExtractor({ messages: {} });
+
+    expect(extract(GREETING)).toHaveLength(1);
+  });
+
+  it('states a kind and a fallback for every parameter it names', () => {
+    const specs: readonly Parser.ParamSpec[] = createExtractor()('{{count:lt; 5:few; default:many}}');
+    const [{ name, kind, optional, values }] = specs;
+    const read: [string, Parser.ParamKind | readonly Parser.ParamKind[], boolean, readonly string[] | undefined] = [name, kind, optional, values];
+
+    expect(read).toEqual(['count', 'number', true, undefined]);
   });
 });

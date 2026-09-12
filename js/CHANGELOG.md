@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+* `createExtractor` reads the parameters a message names, as a named export
+  beside `createParser` and over the same scanner. Each parameter says the
+  payload key it is named by, what the modifiers narrow it to, the values an
+  `eq` selection names explicitly, and whether the message states a fallback for
+  it. It is the build-time half of the parser: a message scanner is of no use
+  while rendering, so the package declares `sideEffects: false` and a bundle
+  that never reaches it drops it.
+
 ## 1.0.0-next.2
 
 * `onReport` accepts `null`, which says the same as leaving it out: the parser

@@ -3,6 +3,7 @@
   "version": "1.0.0-next.2",
   "description": "JavaScript implementation of the Curly Message Format.",
   "type": "module",
+  "sideEffects": false,
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
