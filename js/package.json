@@ -1,6 +1,6 @@
 {
   "name": "@curly-message/parser",
-  "version": "1.0.0-next.2",
+  "version": "1.0.0",
   "description": "JavaScript implementation of the Curly Message Format.",
   "type": "module",
   "sideEffects": false,

@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.0
 
 First stable release. The package implements `curly-message-1` — version 1 of
 the Curly Message Format, which the specification states is stable — and
