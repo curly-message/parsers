@@ -1,106 +1,10 @@
 import * as defaultModifiers from './modifiers';
 import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report, Wrappers } from './types';
-import { failureCode, isBlank, LINE_TERM, mergeLayer, ownKeys, ownModifiers, ownValue, unicodeEscape } from './utils';
+import { EVERY_TERMINATOR, failureCode, mergeLayer, nextPlaceholder, ownKeys, ownModifiers, ownValue, parsePlaceholder, unesc, unicodeEscape } from './utils';
 
 export type { Parser, Modifier, Locale, Report };
 
-const TERMINATOR_CLASS = `[${LINE_TERM.map(unicodeEscape).join('')}]`;
-
-const TERMINATOR = new RegExp(TERMINATOR_CLASS);
-
-const EVERY_TERMINATOR = new RegExp(TERMINATOR_CLASS, 'g');
-
-// A backslash consumes the character after it, so a brace an escape claimed
-// is text rather than half of a delimiter, and a placeholder holds no line
-// terminator in any position. Both delimiters are two characters, so each scan
-// reads one character ahead, and `charAt` stops at the end of the message where
-// an index would answer for its prototype.
-const placeholderEnd = (value: string, open: number) => {
-  for (let index = open + 2; index < value.length; index += 1) {
-    const character = value[index];
-
-    if (character === '\\') {
-      if (TERMINATOR.test(value.charAt(index + 1))) return undefined;
-
-      index += 1;
-      continue;
-    }
-
-    if (TERMINATOR.test(character)) return undefined;
-
-    if (character === '{' && value.charAt(index + 1) === '{') return undefined;
-
-    if (character === '}' && value.charAt(index + 1) === '}') return index + 2;
-  }
-
-  return undefined;
-};
-
-// Both scans skip an escape sequence whole, so the parity of a run of
-// backslashes is never counted backwards and the cost stays linear in the
-// length of the message. An attempt that fails leaves the braces it rejected
-// to a later pair.
-const nextPlaceholder = (value: string, from: number): [number, number] | undefined => {
-  for (let index = from; index < value.length; index += 1) {
-    if (value[index] === '\\') {
-      index += 1;
-      continue;
-    }
-
-    if (value[index] !== '{' || value.charAt(index + 1) !== '{') continue;
-
-    const end = placeholderEnd(value, index);
-
-    if (end !== undefined) return [index, end];
-  }
-
-  return undefined;
-};
-
 const hasPlaceholders = (value: any) => typeof value === 'string' && !!nextPlaceholder(value, 0);
-
-// The syntax reserves a colon, a semicolon, either brace, a backslash and
-// whitespace, which `isBlank` answers for. A backslash writes any of them as
-// text; before anything else it is text itself, so a Windows path and a
-// regular expression survive as typed.
-const RESERVED = /[:;{}\\]/;
-
-const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/g, (sequence, character) => RESERVED.test(character) || isBlank(character) ? character : sequence) : value;
-
-// Whitespace an escape sequence claims is text, not padding around it.
-const trim = (value: string) => {
-  let start = -1;
-  let end = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    const escaped = value[index] === '\\' && index + 1 < value.length;
-
-    if (!escaped && isBlank(value[index])) continue;
-
-    if (start < 0) start = index;
-
-    index += escaped ? 1 : 0;
-    end = index + 1;
-  }
-
-  return start < 0 ? '' : value.slice(start, end);
-};
-
-// Separates on every occurrence of `separator` no escape sequence claims.
-const split = (value: string, separator: string) => {
-  const parts: string[] = [];
-  let from = 0;
-
-  for (let index = 0; index < value.length; index += 1) {
-    if (value[index] === '\\') index += 1;
-    else if (value[index] === separator) {
-      parts.push(value.slice(from, index));
-      from = index + 1;
-    }
-  }
-
-  return [...parts, value.slice(from)];
-};
 
 // A `Date`, a `RegExp` and a `Map` all say what they are through `toString`; a
 // plain object says `[object Object]`, so it is the one shape JSON describes
@@ -257,11 +161,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
   const modifierKeys = Object.keys(modifiers);
 
   const resolvePlaceholder = (placeholder: string) => {
-    const [declaration, ...declaredOptions] = split(placeholder.slice(2, -2), ';');
-    const [declaredKey, ...declaredModifier] = split(declaration, ':');
-
-    const declaredName = trim(declaredKey);
-    const key = declaredName ? unesc(declaredName) as keyof Parser.Payload : undefined;
+    const { key, modifier: modifierKey, options, inlineDefault } = parsePlaceholder(placeholder);
     // A link that refuses to be read is not a link nobody passed. `ownValue`
     // answers nothing either way, because resolution must not throw; the
     // difference between the two is what a report is for.
@@ -270,26 +170,6 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // The payload's root `default` is the fallback itself, never configuration.
     const wrapper = key !== 'default' && isWrapped(entry, wrappers, raised) ? entry : undefined;
     const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
-
-    const options: Modifier.ModifierOption[] = [];
-    let inlineDefault: string | undefined;
-
-    declaredOptions.forEach((option) => {
-      const [declaredOptionKey, ...declaredValue] = split(option, ':');
-      const optionKey = unesc(trim(declaredOptionKey));
-      // The first colon is the separator and every later one is value. An
-      // option that names no value at all stands for itself; one that ends
-      // at its colon declares the empty string.
-      const optionValue = declaredValue.length ? trim(declaredValue.join(':')) : trim(declaredOptionKey);
-
-      if (!optionKey) return;
-
-      // `default` is reserved in lowercase, so both gates read the same
-      // spelling and a segment is either the inline default or an option.
-      if (inlineDefault === undefined && optionKey === 'default') inlineDefault = optionValue;
-
-      if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
-    });
 
     const payloadText = (declared: any) => describedText(declared, raised, conversions);
 
@@ -314,10 +194,6 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       return resolvedDefault;
     };
 
-    // A modifier answers to its name, not to the spelling a message needed to
-    // write it: an escape is how a name carrying a reserved character reaches
-    // the parser, the way a key's and an option key's do.
-    const modifierKey = unesc(trim(declaredModifier.join(':')));
     const hasModifier = !!modifierKey;
 
     // A modifier nobody registered is a defect in the message, not a selection:
@@ -348,7 +224,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     if (!hasModifier && !options.length) return valueText;
 
     const modifierName = hasModifier ? modifierKey : 'eq';
-    const modifier = modifiers[modifierName as keyof typeof modifiers];
+    const modifier = modifiers[modifierName];
 
     // Fail soft: a modifier that raises resolves its placeholder, never out of `resolve`.
     // Containment is what keeps that failure out of the caller's render path,

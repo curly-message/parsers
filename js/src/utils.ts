@@ -1,4 +1,4 @@
-import type { Report } from './types';
+import type { Modifier, Report } from './types';
 
 /**
  * The format's `line-term` production (SPEC.md section 6, note 1): the four
@@ -38,6 +38,150 @@ export const unicodeEscape = (character: string) => `\\u${character.charCodeAt(0
  * membership before.
  */
 export const isBlank = (value: string) => !/[^\t\n\v\f\r\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/.test(value);
+
+const TERMINATOR_CLASS = `[${LINE_TERM.map(unicodeEscape).join('')}]`;
+
+const TERMINATOR = new RegExp(TERMINATOR_CLASS);
+
+/**
+ * Every line terminator in a text at once, for a diagnostic that escapes them
+ * all. It reads the same list the scanner does, so amending `line-term`
+ * reaches both.
+ */
+export const EVERY_TERMINATOR = new RegExp(TERMINATOR_CLASS, 'g');
+
+// A backslash consumes the character after it, so a brace an escape claimed
+// is text rather than half of a delimiter, and a placeholder holds no line
+// terminator in any position. Both delimiters are two characters, so each scan
+// reads one character ahead, and `charAt` stops at the end of the message where
+// an index would answer for its prototype.
+const placeholderEnd = (value: string, open: number) => {
+  for (let index = open + 2; index < value.length; index += 1) {
+    const character = value[index];
+
+    if (character === '\\') {
+      if (TERMINATOR.test(value.charAt(index + 1))) return undefined;
+
+      index += 1;
+      continue;
+    }
+
+    if (TERMINATOR.test(character)) return undefined;
+
+    if (character === '{' && value.charAt(index + 1) === '{') return undefined;
+
+    if (character === '}' && value.charAt(index + 1) === '}') return index + 2;
+  }
+
+  return undefined;
+};
+
+/**
+ * Where the next placeholder opens and where it ends, or nothing where the
+ * text holds none from `from` on.
+ *
+ * Both scans skip an escape sequence whole, so the parity of a run of
+ * backslashes is never counted backwards and the cost stays linear in the
+ * length of the message. An attempt that fails leaves the braces it rejected
+ * to a later pair.
+ */
+export const nextPlaceholder = (value: string, from: number): [number, number] | undefined => {
+  for (let index = from; index < value.length; index += 1) {
+    if (value[index] === '\\') {
+      index += 1;
+      continue;
+    }
+
+    if (value[index] !== '{' || value.charAt(index + 1) !== '{') continue;
+
+    const end = placeholderEnd(value, index);
+
+    if (end !== undefined) return [index, end];
+  }
+
+  return undefined;
+};
+
+// The syntax reserves a colon, a semicolon, either brace, a backslash and
+// whitespace, which `isBlank` answers for. A backslash writes any of them as
+// text; before anything else it is text itself, so a Windows path and a
+// regular expression survive as typed.
+const RESERVED = /[:;{}\\]/;
+
+/** Text as the format reads it, with every escape sequence it claims resolved. */
+export const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/g, (sequence, character) => RESERVED.test(character) || isBlank(character) ? character : sequence) : value;
+
+// Whitespace an escape sequence claims is text, not padding around it.
+const trim = (value: string) => {
+  let start = -1;
+  let end = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    const escaped = value[index] === '\\' && index + 1 < value.length;
+
+    if (!escaped && isBlank(value[index])) continue;
+
+    if (start < 0) start = index;
+
+    index += escaped ? 1 : 0;
+    end = index + 1;
+  }
+
+  return start < 0 ? '' : value.slice(start, end);
+};
+
+// Separates on every occurrence of `separator` no escape sequence claims.
+const split = (value: string, separator: string) => {
+  const parts: string[] = [];
+  let from = 0;
+
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '\\') index += 1;
+    else if (value[index] === separator) {
+      parts.push(value.slice(from, index));
+      from = index + 1;
+    }
+  }
+
+  return [...parts, value.slice(from)];
+};
+
+/**
+ * What a placeholder declares: the payload key it names, the modifier it
+ * names, the options it carries and the default it states inline. Every name
+ * arrives unescaped, because a name answers to itself rather than to the
+ * spelling a message needed to write it.
+ *
+ * Reading a placeholder is the same work whether it is being resolved or only
+ * described, so resolution and extraction read it here.
+ */
+export const parsePlaceholder = (placeholder: string): { key?: string, modifier: string, options: Modifier.ModifierOption[], inlineDefault?: string } => {
+  const [declaration, ...declaredOptions] = split(placeholder.slice(2, -2), ';');
+  const [declaredKey, ...declaredModifier] = split(declaration, ':');
+
+  const declaredName = trim(declaredKey);
+  const options: Modifier.ModifierOption[] = [];
+  let inlineDefault: string | undefined;
+
+  declaredOptions.forEach((option) => {
+    const [declaredOptionKey, ...declaredValue] = split(option, ':');
+    const optionKey = unesc(trim(declaredOptionKey));
+    // The first colon is the separator and every later one is value. An
+    // option that names no value at all stands for itself; one that ends
+    // at its colon declares the empty string.
+    const optionValue = declaredValue.length ? trim(declaredValue.join(':')) : trim(declaredOptionKey);
+
+    if (!optionKey) return;
+
+    // `default` is reserved in lowercase, so both gates read the same
+    // spelling and a segment is either the inline default or an option.
+    if (inlineDefault === undefined && optionKey === 'default') inlineDefault = optionValue;
+
+    if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
+  });
+
+  return { key: declaredName ? unesc(declaredName) : undefined, modifier: unesc(trim(declaredModifier.join(':'))), options, inlineDefault };
+};
 
 /**
  * A target's own enumerable entry under a key, or nothing. Section 4's value
