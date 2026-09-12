@@ -49,7 +49,7 @@
   },
   "homepage": "https://github.com/curly-message/parsers/tree/main/js#readme",
   "devDependencies": {
-    "@curly-message/conformance": "^1.0.0-next.1",
+    "@curly-message/conformance": "^1.0.0",
     "@eslint/js": "^10.0.1",
     "@stylistic/eslint-plugin": "^5.10.0",
     "eslint": "^10.8.1",
