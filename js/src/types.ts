@@ -303,4 +303,72 @@ export module Parser {
    * is where a caller declares what its messages expect.
    */
   export type Factory = <Payload = {}, Props = {}, Key extends string = Modifier.Key>(options?: Parser.Options<Key, Props>) => Parser.T<Parser.Context<Payload & PayloadDefault, Props & Modifier.DefaultProps>>;
+
+  /**
+   * What a parameter accepts, as far as the message says. `'unknown'` is the
+   * top of this lattice rather than a conflict marker: a parameter every value
+   * satisfies is one the message narrows not at all, and merging it with any
+   * other kind leaves the other. `'date'` is a timestamp or a date instance;
+   * `'string'` accompanies it wherever text the host reads as a date is
+   * accepted too, and accompanies `'number'` wherever an exact text match
+   * selects beside a numeric order.
+   */
+  export type ParamKind = 'unknown' | 'string' | 'number' | 'date';
+
+  /** One parameter a message names. */
+  export type ParamSpec = {
+    /**
+     * The payload key the placeholder names, already unescaped. A key is
+     * arbitrary text rather than an identifier, so whatever writes it down
+     * quotes it.
+     */
+    name: string;
+    /**
+     * What the parameter accepts, taking every placeholder naming it
+     * together. Several kinds mean the message reads the parameter in several
+     * ways and any of them is valid; `unknown` is the top of that lattice
+     * rather than a member of it, so it is reported alone and only while
+     * nothing has narrowed the parameter.
+     */
+    kind: ParamKind | readonly ParamKind[];
+    /**
+     * The values the message names explicitly: the option keys of an `eq`
+     * selection, which is the one comparison whose keys are values of the
+     * parameter rather than thresholds it is ordered against or a value it
+     * must differ from. A hint and never a closed set — a value none of them
+     * matches resolves through the fallback chain rather than failing — and
+     * absent where the message names none.
+     */
+    values?: readonly string[];
+    /**
+     * Whether the message states a fallback for the parameter. Every
+     * placeholder renders without its value, so this reports what the message
+     * says rather than what resolution tolerates: a placeholder declaring an
+     * inline `default` says the value may be missing, and one declaring none
+     * says it is expected.
+     */
+    optional: boolean;
+  };
+
+  /**
+   * The parameters a message names, in the order it first names each. This is
+   * the build-time half of the parser: a message scanner is of no use at
+   * render time, so resolution never calls it and a bundle that never reaches
+   * it drops it.
+   *
+   * A message that is not text names no parameters rather than raising: a
+   * catalogue leaf is arbitrary data. Text is also all that is scanned, so a
+   * placeholder a value carries into a later pass is not one the message
+   * itself names.
+   */
+  export type Extractor = (message: Value) => readonly ParamSpec[];
+
+  /**
+   * Builds an `Extractor` from the same options `createParser` takes: a
+   * host's own modifier registered under a name this format defines changes
+   * what a message naming it says about its value, so an extractor is built
+   * the way the parser beside it is. `modifierDefaults` and `onReport` reach
+   * nothing — extraction formats nothing and reports nothing.
+   */
+  export type ExtractorFactory = <Props = {}, Key extends string = Modifier.Key>(options?: Parser.Options<Key, Props>) => Extractor;
 }

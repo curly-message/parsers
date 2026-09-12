@@ -47,8 +47,9 @@ without inheriting a host library. Keep that true:
 ## Current state
 
 `js/` resolves over the format's own named inputs and depends on no host
-library. Nothing here is published yet, so there is no migration cost to
-getting the shape right.
+library. It publishes one entry point, carrying `createParser` for resolution
+and `createExtractor` for the build-time scanner. Nothing here is stable yet, so
+there is no migration cost to getting the shape right.
 
 ---
 
@@ -177,8 +178,11 @@ repository, not just these docs.
   function-local accumulator may be built by mutation instead, but only into a
   null-prototype object (`Object.create(null)`), and it must be finished with a
   single spread before it escapes to consumers.
-- Keep `index.ts` for the resolution pipeline; put pure, reusable helpers in
-  `utils.ts` and modifier implementations in `modifiers.ts`.
+- Keep `index.ts` for the resolution pipeline and `extract.ts` for the
+  build-time one, which reports the parameters a message names and is
+  re-exported from `index.ts` rather than from a subpath of its own; put pure,
+  reusable helpers in `utils.ts` — the placeholder scanner among them, which
+  both pipelines read — and modifier implementations in `modifiers.ts`.
 - Diagnostics leave through the `onReport` option and nowhere else — from a
   placeholder the parser could not resolve, from the chain a message resolves
   through, and from the interpolation guards. The format specifies no channel
@@ -252,10 +256,12 @@ risks are **DoS / robustness / prototype-chain**, not RCE/XSS.
 ## 13. Tests
 
 - For `js/`, tests live in `tests/specs/` — `index.spec.ts` for resolution,
-  `types.spec.ts` for the type surface, `conformance.spec.ts` for the
-  specification's conformance set, driven through the adapter in
-  `tests/conformance/adapter.ts` — with fixtures in `tests/data/`.
-- Drive behavior through the **public API** (`createParser(options).resolve`).
+  `extract.spec.ts` for the parameters a message names, `types.spec.ts` for
+  the type surface, `conformance.spec.ts` for the specification's conformance
+  set, driven through the adapter in `tests/conformance/adapter.ts` — with
+  fixtures in `tests/data/`.
+- Drive behavior through the **public API** (`createParser(options).resolve`,
+  `createExtractor(options)`).
   Pure helpers may be imported directly from `src/` when that yields a more
   deterministic test.
 - A type test must exercise the value it types. A closure that is declared and

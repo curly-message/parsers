@@ -395,6 +395,77 @@ one that parses a serialized object back reads the serialization the conversion
 produced. A caller that needs the result itself to parse passes the text it
 wants as an ordinary string value, with every backslash doubled.
 
+## Extracting parameters
+
+What a message expects of its payload is fixed when the message is written, so
+it can be read off the catalogue instead of discovered at render time.
+`createExtractor` is that reader. It is a named export beside `createParser`,
+over the same scanner, so the two can never disagree about what the syntax is;
+a message scanner is of no use while rendering, and the package declares
+`sideEffects: false` so a bundle that never reaches it drops it.
+
+```js
+import { createExtractor } from '@curly-message/parser';
+
+const extract = createExtractor();
+
+extract('You have {{count:number;}} {{count; 1:message; default:messages;}}.');
+// -> [{ name: 'count', kind: 'number', values: ['1'], optional: true }]
+```
+
+Each parameter is reported once, in the order the message first names it, and
+says what every placeholder naming it says together.
+
+| Field | Meaning |
+| --- | --- |
+| `name` | The payload key, already unescaped. A key is arbitrary text rather than an identifier, so whatever writes it down quotes it. |
+| `kind` | What the parameter accepts, or several kinds where the message reads it in several ways and any of them is valid. |
+| `values` | The values the message names explicitly. Absent where it names none. |
+| `optional` | Whether the message states a fallback for the parameter. |
+
+`kind` is what the modifier narrows the value to. Every value arrives as text,
+so a modifier that reads it as text narrows nothing and the parameter accepts
+`unknown` — the top of the lattice rather than a kind of its own.
+
+| Modifier | `kind` |
+| --- | --- |
+| none, `eq`, `ne` | `'unknown'` |
+| `lt`, `gt` | `'number'` |
+| `lte`, `gte` | `['number', 'string']` — the equality leg selects on text before the numeric one is reached |
+| `number`, `currency` | `'number'` |
+| `ago` | `'number'` — a signed millisecond delta relative to now, not a point in time |
+| `date` | `['date', 'string']` — milliseconds since the epoch, and failing that text the host reads as a date |
+
+A parameter several placeholders name accepts what all of them say together,
+and `unknown` is the top of that lattice rather than a member of it: it is what
+a parameter accepts while nothing has narrowed it, and it drops out the moment
+something does. So `{{count}}` alone reports `unknown`, and the example above —
+where a second placeholder formats the same key with `number` — reports
+`'number'` rather than `['unknown', 'number']`.
+
+`values` lists the option keys of an `eq` selection, which is the one
+comparison whose keys are values of the parameter: `ne`'s are what the value
+must differ from, and an inequality's are thresholds it is ordered against. It
+is a hint and never a closed set — a value none of them matches resolves
+through the fallback chain rather than failing.
+
+`optional` reports what the message says rather than what resolution tolerates.
+Every placeholder renders without its value, an absent one taking the fallback
+chain, so a placeholder declaring an inline `default` is the message saying the
+value may be missing, and one declaring none is the message saying it is
+expected.
+
+An extractor is built from the same options the parser beside it is built from:
+a host's own modifier registered under a name this format defines changes what
+a message naming it says about its value, and a message naming a replaced
+modifier narrows nothing. `modifierDefaults` and `onReport` reach nothing —
+extraction formats nothing and reports nothing.
+
+Only the text of a message is scanned. A message that is not text names no
+parameters rather than raising, a catalogue leaf being arbitrary data, and a
+placeholder a payload value carries into a later pass is not one the message
+itself names.
+
 ## Status
 
 **Prerelease under the `next` dist-tag, and the public surface is unstable.**
