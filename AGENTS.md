@@ -48,8 +48,9 @@ without inheriting a host library. Keep that true:
 
 `js/` resolves over the format's own named inputs and depends on no host
 library. It publishes one entry point, carrying `createParser` for resolution
-and `createExtractor` for the build-time scanner. Nothing here is stable yet, so
-there is no migration cost to getting the shape right.
+and `createExtractor` for the build-time scanner. It is released: the public
+surface is stable, so a change to it is a breaking change and costs every
+caller a migration. Propose one rather than making it.
 
 ---
 

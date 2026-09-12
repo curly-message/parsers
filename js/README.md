@@ -75,11 +75,8 @@ the same value takes it rather than formatting the epoch.
 ## Installation
 
 ```bash
-npm install @curly-message/parser@next
+npm install @curly-message/parser
 ```
-
-The package is a prerelease, published under the `next` dist-tag until a
-stable version reaches `latest`.
 
 ## Usage
 
@@ -468,7 +465,10 @@ itself names.
 
 ## Status
 
-**Prerelease under the `next` dist-tag, and the public surface is unstable.**
+**Stable.** This package implements **`curly-message-1`**, version 1 of the
+[Curly Message Format](https://github.com/curly-message/spec), which the
+specification states is stable: within that version, what a message resolves to
+does not change.
 
 Nothing here references a host framework: `resolve` takes the format's own
 inputs, and an adapter that presents this parser to a host library belongs in

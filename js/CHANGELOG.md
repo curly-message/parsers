@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+First stable release. The package implements `curly-message-1` — version 1 of
+the Curly Message Format, which the specification states is stable — and
+satisfies every conformance level it defines: Core, Intl and Extensions. The
+specification's conformance set holds it to that on every run.
+
 * `createExtractor` reads the parameters a message names, as a named export
   beside `createParser` and over the same scanner. Each parameter says the
   payload key it is named by, what the modifiers narrow it to, the values an
