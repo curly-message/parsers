@@ -1,19 +1,5 @@
 # Changelog
 
-## Unreleased
-
-The change 1.0.1 carried — the message's key became its **id**, and the chain a
-missing message took is gone — is breaking, and a patch release was the wrong
-place for it: a caller on `^1.0.0` was handed it silently. This is the parser
-1.0.1 holds, under the major it should have carried, and 1.0.1 is deprecated on
-npm, pointing here.
-
-* A package's major is the package's own. The package implements
-  `curly-message-1`, which has not moved: every message resolves to what it
-  resolved to in 1.0.1.
-* The conformance set the tests run against is `^2.0.0`, which is 1.0.1's set
-  under the same correction.
-
 ## 1.0.1
 
 Tracks revision 1.0.1 of the specification: the message's key is the message's
