@@ -1,5 +1,22 @@
 # Changelog
 
+## Unreleased
+
+Tracks revision 1.0.1 of the specification: the message's key is the message's
+**id**, and it is diagnostics only.
+
+* `resolve(message, context)` reads `id` off the context where it read `key`,
+  and a `Report` carries `id` where it carried `key`. No step of resolution
+  reads it: it says which message a report came from, and nothing else.
+* A caller that supplies no message — `undefined`, or a message no conversion
+  can describe — resolves to the empty string. The chain such a message took,
+  the payload's own `default` entry and then the key echoed verbatim, is gone:
+  nothing behind the message is read on its account, and nothing is reported,
+  because a message nobody wrote is not a defect. Every message that exists
+  resolves exactly as it did, empty ones included.
+* A caller that passed `key`, or read it off a report, passes and reads `id`
+  instead. Nothing else about a call changes.
+
 ## 1.0.0
 
 First stable release. The package implements `curly-message-1` — version 1 of

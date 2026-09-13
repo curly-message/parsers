@@ -6,8 +6,8 @@ import { MESSAGES } from '../data';
 const defaultLocale = 'en';
 const altLocale = 'cs';
 
-const message = (locale: string, key: string) => {
-  const [namespace, ...path] = key.split('.');
+const message = (locale: string, id: string) => {
+  const [namespace, ...path] = id.split('.');
 
   return MESSAGES[locale]?.[namespace]?.[path.join('.')];
 };
@@ -18,7 +18,7 @@ const defaultParser = createParser({
   },
 });
 
-const resolverFor = <P = Parser.PayloadDefault>(locale: string, { resolve }: Parser.T = defaultParser) => (key: string, payload?: Parser.Payload<P>, props?: Parser.Context['props']): string => resolve(message(locale, key), { payload, props, locale, key });
+const resolverFor = <P = Parser.PayloadDefault>(locale: string, { resolve }: Parser.T = defaultParser) => (id: string, payload?: Parser.Payload<P>, props?: Parser.Context['props']): string => resolve(message(locale, id), { payload, props, locale, id });
 
 // Four values no conversion can describe: `JSON.stringify` raises on the
 // circular one and on the one whose own read raises, `String` raises on the
@@ -82,10 +82,10 @@ const NOT_WHITESPACE = [
 ];
 
 describe('parser', () => {
-  it('returns a key string if not defined', () => {
+  it('resolves to nothing where the catalogue holds no message', () => {
     const resolve = resolverFor<{ value?: any }>(defaultLocale);
 
-    expect(resolve('common.undefined')).toBe('common.undefined');
+    expect(resolve('common.undefined')).toBe('');
   });
   it('resolves every message to a string', () => {
     const { resolve } = defaultParser;
@@ -123,11 +123,8 @@ describe('parser', () => {
   it('reads a falsy own `default` as present', () => {
     const { resolve } = defaultParser;
 
-    expect(resolve(undefined, { payload: { default: 0 }, key: 'greeting' })).toBe('0');
-    expect(resolve(undefined, { payload: { default: '' }, key: 'greeting' })).toBe('');
-    expect(resolve(undefined, { payload: { default: false }, key: 'greeting' })).toBe('false');
-
     expect(resolve('{{count}}', { payload: { default: 0 } })).toBe('0');
+    expect(resolve('{{count}}', { payload: { default: '' } })).toBe('');
     expect(resolve('{{count}}', { payload: { default: false } })).toBe('false');
     expect(resolve('{{count:number}}', { payload: { count: 'not a number', default: 0 }, locale: 'en' })).toBe('0');
     expect(resolve('{{count; default:INLINE}}', { payload: { default: 0 } })).toBe('0');
@@ -647,9 +644,6 @@ describe('parser', () => {
     expect(polluted('modifierDefaults', { number: { maximumFractionDigits: 5 } }, () => createParser({}).resolve('{{v:number}}', { payload, locale: defaultLocale }))).toBe('1.23');
     expect(polluted('number', { maximumFractionDigits: 5 }, () => createParser({ modifierDefaults: {} }).resolve('{{v:number}}', { payload, props: {}, locale: defaultLocale }))).toBe('1.23');
     expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve('{{v:nosuch}}', { payload, locale: defaultLocale }))).toBe('');
-    // The chain a message resolves through reads the channel for itself, one
-    // level above the placeholder, and reads it the same way.
-    expect(polluted('onReport', (entry: Report) => seen.push(entry), () => createParser({}).resolve(undefined, { payload: { get default(): never { throw new Error('READ FAILURE'); } }, key: 'common.key' }))).toBe('common.key');
     // The interpolation guards read the channel for themselves too, between the
     // two, and a payload value that references its own placeholder is what
     // reaches one of them.
@@ -690,8 +684,7 @@ describe('parser', () => {
     const { resolve } = createParser({ onReport: null });
 
     expect(resolve('{{v:nosuch}}', { payload: { v: 'V' } })).toBe('');
-    expect(resolve('{{v:nosuch; default:D}}', { payload: { v: 'V' }, key: 'common.key' })).toBe('D');
-    expect(resolve(undefined, { payload: { get default(): never { throw new Error('READ FAILURE'); } }, key: 'common.key' })).toBe('common.key');
+    expect(resolve('{{v:nosuch; default:D}}', { payload: { v: 'V' }, id: 'common.id' })).toBe('D');
   });
   it('a polluted prototype configures no formatter', () => {
     const { resolve } = createParser({});
@@ -729,11 +722,11 @@ describe('parser', () => {
     const read = () => {
       reports.length = 0;
 
-      resolve('{{v:nosuch}}', { payload: { v: 'V' }, key: 'common.key' });
-      resolve('{{v:x-raise}}', { payload: { v: 'V' }, key: 'common.key' });
-      resolve(circular, { payload: { default: circular }, key: 'common.key' });
-      resolve('{{v}}', { payload: { v: '{{v}}' }, key: 'common.key' });
-      resolve('{{v}}', { payload: { v: 'x'.repeat(100001) }, key: 'common.key' });
+      resolve('{{v:nosuch}}', { payload: { v: 'V' }, id: 'common.id' });
+      resolve('{{v:x-raise}}', { payload: { v: 'V' }, id: 'common.id' });
+      resolve('{{v}}', { payload: { v: circular }, id: 'common.id' });
+      resolve('{{v}}', { payload: { v: '{{v}}' }, id: 'common.id' });
+      resolve('{{v}}', { payload: { v: 'x'.repeat(100001) }, id: 'common.id' });
 
       return reports.map(({ code, limit }) => `${code}=${limit}`).join(' ');
     };
@@ -772,7 +765,7 @@ describe('parser', () => {
     resolve('{{v:x-raise}}', { payload: { v: 'V' } });
     resolve('{{v:eq}}', { payload: { v: 'V' } });
     resolve('{{v:number}}', { payload: { v: 1 } });
-    resolve(circular, { payload: { default: circular } });
+    resolve('{{v}}', { payload: { v: circular } });
     resolve('{{v}}', { payload: { v: '{{v}}' } });
     resolve('{{v}}', { payload: { v: 'x'.repeat(100001) } });
 
@@ -789,7 +782,7 @@ describe('parser', () => {
   it('the scanner reads no character past the end of the message', () => {
     const { resolve } = createParser({});
     const messages = ['{{v}', '{{v{', '{{v', 'a{', '{{{}', '{{v:eq}'];
-    const resolveAll = () => messages.map((message) => resolve(message, { payload: { v: 'V', default: 'CHAIN' }, key: 'common.key' })).join('|');
+    const resolveAll = () => messages.map((message) => resolve(message, { payload: { v: 'V', default: 'CHAIN' }, id: 'common.id' })).join('|');
 
     // Both delimiters are two characters, so every scan asks what follows the
     // character it is on, and past the last one that question leaves the
@@ -813,7 +806,7 @@ describe('parser', () => {
     const resolveAll = () => {
       reports.length = 0;
 
-      const text = messages.map((each) => resolve(each, { payload: { v: 'V', default: 'CHAIN' }, locale: defaultLocale, key: 'common.key' })).join('|');
+      const text = messages.map((each) => resolve(each, { payload: { v: 'V', default: 'CHAIN' }, locale: defaultLocale, id: 'common.id' })).join('|');
 
       return `${text} ${reports.map(({ code }) => code).join(' ')}`;
     };
@@ -840,10 +833,17 @@ describe('parser', () => {
 
     expect(polluted('payload', { v: 'HIJACKED' }, () => resolve('{{v; default:D}}', {}))).toBe('D');
     expect(polluted('payload', { v: 'HIJACKED' }, () => resolve('{{v; default:D}}'))).toBe('D');
-    expect(polluted('payload', { default: 'HIJACKED' }, () => resolve(undefined, { key: 'a.b' }))).toBe('a.b');
-    expect(polluted('key', 'HIJACKED', () => resolve(undefined, {}))).toBe('');
     expect(polluted('locale', altLocale, () => resolve('{{v:number}}', { payload: { v: 1.5 } }))).toBe('');
     expect(polluted('props', { number: { minimumFractionDigits: 4 } }, () => resolve('{{v:number}}', { payload: { v: 1.5 }, locale: defaultLocale }))).toBe('1.5');
+
+    // The id reaches no output, so what a prototype wrote is looked for where
+    // the id does reach: the report that would name it.
+    let named: unknown = 'UNSET';
+    const reporting = createParser({ onReport: ({ id }) => { named = id; } });
+
+    polluted('id', 'HIJACKED', () => reporting.resolve('{{v:nosuch}}', { payload: { v: 'V' } }));
+
+    expect(named).toBeUndefined();
   });
   it('a context nobody passed and one passed as `null` resolve alike', () => {
     const { resolve } = createParser({});
@@ -1181,13 +1181,13 @@ describe('parser', () => {
 
     // A modifier's answer converts the way a payload entry does, so an answer
     // it cannot describe is described as missing the same way one of those is.
-    expect(resolve('{{v:x-circ; default:D}}', { payload, locale: defaultLocale, key: 'common.opaque' })).toBe('D');
+    expect(resolve('{{v:x-circ; default:D}}', { payload, locale: defaultLocale, id: 'common.opaque' })).toBe('D');
 
     expect(reports).toEqual([{
       code: 'unserializable-value',
       origin: 'payload',
       message: 'A value could not become text, so resolution read it as missing.',
-      key: 'common.opaque',
+      id: 'common.opaque',
       text: '{{v:x-circ; default:D}}',
     }]);
 
@@ -1274,7 +1274,7 @@ describe('parser', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
 
-    expect(resolve('{{value:plural; 1:one; default:many}}', { payload: { value: 1 }, key: 'common.plural' })).toBe('many');
+    expect(resolve('{{value:plural; 1:one; default:many}}', { payload: { value: 1 }, id: 'common.plural' })).toBe('many');
     expect(resolve('{{value:plural; 1:one}}', { payload: { value: 1 } })).toBe('');
     expect(resolve('{{value:GT; 1:ONE; default:FALLBACK}}', { payload: { value: 1 } })).toBe('FALLBACK');
     expect(resolve('{{value:x-icon; ok:CHECK; default:FALLBACK}}', { payload: { value: 'ok' } })).toBe('FALLBACK');
@@ -1285,7 +1285,7 @@ describe('parser', () => {
       code: 'unknown-modifier',
       origin: 'message',
       message: 'A placeholder named a modifier this parser does not know.',
-      key: 'common.plural',
+      id: 'common.plural',
       text: '{{value:plural; 1:one; default:many}}',
     });
   });
@@ -1364,14 +1364,14 @@ describe('parser', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
 
-    expect(resolve('{{v; default:INLINE}}', { payload: { v: circular }, key: 'common.opaque' })).toBe('INLINE');
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: circular }, id: 'common.opaque' })).toBe('INLINE');
 
     expect(reports).toHaveLength(1);
     expect(reports[0]).toEqual({
       code: 'unserializable-value',
       origin: 'payload',
       message: 'A value could not become text, so resolution read it as missing.',
-      key: 'common.opaque',
+      id: 'common.opaque',
       text: '{{v; default:INLINE}}',
     });
 
@@ -1696,103 +1696,80 @@ describe('parser', () => {
 
     expect(resolveOpaque('{{value:test; default:FALLBACK}}', { payload: { value: 'TEST_STRING' } })).toBe('FALLBACK');
   });
-  it('a message no conversion can describe is a message that does not exist', () => {
+  it('a message no conversion can describe is nothing to resolve', () => {
     const { resolve } = defaultParser;
     const payload = { default: 'DEFAULT VALUE' };
 
-    expect(resolve(circular, { payload, key: 'common.key' })).toBe('DEFAULT VALUE');
-    expect(resolve(new Opaque(), { payload, key: 'common.key' })).toBe('DEFAULT VALUE');
-    expect(resolve(circular, { key: 'common.key' })).toBe('common.key');
-    expect(resolve(new Opaque(), { key: 'common.key' })).toBe('common.key');
+    // Nothing stands behind a message that is not there. The payload speaks for
+    // the placeholders of a message, and a message nothing describes has none;
+    // the id says which message went looking, and saying it is not resolving it.
+    expect(resolve(circular, { payload, id: 'common.id' })).toBe('');
+    expect(resolve(new Opaque(), { payload, id: 'common.id' })).toBe('');
+    expect(resolve(circular, { id: 'common.id' })).toBe('');
+    expect(resolve(new Opaque(), { id: 'common.id' })).toBe('');
 
-    // A caller that named neither has nothing left to fall back to, whichever
-    // way the conversion failed: a read that raises and a value that serializes
-    // to nothing are as absent as a message that raises on the way to text.
+    // Whichever way the conversion failed: a read that raises and a value that
+    // serializes to nothing are as absent as a message that raises on the way
+    // to text.
     expect(resolve(circular)).toBe('');
     expect(resolve(new Opaque())).toBe('');
     expect(resolve(raisingRead)).toBe('');
     expect(resolve(noDescription)).toBe('');
 
     // A message a conversion does describe is still the message.
-    expect(resolve({ a: 1 }, { payload, key: 'common.key' })).toBe('{"a":1}');
-    expect(resolve(42, { payload, key: 'common.key' })).toBe('42');
+    expect(resolve({ a: 1 }, { payload, id: 'common.id' })).toBe('{"a":1}');
+    expect(resolve(42, { payload, id: 'common.id' })).toBe('42');
   });
-  it('an empty message is a message, and the chain stops at it', () => {
+  it('an empty message is a message, and nothing is read in its place', () => {
     const { resolve } = defaultParser;
 
-    // The chain steps past a message no conversion describes, not past one that
-    // describes to nothing: a translator who wrote an empty string wrote a
-    // message, and answering it with the payload's link or with the key would
-    // put text on screen where that translator asked for none.
-    expect(resolve('', { payload: { default: 'CHAIN' }, key: 'common.key' })).toBe('');
-    expect(resolve('', { key: 'common.key' })).toBe('');
+    // A translator who wrote an empty string wrote a message: answering it with
+    // the payload's `default` would put text on screen where that translator
+    // asked for none, and that entry is there for the placeholders it fills.
+    expect(resolve('', { payload: { default: 'CHAIN' }, id: 'common.id' })).toBe('');
+    expect(resolve('', { id: 'common.id' })).toBe('');
     expect(resolve('', { payload: { default: 'CHAIN' } })).toBe('');
+    expect(resolve('{{v}}', { payload: { default: 'CHAIN' }, id: 'common.id' })).toBe('CHAIN');
   });
-  it('the chain a message resolves through reports what it read and could not describe', () => {
+  it('a message that is not there reads nothing behind it and reports nothing', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
 
-    // The message resolved, so nothing read the payload's link behind it.
-    expect(resolve('MESSAGE', { payload: { default: circular }, key: 'common.key' })).toBe('MESSAGE');
+    // The message resolved, so nothing read the payload's entry behind it.
+    expect(resolve('MESSAGE', { payload: { default: circular }, id: 'common.id' })).toBe('MESSAGE');
     expect(reports).toHaveLength(0);
 
-    // The message did not, so the link is read — and a link that is present
-    // and cannot be described is a payload value that went missing, the same
-    // one a placeholder would report. The report names no placeholder, because
-    // there is none: the key is what says which message went looking.
-    expect(resolve(circular, { payload: { default: circular }, key: 'common.key' })).toBe('common.key');
-    expect(reports).toEqual([{
-      code: 'unserializable-value',
-      origin: 'payload',
-      message: 'A value could not become text, so resolution read it as missing.',
-      key: 'common.key',
-      limit: undefined,
-      text: '',
-    }]);
-
-    // A link that refuses to be read reports too, like one that cannot become
-    // text: both are entries the payload carries and resolution could not use.
-    expect(resolve(circular, { payload: { get default() { throw new Error('READ FAILURE'); } }, key: 'common.key' })).toBe('common.key');
-    expect(reports.map(({ code }) => code)).toEqual(Array(2).fill('unserializable-value'));
-
-    // A link nobody passed is not a defect, and neither is a message nothing
-    // describes: that message is one nobody wrote, so it echoes its key alone.
-    expect(resolve(circular, { payload: {}, key: 'common.key' })).toBe('common.key');
-    expect(resolve(circular, { key: 'common.key' })).toBe('common.key');
-    expect(reports).toHaveLength(2);
-  });
-  it('a message default no conversion can describe is skipped, not resolved', () => {
-    const { resolve } = defaultParser;
-
-    expect(resolve(undefined, { payload: { default: circular }, key: 'common.key' })).toBe('common.key');
-    expect(resolve(undefined, { payload: { default: new Opaque() }, key: 'common.key' })).toBe('common.key');
+    // And a message that did not resolve reads it no more than that one did.
+    // An entry nothing describes is a defect where a placeholder asked for it
+    // and nowhere else, and a message nobody wrote is no defect at all: there
+    // is nothing behind it to read and nothing to report.
+    expect(resolve(circular, { payload: { default: circular }, id: 'common.id' })).toBe('');
+    expect(resolve(circular, { payload: { get default() { throw new Error('READ FAILURE'); } }, id: 'common.id' })).toBe('');
+    expect(resolve(undefined, { payload: { default: 'CHAIN' }, id: 'common.id' })).toBe('');
     expect(resolve(undefined, { payload: { default: circular } })).toBe('');
+    expect(reports).toHaveLength(0);
   });
-  it('the key echo is the key, not text the format resolves over', () => {
+  it('the id reaches no output, whatever the caller spelled it as', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
     const backslash = String.fromCharCode(92);
 
-    // A key echo is what the format says when there is no message, not one of
-    // the things that may resolve to text carrying placeholders. A key shaped
-    // like a placeholder is therefore echoed rather than resolved, and an
-    // escape sequence inside one stays as the caller spelled it.
-    expect(resolve(undefined, { payload: { name: 'Alice' }, key: '{{name}}' })).toBe('{{name}}');
-    expect(resolve(undefined, { key: '{{lit}}' })).toBe('{{lit}}');
-    expect(resolve(undefined, { key: `a${backslash};b` })).toBe(`a${backslash};b`);
+    // The id is what a report names the message by, not text the format
+    // resolves over and not text it falls back to. One shaped like a
+    // placeholder is neither resolved nor echoed, and neither is one of another
+    // shape: nothing reads it on the way to an output.
+    expect(resolve(undefined, { payload: { name: 'Alice' }, id: '{{name}}' })).toBe('');
+    expect(resolve(undefined, { id: '{{lit}}' })).toBe('');
+    expect(resolve(undefined, { id: `a${backslash};b` })).toBe('');
+    expect(resolve(undefined, { payload: { a: '{{a}}' }, id: '{{a}}' })).toBe('');
+    expect(resolve(undefined, { id: 42 as any })).toBe('');
+    expect(resolve(undefined, { id: {} as any })).toBe('');
+    expect(resolve(undefined, {})).toBe('');
     expect(reports).toHaveLength(0);
 
-    // Nothing resolves, so no bound is reached and the payload behind the key
-    // is not read a second time: the echo ends the chain.
-    expect(resolve(undefined, { payload: { a: '{{a}}' }, key: '{{a}}' })).toBe('{{a}}');
-    expect(resolve(undefined, { payload: { default: circular }, key: '{{name}}' })).toBe('{{name}}');
-    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
-
-    // The key still becomes text, because `resolve` answers with text, and a
-    // caller that named no key still has nothing to echo.
-    expect(resolve(undefined, { key: 42 as any })).toBe('42');
-    expect(resolve(undefined, { key: {} as any })).toBe('{}');
-    expect(resolve(undefined, {})).toBe('');
+    // Where a report does name it, it is the id the caller passed, as passed.
+    expect(resolve('{{v:nosuch}}', { payload: { v: 'V' }, id: 'common.id' })).toBe('');
+    expect(reports.map(({ id }) => id)).toEqual(['common.id']);
   });
   it('a message becomes text before it is read, not after', () => {
     const { resolve } = defaultParser;
@@ -1832,7 +1809,6 @@ describe('parser', () => {
 
     expect(resolve('{{value}}', { payload: { get value() { return raise(); }, default: 'FALLBACK' } })).toBe('FALLBACK');
     expect(resolve('{{value}}', { payload: { get default() { return raise(); } } })).toBe('');
-    expect(resolve(undefined, { payload: { get default() { return raise(); } }, key: 'KEY' })).toBe('KEY');
   });
   it('a payload entry the host will not describe resolves to the fallback chain', () => {
     const { resolve } = defaultParser;
@@ -1926,7 +1902,7 @@ describe('parser', () => {
 
     // A configuration entry and a context entry are read once for the call
     // rather than at a placeholder, so the text that went looking is what
-    // names them — and a key that refuses to be read names nothing at all.
+    // names them — and an id that refuses to be read names nothing at all.
     expect(answer('{{v:number}}', { payload, locale: defaultLocale }, boom('customModifiers')))
       .toEqual({ text: formatted, reported: ['unserializable-value/payload/{{v:number}}'] });
     expect(answer('{{v:number}}', withOwn(boom('props'), { payload, locale: defaultLocale })))
@@ -1935,18 +1911,18 @@ describe('parser', () => {
     expect(answer('{{v:number}}', withOwn(boom('locale'), { payload })))
       .toEqual({ text: '', reported: ['unserializable-value/payload/{{v:number}}', 'missing-locale/payload/{{v:number}}'] });
 
-    expect(reports[0].key).toBeUndefined();
-    expect(answer('{{v}}', withOwn(boom('key'), { payload }))).toEqual({ text: '1234.5678', reported: ['unserializable-value/payload/{{v}}'] });
-    expect(reports[0].key).toBeUndefined();
+    expect(reports[0].id).toBeUndefined();
+    expect(answer('{{v}}', withOwn(boom('id'), { payload }))).toEqual({ text: '1234.5678', reported: ['unserializable-value/payload/{{v}}'] });
+    expect(reports[0].id).toBeUndefined();
 
     // The two are told apart by what the report names: a read at a placeholder
     // names the placeholder and not the message around it, and a read of the
-    // call's own structure names the message and carries the key it was
+    // call's own structure names the message and carries the id it was
     // resolving under.
     expect(answer('A {{v:number}} B', { payload, locale: defaultLocale, props: boom('number') }))
       .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/{{v:number}}'] });
-    expect(answer('A {{v}} B', withOwn(boom('payload'), { key: 'common.key' }))).toEqual({ text: 'A  B', reported: ['unserializable-value/payload/A {{v}} B'] });
-    expect(reports[0].key).toBe('common.key');
+    expect(answer('A {{v}} B', withOwn(boom('payload'), { id: 'common.id' }))).toEqual({ text: 'A  B', reported: ['unserializable-value/payload/A {{v}} B'] });
+    expect(reports[0].id).toBe('common.id');
 
     // A wrapper is read entry by entry like the payload holding it, so each of
     // its own keys refuses on its own: the chain steps past the value it would
@@ -2053,7 +2029,7 @@ describe('parser', () => {
     const answer = (modifier: string, value: any) => {
       reports.length = 0;
 
-      const text = resolve(`{{v:${modifier}; default:FALLBACK}}`, { payload: { v: value }, props, locale: defaultLocale, key: 'common.key' });
+      const text = resolve(`{{v:${modifier}; default:FALLBACK}}`, { payload: { v: value }, props, locale: defaultLocale, id: 'common.id' });
 
       return `${text} ${reports.map(({ code }) => code).join(' ')}`;
     };
@@ -2565,7 +2541,7 @@ describe('parser', () => {
     const inherited = Object.create({ default: 'INHERITED DEFAULT' });
 
     expect(resolve('common.placeholder', inherited)).toBe('VALUES: , , , ');
-    expect(resolve('common.undefined', inherited)).toBe('common.undefined');
+    expect(resolve('common.undefined', inherited)).toBe('');
   });
   it('self-referential payload values do not overflow', () => {
     const resolve = resolverFor<{ value?: any, first?: string, second?: string }>(defaultLocale);
@@ -2588,7 +2564,7 @@ describe('parser', () => {
       code: 'pass-limit',
       origin: 'limit',
       message: 'Interpolation stopped after 10 passes. A payload value probably references its own placeholder.',
-      key: 'common.placeholder_chain',
+      id: 'common.placeholder_chain',
       limit: 10,
       text: '{{v11}}',
     });
@@ -2605,7 +2581,7 @@ describe('parser', () => {
     for (let level = 0; level < 24; level += 1) shared = { a: shared, b: shared };
 
     expect(resolve('{{v; default:INLINE}}', { payload: { v: shared } })).toBe('INLINE');
-    expect(resolve(shared as string, { payload: {}, key: 'common.shared' })).toBe('common.shared');
+    expect(resolve(shared as string, { payload: {}, id: 'common.shared' })).toBe('');
 
     expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
 
@@ -2816,7 +2792,7 @@ describe('parser', () => {
       onReport: (report) => { reports.push(report); },
       customModifiers: {
         'x-nest': ({ value }) => {
-          nested.push(parser.resolve(value, { payload: { c: counted, loop: '{{loop}}', big }, key: 'inner' }));
+          nested.push(parser.resolve(value, { payload: { c: counted, loop: '{{loop}}', big }, id: 'inner' }));
 
           return `[${nested.length}]`;
         },
@@ -2829,15 +2805,15 @@ describe('parser', () => {
     // owns. The inner call stops at ten passes while the outer walks a
     // three-link chain to the end, and stops at the output bound while the
     // outer goes on building the text it was building.
-    expect(parser.resolve('{{c}} {{m:x-nest}} {{a}}', { payload: { c: counted, m: '{{c}}{{c}} {{loop}}', a: '{{b}}', b: '{{d}}', d: 'D' }, key: 'outer' })).toBe('C [1] D');
-    expect(parser.resolve('{{m:x-nest}}{{big}}', { payload: { m: '{{big}}{{big}}', big }, key: 'outer' })).toBe(`[2]${big}`);
+    expect(parser.resolve('{{c}} {{m:x-nest}} {{a}}', { payload: { c: counted, m: '{{c}}{{c}} {{loop}}', a: '{{b}}', b: '{{d}}', d: 'D' }, id: 'outer' })).toBe('C [1] D');
+    expect(parser.resolve('{{m:x-nest}}{{big}}', { payload: { m: '{{big}}{{big}}', big }, id: 'outer' })).toBe(`[2]${big}`);
 
     expect(nested).toEqual(['CC {{loop}}', '{{big}}{{big}}']);
     expect(coercions).toBe(2);
 
     // And a report names the message the call that made it was resolving, not
     // the one further out.
-    expect(reports.map(({ code, key }) => `${key}/${code}`)).toEqual(['inner/pass-limit', 'inner/output-limit']);
+    expect(reports.map(({ code, id }) => `${id}/${code}`)).toEqual(['inner/pass-limit', 'inner/output-limit']);
   });
   it('a resolution that never stops beginning another still fails soft', () => {
     // Nothing bounds a resolution a host's own callback begins, so what ends
@@ -3017,7 +2993,7 @@ describe('parser', () => {
       origin: 'limit',
       message: 'Interpolation stopped before exceeding 100000 characters. A payload value probably multiplies its own placeholder.',
       limit: 100000,
-      key: 'common.placeholder_chain',
+      id: 'common.placeholder_chain',
     });
     expect(reports[0].text.length).toBeLessThan(300);
   });
@@ -3040,7 +3016,7 @@ describe('parser', () => {
     const at = (length: number) => {
       reports.length = 0;
 
-      return resolve('{{v}}', { payload: { v: 'x'.repeat(length) }, key: 'common.key' });
+      return resolve('{{v}}', { payload: { v: 'x'.repeat(length) }, id: 'common.id' });
     };
 
     // A pass that lands exactly on the bound has not exceeded it, so what it
@@ -3062,7 +3038,7 @@ describe('parser', () => {
       reports.length = 0;
       ran = 0;
 
-      return counting.resolve(`${'x'.repeat(length)}{{v:x-count}}`, { payload: { v: 'V' }, key: 'common.key' });
+      return counting.resolve(`${'x'.repeat(length)}{{v:x-count}}`, { payload: { v: 'V' }, id: 'common.id' });
     };
 
     expect(after(limit)).toBe('x'.repeat(limit));
@@ -3080,7 +3056,7 @@ describe('parser', () => {
       reports.length = 0;
       ran = 0;
 
-      return counting.resolve(`{{g}}${'x'.repeat(length)}{{v:x-count}}`, { payload: { g: 'g'.repeat(105), v: 'V' }, key: 'common.key' });
+      return counting.resolve(`{{g}}${'x'.repeat(length)}{{v:x-count}}`, { payload: { g: 'g'.repeat(105), v: 'V' }, id: 'common.id' });
     };
 
     expect(grown(limit - 105)).toHaveLength(limit);
@@ -3097,7 +3073,7 @@ describe('parser', () => {
     const before = (length: number) => {
       reports.length = 0;
 
-      return resolve(`{{v}}${'x'.repeat(length)}`, { payload: { v: 'yyyyy' }, key: 'common.key' });
+      return resolve(`{{v}}${'x'.repeat(length)}`, { payload: { v: 'yyyyy' }, id: 'common.id' });
     };
 
     expect(before(limit - 5)).toBe(`yyyyy${'x'.repeat(limit - 5)}`);
@@ -3113,7 +3089,7 @@ describe('parser', () => {
     // The pass past the bound is discarded whole, so what resolves is the last
     // text under it, and that is what the report describes: it is where the
     // placeholder that overran still stands.
-    expect(resolve('{{a}}', { payload: { a: '{{b}}', b: 'x'.repeat(100001) }, key: 'common.key' })).toBe('{{b}}');
+    expect(resolve('{{a}}', { payload: { a: '{{b}}', b: 'x'.repeat(100001) }, id: 'common.id' })).toBe('{{b}}');
     expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(['output-limit/{{b}}']);
   });
   it('a pass is bounded as it is built, so it cannot outgrow what a string can hold', () => {
@@ -3121,12 +3097,12 @@ describe('parser', () => {
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
 
     const multiplied = '{{b}}'.repeat(10400);
-    const output = resolve('{{a}}', { payload: { a: multiplied, b: 'x'.repeat(52000) }, key: 'common.placeholder_chain' });
+    const output = resolve('{{a}}', { payload: { a: multiplied, b: 'x'.repeat(52000) }, id: 'common.placeholder_chain' });
 
     expect(output).toBe(multiplied);
 
     expect(reports).toHaveLength(1);
-    expect(reports[0]).toMatchObject({ code: 'output-limit', origin: 'limit', limit: 100000, key: 'common.placeholder_chain' });
+    expect(reports[0]).toMatchObject({ code: 'output-limit', origin: 'limit', limit: 100000, id: 'common.placeholder_chain' });
   });
   it('a pass no string could hold is measured rather than built', () => {
     const reports: Report[] = [];
@@ -3137,7 +3113,7 @@ describe('parser', () => {
     const held = 536870888;
     const message = `{{v}}${'a'.repeat(Math.ceil(held / 2) + 50)}`;
 
-    const output = resolve(message, { payload: { v: message }, key: 'common.key' });
+    const output = resolve(message, { payload: { v: message }, id: 'common.id' });
 
     // Lengths rather than the text: a mismatch prints a number here and a
     // quarter of a gigabyte of `a` anywhere else.
