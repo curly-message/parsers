@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.0.1
 
 Tracks revision 1.0.1 of the specification: the message's key is the message's
 **id**, and it is diagnostics only.
