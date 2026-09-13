@@ -32,13 +32,13 @@ describe('payload typing', () => {
   it('keeps the `default` payload key', () => {
     const { resolve } = createParser();
 
-    expect(resolve(undefined, { payload: { default: 'FALLBACK' }, key: 'greeting' })).toBe('FALLBACK');
+    expect(resolve('{{applicationName}}', { payload: { default: 'FALLBACK' } })).toBe('FALLBACK');
   });
 
-  it('resolves to the key when the message is missing', () => {
+  it('resolves to nothing when the message is missing', () => {
     const { resolve } = createParser();
 
-    expect(resolve(undefined, { key: 'greeting' })).toBe('greeting');
+    expect(resolve(undefined, { id: 'greeting' })).toBe('');
   });
 
   it('resolves without a context', () => {
@@ -184,7 +184,7 @@ describe('payload typing', () => {
   it('rejects a context key resolution does not read', () => {
     const { resolve } = createParser();
 
-    // @ts-expect-error resolution reads the payload, the props, the locale and the key
+    // @ts-expect-error a call carries the payload, the props, the locale and the id
     expect(resolve(GREETING, { payload: { applicationName: 'App' }, extra: true })).toBe('Hi App!');
   });
 

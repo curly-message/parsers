@@ -90,25 +90,26 @@ resolve('Hello, {{name; default:Guest;}}!', { payload: { name: 'Alice' }, locale
 ```
 
 `createParser(options?)` returns a parser whose `resolve(message, context?)`
-takes the four inputs resolution is defined over, plus the message's own key:
+takes the four inputs resolution is defined over, plus the message's own id:
 
 | Context | Meaning |
 | --- | --- |
 | `payload` | The values the placeholders name, or the configuration of one — see [Payload](#payload). Its `default` key is the message-wide fallback. |
 | `props` | Per-call formatting options handed to the modifiers, keyed by modifier name. A payload entry layers over them. |
 | `locale` | The locale the locale-dependent modifiers format for. |
-| `key` | The message's identifier. A missing message resolves to the payload's `default`, and to this where the payload carries none, echoed as the caller spelled it. |
+| `id` | The message's identifier. No step of resolution reads it; a report names it, so that a report says which message went looking. |
 
-A message that no conversion describes is a message that does not exist:
-resolution steps past it to the payload's `default` and then to the key, and
-reports nothing, because a message nobody wrote is not a defect. The link it
-steps to is a payload value like any other, so one that is read and cannot be
-described is reported.
+A caller that supplies no message — `undefined`, or a message no conversion
+describes — has supplied nothing to resolve, and the resolution is the empty
+string. Nothing stands in for it: the payload's `default` is there for the
+placeholders of a message, and this message has none. Nothing behind it is read
+and nothing is reported, because a message nobody wrote is not a defect. A
+message that exists resolves as it is, even where it is empty, and one that is
+`0`, `false` or `null` resolves as the text it converts to.
 
-The key is where that chain ends, and it is not text the format resolves over.
-A key shaped like a placeholder is echoed rather than resolved, an escape
-sequence inside one stays as it was spelled, and nothing behind the key is read
-a second time. It still becomes text, because `resolve` answers with text.
+The id is not text the format resolves over and not text it falls back to. One
+shaped like a placeholder is neither resolved nor echoed: nothing reads it on
+the way to an output, and a report is the one place it is named.
 
 `options` carries `customModifiers`, `modifierDefaults` and `onReport`. Nothing
 else is read, and the package has no runtime dependencies — locale-dependent
@@ -130,15 +131,14 @@ just does so silently. `null` is for a host that states the silence rather than
 omits it. It is called with a `Report` describing what the parser could not do
 — `code`, the `origin` that code declares, an English `message` carrying
 nothing from the payload, the `limit` reached where the report is about one,
-the message's `key` where one was passed, and `text`, the source of the
+the message's `id` where one was passed, and `text`, the source of the
 trouble: the placeholder that named it for `unknown-modifier`,
 `failed-modifier`, `missing-options`, `missing-locale` and
 `unserializable-value`, the output that would not settle for `pass-limit` and
 `output-limit`, the message as it was passed where the read that refused is of
-the call's own structure — a context entry, an entry of the option bag — and
-nothing at all where what could not be described is the chain the message
-itself resolves through. The last two name no placeholder, and a message that
-is not text carries none of itself either. `origin` says who fixes what `code`
+the call's own structure — a context entry, an entry of the option bag. That
+one names no placeholder, and a message that is not text carries none of itself
+either. `origin` says who fixes what `code`
 names — `'message'` for a defect in the message that was written, `'payload'`
 for one in what the caller passed, and `'limit'` for a bound this parser set.
 Every code declares one, and it ranks nothing: a report is no graver for coming
@@ -257,7 +257,7 @@ reported either.
 
 Every entry the parser reads is read as an own **enumerable** property: a
 payload key, a wrapper's, a `props` layer's, an entry of the modifier registry,
-and the call's own `payload`, `props`, `locale` and `key`. That is the rule the
+and the call's own `payload`, `props`, `locale` and `id`. That is the rule the
 value conversion has always followed, so a property `Object.defineProperty`
 left hidden is not one the format carries anywhere — after
 `Object.defineProperty(payload, 'v', { value: 'V' })`, `{{v}}` resolves to its
@@ -269,8 +269,8 @@ value. A `props` entry that refuses to be read leaves the layer beneath it
 standing and reports `unserializable-value` at the placeholder that needed it;
 `customModifiers`, `modifierDefaults` and the context's own entries are read
 once for the call, so a report about one names the text that went looking
-rather than a placeholder, and a `key` that is itself the entry that raised
-leaves the report naming no key.
+rather than a placeholder, and an `id` that is itself the entry that raised
+leaves the report naming no id.
 
 A modifier's answer becomes text by that same conversion, so an answer no
 conversion describes is read as missing and reported the same way, and the

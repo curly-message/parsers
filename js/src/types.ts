@@ -43,7 +43,7 @@ export type Conversions = Map<any, string | undefined>;
 export type Wrappers = Map<object, boolean | undefined>;
 
 /**
- * What a pass reads. It sees the message's key on top of what a pass needs to
+ * What a pass reads. It sees the message's id on top of what a pass needs to
  * substitute, because a report names the message it came from, and what the
  * resolution around it has already converted and recognized. The option bag's
  * own entries reach it read: the modifiers a message can name and the defaults
@@ -52,7 +52,7 @@ export type Wrappers = Map<object, boolean | undefined>;
  * pass carries the host's props without reading one, so it names no props type
  * of its own.
  */
-type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, key?: Parser.Key, conversions: Conversions, wrappers: Wrappers };
+type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
 
 /**
  * A single interpolation pass, answering with nothing where the pass runs past
@@ -85,8 +85,8 @@ export type Report = {
    * payload, so writing it anywhere is safe without further thought.
    */
   message: string;
-  /** The message's own key, where the caller passed one. */
-  key?: Parser.Key;
+  /** The message's own id, where the caller passed one. */
+  id?: Parser.Id;
   /** The limit that was reached, where the report is about one. */
   limit?: number;
   /**
@@ -272,21 +272,21 @@ export module Parser {
    */
   export type Payload<T = any, Props = Modifier.DefaultProps> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, PayloadEntry<any, Props>> & PayloadDefault : { [Key in keyof T]: PayloadEntry<T[Key], Props> } & PayloadDefault;
 
-  export type Key = string;
+  export type Id = string;
 
   export type Value = any;
 
   /**
-   * Everything resolution reads besides the message itself. `key` is the
-   * message's own identifier where the caller has one. A missing message
-   * resolves to the payload's own `default`, and to `key` where the payload
-   * carries none — the same chain a placeholder falls through, one level up.
+   * Everything a resolution is given besides the message itself. `id` is the
+   * message's own identifier where the caller has one; no step of resolution
+   * reads it, and a report names it so that it says which message went
+   * looking.
    */
   export type Context<P = PayloadDefault, M = Modifier.DefaultProps> = {
     payload?: Payload<P, M>;
     props?: Modifier.Props<M>;
     locale?: Locale;
-    key?: Key;
+    id?: Id;
   };
 
   export type Resolve<C extends Parser.Context = Parser.Context> = (message: Value, context?: C) => string;

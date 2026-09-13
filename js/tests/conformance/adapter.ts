@@ -12,7 +12,7 @@ import { createParser, Modifier, Parser, Report } from '../../src';
 export const adapter: Adapter = {
   levels: ['core', 'intl', 'extensions'],
   limits: { passes: 10, output: 100000, conversion: 100000 },
-  resolve: ({ message, payload, props, locale, key, modifiers, defaults }) => {
+  resolve: ({ message, payload, props, locale, id, modifiers, defaults }) => {
     const reports: Report[] = [];
 
     // A behaviour of the set's catalogue is a function of section 11's inputs;
@@ -34,7 +34,7 @@ export const adapter: Adapter = {
     });
 
     return {
-      output: resolve(message, { payload: payload as Parser.Payload | undefined, props: props as Modifier.Props | undefined, locale, key: key as Parser.Key | undefined }),
+      output: resolve(message, { payload: payload as Parser.Payload | undefined, props: props as Modifier.Props | undefined, locale, id: id as Parser.Id | undefined }),
       reports,
     };
   },

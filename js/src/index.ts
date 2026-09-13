@@ -162,7 +162,7 @@ const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte
 // defines under it, and not one a host registered in its place.
 const isComparison = (name: string, modifiers: Record<string, unknown>) => COMPARISONS.includes(name as Modifier.DefaultKeys) && modifiers[name] === defaultModifiers[name as Modifier.DefaultKeys];
 
-const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key: messageKey, conversions, wrappers }) => {
+const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, id: messageId, conversions, wrappers }) => {
   const modifierKeys = Object.keys(modifiers);
 
   const resolvePlaceholder = (placeholder: string) => {
@@ -170,7 +170,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // A link that refuses to be read is not a link nobody passed. `ownValue`
     // answers nothing either way, because resolution must not throw; the
     // difference between the two is what a report is for.
-    const raised = () => report('unserializable-value', placeholder, messageKey, onReport);
+    const raised = () => report('unserializable-value', placeholder, messageId, onReport);
     const entry = ownValue(payload, key, raised);
     // The payload's root `default` is the fallback itself, never configuration.
     const wrapper = key !== 'default' && isWrapped(entry, wrappers, raised) ? entry : undefined;
@@ -205,7 +205,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // running `eq` in its place would render a plausible answer to a question the
     // message never asked.
     if (hasModifier && !modifierKeys.includes(modifierKey)) {
-      report('unknown-modifier', placeholder, messageKey, onReport);
+      report('unknown-modifier', placeholder, messageId, onReport);
 
       return defaultText();
     }
@@ -219,7 +219,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // asked nothing. A host that registered its own modifier under the name
     // replaced the comparison, so the placeholder asks the host's modifier
     // and is no selection either.
-    if (key !== undefined && !options.length && isComparison(modifierKey, modifiers)) report('missing-options', placeholder, messageKey, onReport);
+    if (key !== undefined && !options.length && isComparison(modifierKey, modifiers)) report('missing-options', placeholder, messageId, onReport);
 
     // An absent value is nothing to compare against, whatever the modifier
     // asks: the placeholder takes the fallback chain rather than measuring the
@@ -260,7 +260,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // failure it has always been.
       const code = failureCode(failure) ?? 'failed-modifier';
 
-      report(code, placeholder, messageKey, onReport);
+      report(code, placeholder, messageId, onReport);
 
       // A locale nobody supplied is the one failure the chain does not answer:
       // a declared default stands in for a value the modifier cannot read,
@@ -361,31 +361,31 @@ const REPORT_ORIGINS: Record<Report['code'], Report['origin']> = {
   'output-limit': 'limit',
 };
 
-const report = (code: Report['code'], reported: string, key: Parser.Key | undefined, onReport: Parser.OnReport | undefined) => {
+const report = (code: Report['code'], reported: string, id: Parser.Id | undefined, onReport: Parser.OnReport | undefined) => {
   if (!onReport) return;
 
   try {
-    onReport({ code, origin: REPORT_ORIGINS[code], message: REPORT_MESSAGES[code], key, limit: REPORT_LIMITS[code], text: excerpt(reported) });
+    onReport({ code, origin: REPORT_ORIGINS[code], message: REPORT_MESSAGES[code], id, limit: REPORT_LIMITS[code], text: excerpt(reported) });
   } catch {
     // Reporting is an observation, not a step of the resolution. A host whose
     // logger fails must still get its message back.
   }
 };
 
-const interpolate: Interpolation = ({ value, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions, wrappers }) => {
+const interpolate: Interpolation = ({ value, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, id, conversions, wrappers }) => {
   let output = value;
 
   for (let pass = 0; hasPlaceholders(output); pass += 1) {
     if (pass === MAX_INTERPOLATION_PASSES) {
-      report('pass-limit', output, key, onReport);
+      report('pass-limit', output, id, onReport);
 
       break;
     }
 
-    const next = placeholders({ value: output, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions, wrappers });
+    const next = placeholders({ value: output, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, id, conversions, wrappers });
 
     if (next === undefined) {
-      report('output-limit', output, key, onReport);
+      report('output-limit', output, id, onReport);
 
       break;
     }
@@ -404,15 +404,15 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // is a caller that passed none.
     const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport') ?? undefined;
     // A context entry or an entry of the option bag that refuses to be read is
-    // the call's own defect rather than a placeholder's, and the key that would
+    // the call's own defect rather than a placeholder's, and the id that would
     // name the message is one of the entries, so the message is what a report
     // of one carries — as text where the caller wrote text, because nothing
     // has converted it yet. Both are the call's own structure, read once for
     // the call: a pass composes over what the call holds rather than asking
     // the bag again.
     const reported = typeof message === 'string' ? message : '';
-    const key: Parser.Key | undefined = ownValue(context, 'key', () => report('unserializable-value', reported, undefined, onReport));
-    const callRaised = () => report('unserializable-value', reported, key, onReport);
+    const id: Parser.Id | undefined = ownValue(context, 'id', () => report('unserializable-value', reported, undefined, onReport));
+    const callRaised = () => report('unserializable-value', reported, id, onReport);
     const payload: Parser.Payload | undefined = ownValue(context, 'payload', callRaised);
     const props: Modifier.Props | undefined = ownValue(context, 'props', callRaised);
     const locale: Locale | undefined = ownValue(context, 'locale', callRaised);
@@ -425,11 +425,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // that holds no table composes nothing over the built-in registry, which
     // nothing writes to.
     const modifiers = customModifiers === undefined ? builtInModifiers : mergeLayer(builtInModifiers, ownModifiers(customModifiers, callRaised));
-    // A report about the chain a message resolves through names no placeholder,
-    // and the link it is about is one nothing describes, so it carries no
-    // excerpt: the key is what says which message went looking.
-    const raised = () => report('unserializable-value', '', key, onReport);
-
     // One value converts once, however many placeholders read it: the walk is
     // the costly step. So is one entry asked once whether it configures its
     // value, because asking enumerates it. The call is the scope — a payload
@@ -441,23 +436,14 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     // Everything the format carries is text, and the message becomes text
     // before anything reads it rather than after everything has: a host that
     // wrote its message as something else gets it interpolated and unescaped
-    // like any other. A link no conversion can describe does not exist, the
-    // same way such a value is not a value, so the chain steps past it — a
-    // message default that cannot become text must not swallow the key echo.
-    // Stepping past the payload's link is reported, because that link is a
-    // payload value like any other; stepping past the message is not, because
-    // a message nothing describes is a message nobody wrote.
-    const value = text(message, conversions) ?? describedText(ownValue(payload, 'default', raised), raised, conversions);
+    // like any other. A message no conversion can describe is nothing to
+    // resolve, the same way such a value is not a value, and that is not a
+    // condition to report: a message nothing describes is a message nobody
+    // wrote, and nothing behind it is read on its account.
+    const value = text(message, conversions);
 
-    // What is left when the chain runs out is not a message the format resolves
-    // over: it is the format naming the message that went looking. A value, an
-    // option value, an inline default and a payload `default` are what may
-    // carry placeholders; a key is not one of them, so it leaves as the caller
-    // spelled it, neither resolved nor unescaped. It still becomes text,
-    // because `resolve` answers with text, and a caller that named no key has
-    // nothing to echo.
-    if (value === undefined) return text(key, conversions) ?? '';
+    if (value === undefined) return '';
 
-    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, key, conversions, wrappers });
+    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, id, conversions, wrappers });
   },
 });
