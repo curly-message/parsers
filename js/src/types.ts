@@ -372,3 +372,81 @@ export module Parser {
    */
   export type ExtractorFactory = <Props = {}, Key extends string = Modifier.Key>(options?: Parser.Options<Key, Props>) => Extractor;
 }
+
+/**
+ * The message as it is written, described rather than resolved. Section 6 is a
+ * grammar over the message string and section 7 an escaping rule over the same
+ * string; together they say where every character of a message belongs, and
+ * that is what this describes — section 8 included, because which characters
+ * are padding is a fact about the spelling. Nothing from section 9 on is
+ * here: which placeholders bind, what an option selects, what the message
+ * resolves to — none of it is a property of the text.
+ *
+ * It is a *concrete* tree, not an abstract one. A concrete tree describes the
+ * source: every character of the message lies in exactly one leaf, the leaves
+ * come in the order they are written, and concatenating them spells the
+ * message back. There is no abstract tree to offer instead. Resolution is
+ * passes of substitution over text (section 5), and section 12 derives no
+ * placeholder inside another, so what a message resolves to is not a shape
+ * this or any other tree could carry.
+ */
+export module Cst {
+  /** Where a node lies in the message, as `[start, end)` in code units. */
+  type Span = { start: number, end: number };
+
+  /** Characters that carry no structural meaning where they stand. */
+  export type Text = Span & { type: 'text' };
+
+  /**
+   * A backslash and the character it consumes (section 7). `cancels` says
+   * which of the two readings the pair takes: a structural meaning cancelled,
+   * so that removing the sequence leaves the character alone, or a backslash
+   * that denotes itself, so that both characters stand.
+   */
+  export type Escape = Span & { type: 'escape', cancels: boolean };
+
+  /** Blank padding a name is read without (section 8). */
+  export type Space = Span & { type: 'space' };
+
+  /** A delimiter: the pair that opens or closes, or a `:` or `;` that divides. */
+  export type Punctuation = Span & { type: 'open' | 'close' | 'separator' };
+
+  /**
+   * Something a placeholder writes a name with: the key it selects on, the
+   * modifier it names, an option's key, an option's value. `name` is the span
+   * unescaped and `nodes` is how the message spells it.
+   *
+   * The first three answer to that name: a key and a modifier name are matched
+   * against something a host wrote, by code-point equality after unescaping
+   * (section 6, note 2), and an option key is unescaped the same way though it
+   * looks nothing up. An option value is matched by nobody — it is the source
+   * spelling, which reaches the output through the one removal section 7
+   * bounds — so `name` is what it renders as rather than what it answers to.
+   *
+   * A name may be empty, and an empty one still has a position: a placeholder
+   * that names no key carries a `key` node of no width where the key would be.
+   */
+  export type Name = Span & { type: 'key' | 'modifier' | 'option-key' | 'option-value', name: string, nodes: (Text | Escape)[] };
+
+  /** A construct section 6 derives as a placeholder, and what it is made of. */
+  export type Placeholder = Span & { type: 'placeholder', nodes: (Punctuation | Space | Name)[] };
+
+  /**
+   * A whole message. Its parts are text and placeholders and nothing else:
+   * section 9.1 leaves no third state between them, so a `{{ … }}` construct
+   * the grammar does not derive is text here, exactly as it is to resolution.
+   * A message that is not text has no characters to describe and carries no
+   * parts.
+   */
+  export type Message = Span & { type: 'message', nodes: (Text | Escape | Placeholder)[] };
+
+  export type Node = Message | Placeholder | Name | Text | Escape | Space | Punctuation;
+
+  /**
+   * Describes a message. It reads no options: a name is a name whether or not
+   * a modifier answers to it, so nothing a host registers changes the text.
+   * This is the build-time and editor-time half of the parser, like
+   * `Parser.Extractor` — resolution never calls it.
+   */
+  export type Parse = (message: Parser.Value) => Message;
+}

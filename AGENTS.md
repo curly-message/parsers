@@ -47,10 +47,11 @@ without inheriting a host library. Keep that true:
 ## Current state
 
 `js/` resolves over the format's own named inputs and depends on no host
-library. It publishes one entry point, carrying `createParser` for resolution
-and `createExtractor` for the build-time scanner. It is released: the public
-surface is stable, so a change to it is a breaking change and costs every
-caller a migration. Propose one rather than making it.
+library. It publishes one entry point, carrying `createParser` for resolution,
+`createExtractor` for the build-time scanner and `cst` for describing a message
+as it is written. It is released: the public surface is stable, so a change to
+it is a breaking change and costs every caller a migration. Propose one rather
+than making it.
 
 ---
 
@@ -179,11 +180,12 @@ repository, not just these docs.
   function-local accumulator may be built by mutation instead, but only into a
   null-prototype object (`Object.create(null)`), and it must be finished with a
   single spread before it escapes to consumers.
-- Keep `index.ts` for the resolution pipeline and `extract.ts` for the
-  build-time one, which reports the parameters a message names and is
-  re-exported from `index.ts` rather than from a subpath of its own; put pure,
-  reusable helpers in `utils.ts` — the placeholder scanner among them, which
-  both pipelines read — and modifier implementations in `modifiers.ts`.
+- Keep `index.ts` for the resolution pipeline, and `extract.ts` and `cst.ts`
+  for the build-time ones — the parameters a message names and the tree it is
+  described by, each re-exported from `index.ts` rather than from a subpath of
+  its own; put pure, reusable helpers in `utils.ts` — the placeholder scanner
+  among them, which all three read — and modifier implementations in
+  `modifiers.ts`.
 - Diagnostics leave through the `onReport` option and nowhere else — from a
   placeholder the parser could not resolve, from the chain a message resolves
   through, and from the interpolation guards. The format specifies no channel
@@ -257,10 +259,11 @@ risks are **DoS / robustness / prototype-chain**, not RCE/XSS.
 ## 13. Tests
 
 - For `js/`, tests live in `tests/specs/` — `index.spec.ts` for resolution,
-  `extract.spec.ts` for the parameters a message names, `types.spec.ts` for
-  the type surface, `conformance.spec.ts` for the specification's conformance
-  set, driven through the adapter in `tests/conformance/adapter.ts` — with
-  fixtures in `tests/data/`.
+  `extract.spec.ts` for the parameters a message names, `cst.spec.ts` for the
+  tree a message is described by, `types.spec.ts` for the type surface,
+  `conformance.spec.ts` for the specification's conformance set, driven through
+  the adapter in `tests/conformance/adapter.ts` — with fixtures in
+  `tests/data/`.
 - Drive behavior through the **public API** (`createParser(options).resolve`,
   `createExtractor(options)`).
   Pure helpers may be imported directly from `src/` when that yields a more

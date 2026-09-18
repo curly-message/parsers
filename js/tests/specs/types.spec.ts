@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createExtractor, createParser } from '../../src';
-import type { Modifier, Parser, Report } from '../../src';
+import { createExtractor, createParser, cst } from '../../src';
+import type { Cst, Modifier, Parser, Report } from '../../src';
 
 const GREETING = 'Hi {{applicationName}}!';
 
@@ -300,6 +300,48 @@ describe('modifier typing', () => {
     expect(choose({ value: '', options: [] })).toBe(undefined);
     // @ts-expect-error a value reaches a modifier as text, whatever the payload carried
     expect(choose({ value: 42, options: [], defaultValue: 'D' })).toBe(42);
+  });
+});
+
+// Describing a message answers in a tree of tagged nodes, so a caller narrows
+// by `type` and reads what that node carries — and nothing a node of another
+// type does.
+describe('description typing', () => {
+  it('describes a message the parser beside it resolves', () => {
+    const parse: Cst.Parse = cst;
+    const { type, nodes }: Cst.Message = parse(GREETING);
+
+    expect([type, nodes.map((node) => node.type)]).toEqual(['message', ['text', 'placeholder', 'text']]);
+  });
+
+  it('narrows a node to the parts its own type carries', () => {
+    const [, placeholder] = cst(GREETING).nodes;
+
+    if (placeholder.type !== 'placeholder') throw new Error('A message writing a placeholder describes one.');
+
+    const named = placeholder.nodes.filter((node): node is Cst.Name => node.type === 'key');
+    const read: [string, number, number][] = named.map(({ name, start, end }) => [name, start, end]);
+
+    expect(read).toEqual([['applicationName', 5, 20]]);
+  });
+
+  it('says of an escape sequence what only an escape sequence says', () => {
+    const [escape] = cst('\\;').nodes;
+
+    if (escape.type !== 'escape') throw new Error('A message writing an escape sequence describes one.');
+
+    const cancels: boolean = escape.cancels;
+
+    expect(cancels).toBe(true);
+  });
+
+  it('rejects a part read for something the node it is does not carry', () => {
+    const [node] = cst(GREETING).nodes;
+
+    // @ts-expect-error text carries no name; only the nodes a placeholder writes a name with do
+    expect(node.name).toBe(undefined);
+    // @ts-expect-error the tree describes the text, so no node states what a placeholder resolves to
+    expect(node.value).toBe(undefined);
   });
 });
 
