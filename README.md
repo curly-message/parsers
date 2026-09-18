@@ -41,7 +41,9 @@ workflow runs the test matrix, bumps the version, turns the changelog's
 `## Unreleased` section into the version's, commits, tags (`js-v1.0.0`),
 pushes, publishes to npm, and publishes a GitHub release carrying that
 changelog section. A release whose changelog has no `## Unreleased` section
-is refused.
+is refused. That heading may name the bump the section is expected to be cut
+under — `## Unreleased (minor)` — as a note to the reader; the release the
+workflow is given is what it cuts.
 
 The commit, the tag and the release are made as a GitHub App, whose id and
 private key the repository holds as the `APP_ID` variable and the
