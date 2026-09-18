@@ -463,6 +463,92 @@ parameters rather than raising, a catalogue leaf being arbitrary data, and a
 placeholder a payload value carries into a later pass is not one the message
 itself names.
 
+## Describing a message
+
+An editor needs to know where the parts of a message are, not what it resolves
+to. `cst` answers that: it describes the message as it is written, over the
+same scanner resolution uses, so what an editor colors and what the parser
+finds cannot disagree. Like `createExtractor`, it is a named export that
+resolution never calls.
+
+```js
+import { cst } from '@curly-message/parser';
+
+cst('Hi {{name; default:you;}}');
+// {
+//   type: 'message', start: 0, end: 25,
+//   nodes: [
+//     { type: 'text', start: 0, end: 3 },
+//     { type: 'placeholder', start: 3, end: 25, nodes: [
+//       { type: 'open', start: 3, end: 5 },
+//       { type: 'key', start: 5, end: 9, name: 'name', nodes: [ ... ] },
+//       { type: 'separator', start: 9, end: 10 },
+//       { type: 'space', start: 10, end: 11 },
+//       { type: 'option-key', start: 11, end: 18, name: 'default', nodes: [ ... ] },
+//       { type: 'separator', start: 18, end: 19 },
+//       { type: 'option-value', start: 19, end: 22, name: 'you', nodes: [ ... ] },
+//       { type: 'separator', start: 22, end: 23 },
+//       { type: 'option-key', start: 23, end: 23, name: '', nodes: [] },
+//       { type: 'close', start: 23, end: 25 },
+//     ] },
+//   ],
+// }
+```
+
+It is a **concrete** tree. Every node carries `start` and `end` as a half-open
+range of code units, every character of the message lies in exactly one leaf,
+the leaves come in the order they are written, and concatenating them spells
+the message back. A highlighter can therefore walk the leaves and emit a span
+per node without tracking a position of its own.
+
+There is no abstract tree to ask for instead, and that is the format rather
+than an omission. Resolution is passes of substitution over text, and section
+12 of the specification derives no placeholder inside another, so what a
+message resolves to is not a shape a tree could carry. What a tree can carry
+is the text, which is what sections 6, 7 and 8 define — section 8 included,
+because which characters are padding is a fact about the spelling. Nothing
+from section 9 on appears here: which placeholders bind, what an option
+selects and what the message renders are not properties of what was typed.
+
+| Node | Where | Carries |
+| --- | --- | --- |
+| `message` | the root | `nodes`: text, escape sequences and placeholders |
+| `text` | anywhere | characters with no structural meaning where they stand |
+| `escape` | anywhere | a backslash and the character it consumes, and `cancels` |
+| `placeholder` | the root | `nodes`: the parts below, in the order they are written |
+| `open`, `close` | a placeholder | the `{{` and `}}` that delimit it |
+| `separator` | a placeholder | a `:` or `;` that divides |
+| `space` | a placeholder | blank padding a name is read without |
+| `key`, `modifier` | a placeholder | `name`, and `nodes`: how the message spells it |
+| `option-key`, `option-value` | a placeholder | the same |
+
+`name` is the range unescaped and `nodes` is how the message spells it, so
+`{{my\;key}}` names the key `my;key` and the escape sequence that let it be
+written is a node of its own. A key, a modifier name and an option key answer
+to that name: the format matches them against a payload entry, a registered
+modifier or the value. An option value answers to nobody — it is the source
+spelling, and unescaping it is the removal every value reaches the output
+through — so its `name` is what it renders as.
+
+`cancels` distinguishes the two readings of an escape sequence. A backslash
+before `:`, `;`, `{`, `}`, `\` or whitespace cancels a structural meaning, and
+removing the sequence leaves the character alone; before anything else the
+backslash denotes itself and both characters stand, so `\;` reports `true` and
+`\d` reports `false`. An editor that colors them alike is lying about one of
+them.
+
+Two things surprise, and both are the grammar showing through. A `{{ … }}`
+construct that encloses another is not a placeholder — the inner one is, and
+the text around it is text, which is exactly how resolution reads it. And the
+`;` an idiomatic placeholder ends with opens a segment like any other, so that
+segment is there, empty, with a width of nothing.
+
+`cst` reads no options. A name is a name whether or not a modifier answers to
+it, so nothing a host registers changes the text; a caller that wants to know
+whether a modifier is one this package defines compares the `name` itself. A
+message that is not text has no characters to describe and comes back with no
+parts rather than raising.
+
 ## Status
 
 **Stable.** This package implements **`curly-message-1`**, version 1 of the

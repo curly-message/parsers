@@ -1,13 +1,14 @@
 import * as defaultModifiers from './modifiers';
-import type { Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report, Wrappers } from './types';
+import type { Cst, Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report, Wrappers } from './types';
 import { EVERY_TERMINATOR, failureCode, mergeLayer, nextPlaceholder, ownKeys, ownModifiers, ownValue, parsePlaceholder, unesc, unicodeEscape } from './utils';
 
-export type { Parser, Modifier, Locale, Report };
+export type { Cst, Parser, Modifier, Locale, Report };
 
 // The scanner is a named export of this entry rather than a subpath of its
 // own: the package is ESM and declares `sideEffects: false`, so a bundle that
 // never reaches it drops it, and a build-time caller is not bundled at all.
 export { createExtractor } from './extract';
+export { cst } from './cst';
 
 const hasPlaceholders = (value: any) => typeof value === 'string' && !!nextPlaceholder(value, 0);
 

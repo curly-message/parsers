@@ -44,6 +44,15 @@ const TERMINATOR_CLASS = `[${LINE_TERM.map(unicodeEscape).join('')}]`;
 const TERMINATOR = new RegExp(TERMINATOR_CLASS);
 
 /**
+ * Where the escape sequence opening at `index` ends. A backslash consumes the
+ * character after it (section 7), and a character outside the basic plane is
+ * written as two code units, so the pair is claimed whole rather than cut in
+ * half. Every scan that steps over a sequence reads its extent here, so the
+ * rule has one implementation and not one per scanner.
+ */
+export const escapeEnd = (value: string, index: number, to: number) => (index + 2 < to && value.codePointAt(index + 1)! > 0xffff ? index + 3 : index + 2);
+
+/**
  * Every line terminator in a text at once, for a diagnostic that escapes them
  * all. It reads the same list the scanner does, so amending `line-term`
  * reaches both.
@@ -62,7 +71,7 @@ const placeholderEnd = (value: string, open: number) => {
     if (character === '\\') {
       if (TERMINATOR.test(value.charAt(index + 1))) return undefined;
 
-      index += 1;
+      index = escapeEnd(value, index, value.length) - 1;
       continue;
     }
 
@@ -88,7 +97,7 @@ const placeholderEnd = (value: string, open: number) => {
 export const nextPlaceholder = (value: string, from: number): [number, number] | undefined => {
   for (let index = from; index < value.length; index += 1) {
     if (value[index] === '\\') {
-      index += 1;
+      index = escapeEnd(value, index, value.length) - 1;
       continue;
     }
 
@@ -108,43 +117,68 @@ export const nextPlaceholder = (value: string, from: number): [number, number] |
 // regular expression survive as typed.
 const RESERVED = /[:;{}\\]/;
 
+/**
+ * Whether a backslash in front of this character cancels a structural meaning
+ * rather than denoting itself (SPEC.md section 7). Both readings are escape
+ * sequences; they differ in what removing one leaves behind.
+ */
+export const cancels = (character: string) => RESERVED.test(character) || isBlank(character);
+
 /** Text as the format reads it, with every escape sequence it claims resolved. */
-export const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/g, (sequence, character) => RESERVED.test(character) || isBlank(character) ? character : sequence) : value;
+export const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/gu, (sequence, character) => cancels(character) ? character : sequence) : value;
 
-// Whitespace an escape sequence claims is text, not padding around it.
-const trim = (value: string) => {
+/**
+ * The span between `from` and `to` with its blank padding dropped, empty at
+ * `from` where the span is padding throughout. Whitespace an escape sequence
+ * claims is text, not padding around it.
+ */
+export const trimmed = (value: string, from: number, to: number): [number, number] => {
   let start = -1;
-  let end = 0;
+  let end = from;
 
-  for (let index = 0; index < value.length; index += 1) {
-    const escaped = value[index] === '\\' && index + 1 < value.length;
+  for (let index = from; index < to; index += 1) {
+    const escaped = value[index] === '\\' && index + 1 < to;
 
     if (!escaped && isBlank(value[index])) continue;
 
     if (start < 0) start = index;
 
-    index += escaped ? 1 : 0;
+    index = escaped ? escapeEnd(value, index, to) - 1 : index;
     end = index + 1;
   }
 
-  return start < 0 ? '' : value.slice(start, end);
+  return start < 0 ? [from, from] : [start, end];
 };
 
-// Separates on every occurrence of `separator` no escape sequence claims.
-const split = (value: string, separator: string) => {
-  const parts: string[] = [];
-  let from = 0;
+/**
+ * The spans between `from` and `to` that `separator` divides, passing over
+ * every occurrence an escape sequence claims. There is always one span: a
+ * range the separator does not occur in is itself.
+ */
+export const separated = (value: string, from: number, to: number, separator: string): [number, number][] => {
+  const parts: [number, number][] = [];
+  let start = from;
 
-  for (let index = 0; index < value.length; index += 1) {
-    if (value[index] === '\\') index += 1;
+  for (let index = from; index < to; index += 1) {
+    if (value[index] === '\\') index = escapeEnd(value, index, to) - 1;
     else if (value[index] === separator) {
-      parts.push(value.slice(from, index));
-      from = index + 1;
+      parts.push([start, index]);
+      start = index + 1;
     }
   }
 
-  return [...parts, value.slice(from)];
+  return [...parts, [start, to]];
 };
+
+// Reading a placeholder and describing one split it the same way, so both read
+// the spans above rather than a second implementation of the same rule.
+const trim = (value: string) => {
+  const [start, end] = trimmed(value, 0, value.length);
+
+  return value.slice(start, end);
+};
+
+const split = (value: string, separator: string) => separated(value, 0, value.length, separator).map(([start, end]) => value.slice(start, end));
 
 /**
  * What a placeholder declares: the payload key it names, the modifier it

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased (minor)
+
+Nothing about resolution changes. What is new is a second way to read a
+message, for a caller that needs to show one rather than render it.
+
+* `cst(message)` describes a message as it is written: where its placeholders
+  are, what each is made of, where every name begins and ends, and where every
+  escape sequence falls. Every node carries a range, every character of the
+  message lies in exactly one leaf, and concatenating the leaves spells the
+  message back, so an editor can color a message by walking them. It reads the
+  scanner resolution reads, so the two cannot disagree about what a placeholder
+  is — a construct enclosing another is text here exactly as it is to
+  resolution. It takes no options, and resolution never calls it.
+
 ## 1.0.1
 
 Tracks revision 1.0.1 of the specification: the message's key is the message's
