@@ -15,7 +15,7 @@ of options and a fallback.
 ## Status
 
 **Stable.** The JavaScript implementation is on npm as
-`@curly-message/parser`, and implements `curly-message-1` — version 1 of the
+`@curly-message/parser`, and implements `curly-message-2` — version 2 of the
 format, which the specification states is stable.
 
 It resolves over the format's own inputs and depends on no host library.
@@ -65,7 +65,7 @@ refuses to run for a package the registry does not know.
 
 The format is defined in [`curly-message/spec`](https://github.com/curly-message/spec).
 Its machine-readable identifier is `curly-message`; versioned references use
-`curly-message-1`, and so on.
+`curly-message-2`, and so on.
 
 ## License
 
