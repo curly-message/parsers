@@ -111,9 +111,9 @@ The id is not text the format resolves over and not text it falls back to. One
 shaped like a placeholder is neither resolved nor echoed: nothing reads it on
 the way to an output, and a report is the one place it is named.
 
-`options` carries `customModifiers`, `modifierDefaults` and `onReport`. Nothing
-else is read, and the package has no runtime dependencies — locale-dependent
-formatting is delegated to `Intl`.
+`options` carries `customModifiers`, `modifierDefaults`, `onReport` and
+`recognizeWrappers`. Nothing else is read, and the package has no runtime
+dependencies — locale-dependent formatting is delegated to `Intl`.
 
 `customModifiers` registers modifiers by name, over the built-in ones, so a
 name it carries is a name a message may write, and so is a name the parser
@@ -149,6 +149,16 @@ parser's own, and the excerpt is escaped after that — quotes, backslashes, and
 every line terminator. So a cut excerpt arrives at 122 code units at the
 shortest, one carrying something to escape arrives longer still, and no message
 can forge a line where a report is written.
+
+`recognizeWrappers` says whether a payload entry shaped like a wrapper carries
+the value's own configuration. It is on where the caller says nothing, so a
+payload written for this package reads as it always did. `false` turns it off,
+and an entry of that shape is then a value like any other: it converts to JSON,
+carries no `props` and joins no fallback chain. That is where a caller holding
+untrusted data passes it — an entry the caller did not write, shaped like a
+wrapper, otherwise reconfigures every modifier the placeholder reaches without
+spelling any syntax at all, and nothing can tell it from an entry the caller
+meant.
 
 Three budgets bound a resolution, and reaching one is what the three limit
 codes report. The **output** budget is what the output carries: at most
@@ -247,7 +257,7 @@ else is a value, wrapper-shaped or not: `{ value: 1, unit: 'kg' }` and `{}` are
 data and become JSON. Unwrapping happens once, so a wrapper's `value` is never
 read as a wrapper of its own, and a wrapper carrying no `value` falls back like
 a key the payload does not carry. The payload's own `default` is always a
-value.
+value, and so is every entry where the parser's `recognizeWrappers` is off.
 
 A placeholder resolves to its value wherever the payload carries one, and
 otherwise to the first of these that yields text:
@@ -503,8 +513,9 @@ expected.
 An extractor is built from the same options the parser beside it is built from:
 a host's own modifier registered under a name this format defines changes what
 a message naming it says about its value, and a message naming a replaced
-modifier narrows nothing. `modifierDefaults` and `onReport` reach nothing —
-extraction formats nothing and reports nothing.
+modifier narrows nothing. `modifierDefaults`, `onReport` and
+`recognizeWrappers` reach nothing — extraction formats nothing, reports nothing
+and reads no payload.
 
 Only the text of a message is scanned. A message that is not text names no
 parameters rather than raising, a catalogue leaf being arbitrary data, and a

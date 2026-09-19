@@ -52,7 +52,7 @@ export type Wrappers = Map<object, boolean | undefined>;
  * carries the host's props without reading one, so it names no props type of
  * its own.
  */
-type WalkProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
+type WalkProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, recognizeWrappers: boolean, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
 
 /**
  * Resolves a message. One walk produces the whole output: what a placeholder
@@ -237,6 +237,18 @@ export module Parser {
      * host that states the silence rather than omits it.
      */
     onReport?: OnReport | null;
+    /**
+     * Whether a payload entry shaped like a `Modifier.Wrapper` configures its
+     * value (section 4.1). On where the caller says nothing.
+     *
+     * `false` turns it off: an entry of that shape is then a value like any
+     * other and converts as one, so it carries no `props` and no `default`.
+     * That is where a caller holding untrusted data passes it — an entry it
+     * did not write, shaped like a wrapper, otherwise reconfigures every
+     * modifier the placeholder reaches without spelling any syntax
+     * (section 14.1).
+     */
+    recognizeWrappers?: boolean;
   };
 
   export type PayloadDefault = { [key in 'default']?: any };

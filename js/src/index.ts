@@ -240,7 +240,7 @@ const report = (code: Report['code'], reported: string, id: Parser.Id | undefine
 // own text is syntax and is scanned for placeholders; what a placeholder
 // resolves to is data and is never scanned again, so nesting is what the
 // message spells rather than what a payload arranges (section 12).
-const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, id: messageId, conversions, wrappers }) => {
+const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, recognizeWrappers, locale, id: messageId, conversions, wrappers }) => {
   const source = `${message}`;
   // One scanner for the walk: a verdict is final, so the span an opening brace
   // derives is settled once however many times the walk asks for it.
@@ -273,7 +273,9 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
     const { key, modifier: modifierKey, options: segments, inlineDefault } = parsePlaceholder(source, open, close, scan.end);
     const entry = ownValue(payload, key, raised);
     // The payload's root `default` is the fallback itself, never configuration.
-    const wrapper = key !== 'default' && isWrapped(entry, wrappers, raised) ? entry : undefined;
+    // A caller that turned recognition off passes entries it did not write, so
+    // an entry shaped like a wrapper is a value here and converts as one.
+    const wrapper = recognizeWrappers && key !== 'default' && isWrapped(entry, wrappers, raised) ? entry : undefined;
     const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
 
     // Value text is what a placeholder takes from the payload, and every
@@ -471,6 +473,10 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     const locale: Locale | undefined = ownValue(context, 'locale', callRaised);
     const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', callRaised);
     const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', callRaised);
+    // Recognition is on where the caller says nothing (specification, section
+    // 4.1), so an entry that refuses to be read leaves it where it was and is
+    // reported like every other refusal.
+    const recognizeWrappers = !!(ownValue(parserOptions, 'recognizeWrappers', callRaised) ?? true);
     // Each layer of the registry contributes the modifiers it holds and nothing
     // else: an entry that cannot be called is not one a message can name and
     // not one that shadows the name it would replace. Filtered after the merge
@@ -497,6 +503,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
 
     if (value === undefined) return '';
 
-    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, id, conversions, wrappers });
+    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, recognizeWrappers, locale, id, conversions, wrappers });
   },
 });

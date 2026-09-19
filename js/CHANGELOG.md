@@ -1,5 +1,18 @@
 # Changelog
 
+### 2.1.0 (Unreleased)
+
+* **`recognizeWrappers`** says whether a payload entry shaped like a wrapper
+  carries the value's own configuration. It is on where the caller says
+  nothing. `false` turns it off, and an entry of that shape is then a value
+  like any other: it converts to JSON, carries no `props` and joins no
+  fallback chain. That is where a caller holding untrusted data passes it — an
+  entry the caller did not write, shaped like a wrapper, otherwise
+  reconfigures every modifier the placeholder reaches without spelling any
+  syntax at all, and nothing can tell it from an entry the caller meant.
+  Section 4.1 of the specification asks for the switch and 14.1 is the rule it
+  answers.
+
 ## 2.0.0
 
 Implements `curly-message-2` — version 2 of the Curly Message Format. Message
