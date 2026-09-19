@@ -469,7 +469,10 @@ An editor needs to know where the parts of a message are, not what it resolves
 to. `cst` answers that: it describes the message as it is written, over the
 same scanner resolution uses, so what an editor colors and what the parser
 finds cannot disagree. Like `createExtractor`, it is a named export that
-resolution never calls.
+resolution never calls. The tree it answers with is the one
+[`CST.md`](https://github.com/curly-message/spec/blob/main/CST.md) specifies,
+a companion to the specification; an implementation conforms to the format
+without offering one at all.
 
 ```js
 import { cst } from '@curly-message/parser';
@@ -496,10 +499,12 @@ cst('Hi {{name; default:you;}}');
 ```
 
 It is a **concrete** tree. Every node carries `start` and `end` as a half-open
-range of code units, every character of the message lies in exactly one leaf,
-the leaves come in the order they are written, and concatenating them spells
-the message back. A highlighter can therefore walk the leaves and emit a span
-per node without tracking a position of its own.
+range of **UTF-16 code units** — what a string's `length` counts, which is the
+unit section 4 of `CST.md` asks an implementation to name. Every character of
+the message lies in exactly one leaf, the leaves come in the order they are
+written, and concatenating them spells the message back. A highlighter can
+therefore walk the leaves and emit a span per node without tracking a position
+of its own.
 
 There is no abstract tree to ask for instead, and that is the format rather
 than an omission. Resolution is passes of substitution over text, and section
@@ -570,7 +575,8 @@ The specification is normative — where this implementation and the
 specification disagree, this implementation is wrong. The specification's
 conformance set (`@curly-message/conformance`) holds it to that: the adapter of
 section 14.3 lives in `tests/conformance/adapter.ts`, and `npm test` runs
-every case the set ships against it, at every level.
+every case the set ships against it, at every level and over the tree of
+`CST.md` as well.
 
 ## Development
 

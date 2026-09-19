@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { decode, fixtures } from '@curly-message/conformance';
+import type { Case, TreeCase } from '@curly-message/conformance';
 import { createExtractor, cst } from '../../src';
 import type { Cst } from '../../src';
 import { MESSAGES } from '../data';
@@ -16,9 +17,11 @@ const of = (message: string, type: Cst.Name['type']) =>
     .filter((node): node is Cst.Name => node.type === type);
 
 // A generated case names a construction rather than a message, so only the
-// cases that state one are read, each through the set's own decoding.
+// cases that state one are read, each through the set's own decoding. A file
+// of either kind is read: a tree case states a message the same way, and the
+// two kinds are what one corpus is assembled from.
 const STATED: string[] = fixtures()
-  .flatMap(({ file }) => file.cases)
+  .flatMap(({ file }): readonly (Case | TreeCase)[] => file.cases)
   .map((stated) => ('message' in stated ? decode(stated.message) : undefined))
   .filter((message): message is string => typeof message === 'string');
 

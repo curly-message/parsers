@@ -1,5 +1,5 @@
 import type { Adapter, ModifierInput } from '@curly-message/conformance';
-import { createParser, Modifier, Parser, Report } from '../../src';
+import { createParser, cst, Modifier, Parser, Report } from '../../src';
 
 /**
  * The adapter of SPEC.md section 14.3: what this implementation supplies so
@@ -12,6 +12,10 @@ import { createParser, Modifier, Parser, Report } from '../../src';
 export const adapter: Adapter = {
   levels: ['core', 'intl', 'extensions'],
   limits: { passes: 10, output: 100000, conversion: 100000 },
+  // CST.md section 4 lets an implementation count its spans in whatever unit
+  // its strings are indexed by, and asks it to say which: these are ECMAScript
+  // string indices, so UTF-16 code units.
+  cst: { unit: 'utf-16', parse: cst },
   resolve: ({ message, payload, props, locale, id, modifiers, defaults }) => {
     const reports: Report[] = [];
 
