@@ -52,7 +52,7 @@ export type Wrappers = Map<object, boolean | undefined>;
  * carries the host's props without reading one, so it names no props type of
  * its own.
  */
-type WalkProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, recognizeWrappers: boolean, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
+type WalkProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, onSuspectValue?: Parser.OnSuspectValue, recognizeWrappers: boolean, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
 
 /**
  * Resolves a message. One walk produces the whole output: what a placeholder
@@ -215,6 +215,39 @@ export module Modifier {
 export module Parser {
   export type OnReport = (report: Report) => void;
 
+  /**
+   * What a value holds that version 1 of this format would have read as
+   * syntax: `placeholder` where it holds `{{`, `escape` where it holds a
+   * backslash. A value holding both is described by both, in that order.
+   *
+   * Neither is anything in version 2 — a value is data and reaches the output
+   * as it stands — which is the whole point of the version and the whole
+   * reason a catalogue written for version 1 may render differently under it.
+   */
+  export type SuspectKind = 'placeholder' | 'escape';
+
+  /**
+   * A value a placeholder read that version 1 would have read as syntax. It
+   * is not a `Report`: nothing went wrong, the placeholder resolved to exactly
+   * the text the payload holds, and no code of section 14.3 describes that.
+   * It is a migration aid, and a host that is not migrating asks for none.
+   */
+  export type Suspect = {
+    found: readonly SuspectKind[];
+    /** The placeholder that read the value, as the message spells it. */
+    placeholder: string;
+    /** The message's own id, where the caller passed one. */
+    id?: Id;
+    /**
+     * The value's text, truncated and with its line terminators escaped the
+     * way a report's text is. Unlike a report's, this **is** payload text: a
+     * host that writes it somewhere writes what its payload holds.
+     */
+    text: string;
+  };
+
+  export type OnSuspectValue = (suspect: Suspect) => void;
+
   export type Options<Key extends string = Modifier.Key, Props = Modifier.DefaultProps> = {
     /**
      * Modifiers registered by name, over the built-in ones. A name a message
@@ -249,6 +282,19 @@ export module Parser {
      * (section 14.1).
      */
     recognizeWrappers?: boolean;
+    /**
+     * Where a value that version 1 of this format would have read as syntax is
+     * announced. Unset or `null`, nothing is announced and nothing is looked
+     * for.
+     *
+     * This is a migration aid, on a channel of its own because it is not a
+     * report: the placeholder resolved correctly, to the text the payload
+     * holds. A catalogue written for version 1 that composed messages through
+     * its payload renders that composition literally now, and this says which
+     * values those are while a host is looking for them. Turn it off once the
+     * catalogue is migrated — every value read is searched while it is on.
+     */
+    onSuspectValue?: OnSuspectValue | null;
   };
 
   export type PayloadDefault = { [key in 'default']?: any };

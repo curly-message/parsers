@@ -2,6 +2,9 @@
 
 ### 2.1.0 (Unreleased)
 
+Two options, both opt-in, both leaving a parser that asks for neither exactly
+where it was.
+
 * **`recognizeWrappers`** says whether a payload entry shaped like a wrapper
   carries the value's own configuration. It is on where the caller says
   nothing. `false` turns it off, and an entry of that shape is then a value
@@ -12,6 +15,15 @@
   syntax at all, and nothing can tell it from an entry the caller meant.
   Section 4.1 of the specification asks for the switch and 14.1 is the rule it
   answers.
+* **`onSuspectValue`** says which payload values version 1 of the format would
+  have read as syntax. That migration breaks silently — a value holding `{{`
+  or a backslash renders as the characters it spells now, which is correct and
+  reports nothing — so this announces one as a placeholder reads it, with a
+  `Suspect` naming what it found, the placeholder that read it, the message's
+  id and the value's text. It is not a report: no code of section 14.3
+  describes a resolution that went right. Unset or `null`, nothing is looked
+  for. `createExtractor` answers the same question over a catalogue at build
+  time.
 
 ## 2.0.0
 
