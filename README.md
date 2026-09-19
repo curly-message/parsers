@@ -34,16 +34,19 @@ that being a breaking change for the others.
 ## Releasing
 
 A release is cut from `main` by the **JavaScript parser publish** workflow
-(`.github/workflows/publish-js.yml`, started by hand). `next` bumps the
-prerelease counter and publishes under the `next` dist-tag; `patch`, `minor`
-and `major` cut a release under `latest`, closing any prerelease line. The
-workflow runs the test matrix, bumps the version, turns the changelog's
-`## Unreleased` section into the version's, commits, tags (`js-v1.0.0`),
-pushes, publishes to npm, and publishes a GitHub release carrying that
-changelog section. A release whose changelog has no `## Unreleased` section
-is refused. That heading may name the bump the section is expected to be cut
-under — `## Unreleased (minor)` — as a note to the reader; the release the
-workflow is given is what it cuts.
+(`.github/workflows/publish-js.yml`, started by hand). The changelog's pending
+section names the version it will be released as — `### 1.1.0 (Unreleased)` —
+so a version is settled in the commit that writes the section rather than in
+the dispatch. `patch`, `minor` and `major` cut that section under the `latest`
+dist-tag, and the run is refused unless the bump arrives at the version the
+section names — over an open prerelease line that is the bump which drops the
+prerelease rather than the one that opened it, so `1.1.0-next.3` reaches
+`1.1.0` under `patch`. `next` publishes a prerelease of that same version —
+`1.1.0-next.0`, then `.1` — under the `next` dist-tag and leaves the section
+open, because a prerelease has not released what the section names. The
+workflow runs the test matrix, bumps the version, cuts the section where the
+release closes it, commits, tags (`js-v1.0.0`), pushes, publishes to npm, and
+publishes a GitHub release carrying that changelog section.
 
 The commit, the tag and the release are made as a GitHub App, whose id and
 private key the repository holds as the `APP_ID` variable and the

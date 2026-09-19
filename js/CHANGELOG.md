@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased (minor)
+### 1.1.0 (Unreleased)
 
 Nothing about resolution changes. What is new is a second way to read a
 message, for a caller that needs to show one rather than render it.

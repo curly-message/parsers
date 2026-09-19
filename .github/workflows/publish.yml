@@ -63,33 +63,54 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # `next` bumps the prerelease counter (1.0.0-next.0 -> 1.0.0-next.1, and
-      # 1.0.0 -> 1.0.1-next.0); the others cut a release, which also closes a
-      # prerelease line (1.0.0-next.3 -> 1.0.0 under `patch`). The changelog's
-      # Unreleased section becomes the version's, so a release without one fails.
-      # Its heading may name the bump the section is expected to be cut under;
-      # that note is read by people, and the release given here is what runs.
+      # The changelog's pending section names the version it will be released
+      # as, so a version is settled in the commit that writes the section
+      # rather than in the dispatch. `patch`, `minor` and `major` cut that
+      # section under the `latest` dist-tag and must arrive at the version it
+      # names, which over an open prerelease line is the bump that drops the
+      # prerelease rather than the one that opened it (1.1.0-next.3 reaches
+      # 1.1.0 under `patch`). `next` publishes a prerelease of that version
+      # (1.1.0-next.0,
+      # then .1) under the `next` dist-tag and leaves the section open, because
+      # a prerelease has not released what the section names.
       - name: Bump the version
         id: version
         env:
           RELEASE: ${{ inputs.release }}
         run: |
           case "$RELEASE" in
-            next) bump='prerelease --preid=next'; tag=next ;;
-            patch|minor|major) bump="$RELEASE"; tag=latest ;;
+            next) tag=next ;;
+            patch|minor|major) tag=latest ;;
             *) echo "::error::Unknown release type '$RELEASE'; expected next, patch, minor or major."; exit 1 ;;
           esac
-          npm version $bump --no-git-tag-version
+          # One spelling of the heading, read by the gate, by the version it
+          # names and by the rewrite: a widening one of them missed would pass
+          # one and not the others.
+          heading='### ([0-9]+\.[0-9]+\.[0-9]+) \(Unreleased\)'
+          sections=$(grep -cE "^$heading$" CHANGELOG.md) || sections=0
+          [ "$sections" = 1 ] || { echo "::error::CHANGELOG.md holds $sections sections headed '### <major.minor.patch> (Unreleased)'; a release reads exactly one."; exit 1; }
+          declared=$(sed -nE "s/^$heading$/\1/p" CHANGELOG.md)
+          before=$(node -p "require('./package.json').version")
+          if [ "$tag" = next ]; then
+            case "$before" in
+              "$declared"-next.*) npm version prerelease --preid=next --no-git-tag-version ;;
+              *) npm version "$declared-next.0" --no-git-tag-version ;;
+            esac
+          else
+            npm version "$RELEASE" --no-git-tag-version
+          fi
           # Read back from package.json: a version script prints while npm version runs.
           version=$(node -p "require('./package.json').version")
-          # One spelling of the heading, read by the gate and by the rewrite:
-          # a widening either of them missed would pass one and not the other.
-          heading='## Unreleased( \((patch|minor|major)\))?'
-          grep -Eqx "$heading" CHANGELOG.md || { echo "::error::CHANGELOG.md has no section to release as $version. The heading is '## Unreleased', optionally naming the expected bump as '## Unreleased (patch|minor|major)'."; exit 1; }
-          sed -i -E "s/^$heading$/## $version/" CHANGELOG.md
+          section="### $declared (Unreleased)"
+          if [ "$tag" = latest ]; then
+            [ "$version" = "$declared" ] || { echo "::error::$RELEASE over $before is $version, and CHANGELOG.md's pending section names $declared. Release what the section names, or rewrite its heading."; exit 1; }
+            sed -i -E "s/^$heading$/## \1/" CHANGELOG.md
+            section="## $version"
+          fi
           echo "name=$(node -p "require('./package.json').name")" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "section=$section" >> "$GITHUB_OUTPUT"
 
       # The pre-commit hook lints the package; the tests job already did. One
       # atomic push carries the commit and the tag: either both land or neither,
@@ -114,7 +135,8 @@ jobs:
       - name: Publish to npm
         run: npm publish --access public --tag ${{ steps.version.outputs.tag }}
 
-      # The release notes are the changelog section the bump just named.
+      # The release notes are the changelog section this release names: the one
+      # just cut, or, for a prerelease, the pending one it leaves open.
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -122,7 +144,8 @@ jobs:
           NAME: ${{ steps.version.outputs.name }}
           VERSION: ${{ steps.version.outputs.version }}
           TAG: ${{ steps.version.outputs.tag }}
+          SECTION: ${{ steps.version.outputs.section }}
         run: |
-          awk -v heading="## $VERSION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          awk -v heading="$SECTION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           [ "$TAG" = next ] && prerelease=--prerelease || prerelease=
           gh release create "$PACKAGE-v$VERSION" --verify-tag --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" $prerelease
