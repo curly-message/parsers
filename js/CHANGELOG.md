@@ -12,7 +12,9 @@ message, for a caller that needs to show one rather than render it.
   message back, so an editor can color a message by walking them. It reads the
   scanner resolution reads, so the two cannot disagree about what a placeholder
   is — a construct enclosing another is text here exactly as it is to
-  resolution. It takes no options, and resolution never calls it.
+  resolution. It takes no options, and resolution never calls it. The tree is
+  the one `CST.md` specifies, a companion document to the specification, and
+  the conformance set holds this package to it.
 
 ## 1.0.1
 
