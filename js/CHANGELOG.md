@@ -1,6 +1,6 @@
 # Changelog
 
-### 2.0.0 (Unreleased)
+## 2.0.0
 
 Implements `curly-message-2` — version 2 of the Curly Message Format. Message
 text is syntax, payload text is data, and a message is resolved in one walk. A
