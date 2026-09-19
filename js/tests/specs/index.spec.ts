@@ -210,6 +210,29 @@ describe('parser', () => {
     expect(resolve(message, { payload: { v: ['solo'] } })).toBe('JSON');
     expect(resolve(message, { payload: { v: Tags.from(['solo']) } })).toBe('TEXT');
   });
+  it('which conversion describes a derived array is which one may fail to', () => {
+    class Tags extends Array<string> {}
+
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    // No serialization describes a value that holds itself, and the string
+    // conversion describes this one perfectly well.
+    const cyclic = Tags.from(['a']);
+
+    cyclic.push(cyclic as unknown as string);
+
+    expect(resolve('{{v; default:D}}', { payload: { v: cyclic } })).toBe('a,');
+
+    // And the other way: a serialization would have described this one.
+    const raising = Tags.from(['a', 'b']);
+
+    raising.toString = () => { throw new Error('NO TEXT'); };
+
+    expect(resolve('{{v; default:D}}', { payload: { v: raising } })).toBe('D');
+
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
   it('a payload entry owning only wrapper keys is a wrapper', () => {
     const { resolve } = defaultParser;
 
