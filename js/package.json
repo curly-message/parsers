@@ -47,7 +47,7 @@
   "bugs": {
     "url": "https://github.com/curly-message/parsers/issues"
   },
-  "homepage": "https://github.com/curly-message/parsers/tree/main/js#readme",
+  "homepage": "https://curlymessage.dev/",
   "devDependencies": {
     "@curly-message/conformance": "^3.0.0",
     "@eslint/js": "^10.0.1",
