@@ -1,6 +1,6 @@
 import * as defaultModifiers from './modifiers';
-import type { Cst, Parser, Modifier, Conversions, Interpolate, Interpolation, Locale, Report, Wrappers } from './types';
-import { EVERY_TERMINATOR, failureCode, mergeLayer, nextPlaceholder, ownKeys, ownModifiers, ownValue, parsePlaceholder, unesc, unicodeEscape } from './utils';
+import type { Cst, Parser, Modifier, Conversions, Interpolation, Locale, Report, Wrappers } from './types';
+import { EVERY_TERMINATOR, failureCode, mergeLayer, ownKeys, ownModifiers, ownValue, parsePlaceholder, scanner, unesc, unicodeEscape } from './utils';
 
 export type { Cst, Parser, Modifier, Locale, Report };
 
@@ -9,8 +9,6 @@ export type { Cst, Parser, Modifier, Locale, Report };
 // never reaches it drops it, and a build-time caller is not bundled at all.
 export { createExtractor } from './extract';
 export { cst } from './cst';
-
-const hasPlaceholders = (value: any) => typeof value === 'string' && !!nextPlaceholder(value, 0);
 
 // A `Date`, a `RegExp` and a `Map` all say what they are through `toString`; a
 // plain object says `[object Object]`, so it is the one shape JSON describes
@@ -35,7 +33,7 @@ const isPlainObject = (value: any) => {
 // visiting more nodes than a resolvable output can hold is one no conversion
 // describes, which is what a cycle and a `toJSON` answering nothing are too.
 const serialize = (value: any): string | undefined => {
-  let budget = MAX_INTERPOLATION_LENGTH;
+  let budget = MAX_CONVERSION_NODES;
 
   try {
     const json = JSON.stringify(value, (_, entry) => {
@@ -163,21 +161,153 @@ const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte
 // defines under it, and not one a host registered in its place.
 const isComparison = (name: string, modifiers: Record<string, unknown>) => COMPARISONS.includes(name as Modifier.DefaultKeys) && modifiers[name] === defaultModifiers[name as Modifier.DefaultKeys];
 
-const placeholders: Interpolate = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, id: messageId, conversions, wrappers }) => {
+// The modifier module's exports are the registry a host's table composes with.
+// They are a constant of the module, so the registry is read off them once.
+const builtInModifiers = ownModifiers(defaultModifiers);
+
+const MAX_OUTPUT_LENGTH = 100000;
+
+const MAX_READ_LENGTH = 100000;
+
+const MAX_CONVERSION_NODES = 100000;
+
+const MAX_NESTING = 8;
+
+const MAX_REPORTED_LENGTH = 120;
+
+// A cut that would fall between the halves of a surrogate pair stops one unit
+// short, so an excerpt ends on a whole character and not on an escaped half.
+const cut = (value: string) => value.slice(0, (value.codePointAt(MAX_REPORTED_LENGTH - 1) ?? 0) > 0xffff ? MAX_REPORTED_LENGTH - 1 : MAX_REPORTED_LENGTH);
+
+// `JSON.stringify` leaves a terminator it has no short escape for raw, so
+// every terminator the format holds is escaped again on top of it. The ones
+// it did escape are two characters by then and no longer match.
+const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${cut(value)}...` : value).slice(1, -1).replace(EVERY_TERMINATOR, unicodeEscape);
+
+const REPORT_MESSAGES: Record<Report['code'], string> = {
+  'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
+  'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
+  'missing-options': 'A comparison was given no options to select from, so the placeholder took its fallback chain.',
+  'unserializable-value': 'A value could not become text, so resolution read it as missing.',
+  'missing-locale': 'A formatting modifier was given no locale, so the placeholder resolved to the empty string.',
+  'nesting-limit': `A placeholder was nested deeper than ${MAX_NESTING} levels, so it took its fallback chain.`,
+  'output-limit': `A placeholder resolved to text this resolution has no room for, and would have carried the output past ${MAX_OUTPUT_LENGTH} characters, so it resolved to the empty string.`,
+  'read-limit': `Resolution read more than ${MAX_READ_LENGTH} characters of value text, so this placeholder resolved to the empty string.`,
+};
+
+// A code that reached no limit names one all the same, because a table read by
+// a key it does not carry answers for its prototype, and a report would then
+// carry out whatever somebody else had written there.
+const REPORT_LIMITS: Record<Report['code'], number | undefined> = {
+  'unknown-modifier': undefined,
+  'failed-modifier': undefined,
+  'missing-options': undefined,
+  'unserializable-value': undefined,
+  'missing-locale': undefined,
+  'nesting-limit': MAX_NESTING,
+  'output-limit': MAX_OUTPUT_LENGTH,
+  'read-limit': MAX_READ_LENGTH,
+};
+
+// The axis is a property of the code rather than of the site that reported it,
+// so every code names its own here and no report site chooses one. The table
+// names them all for the reason the limits do. A modifier that could not
+// produce a result was handed the caller's value, props and locale, or is the
+// caller's own, so what it reports is the payload's.
+const REPORT_ORIGINS: Record<Report['code'], Report['origin']> = {
+  'unknown-modifier': 'message',
+  'failed-modifier': 'payload',
+  'missing-options': 'message',
+  'unserializable-value': 'payload',
+  'missing-locale': 'payload',
+  'nesting-limit': 'message',
+  'output-limit': 'limit',
+  'read-limit': 'limit',
+};
+
+const report = (code: Report['code'], reported: string, id: Parser.Id | undefined, onReport: Parser.OnReport | undefined) => {
+  if (!onReport) return;
+
+  try {
+    onReport({ code, origin: REPORT_ORIGINS[code], message: REPORT_MESSAGES[code], id, limit: REPORT_LIMITS[code], text: excerpt(reported) });
+  } catch {
+    // Reporting is an observation, not a step of the resolution. A host whose
+    // logger fails must still get its message back.
+  }
+};
+
+// A message is resolved in one walk (specification, section 5). The message's
+// own text is syntax and is scanned for placeholders; what a placeholder
+// resolves to is data and is never scanned again, so nesting is what the
+// message spells rather than what a payload arranges (section 12).
+const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, id: messageId, conversions, wrappers }) => {
+  const source = `${message}`;
+  // One scanner for the walk: a verdict is final, so the span an opening brace
+  // derives is settled once however many times the walk asks for it.
+  const scan = scanner(source);
   const modifierKeys = Object.keys(modifiers);
 
-  const resolvePlaceholder = (placeholder: string) => {
-    const { key, modifier: modifierKey, options, inlineDefault } = parsePlaceholder(placeholder);
+  // What the output carries and what the payload is read for are budgets of
+  // the resolution rather than of a placeholder: each is spent by what reaches
+  // it, and what one placeholder spends is gone for every placeholder after
+  // it (section 13).
+  let output = MAX_OUTPUT_LENGTH;
+  let read = MAX_READ_LENGTH;
+
+  const resolvePlaceholder = (open: number, close: number, depth: number): string => {
+    const spelling = source.slice(open, close);
     // A link that refuses to be read is not a link nobody passed. `ownValue`
     // answers nothing either way, because resolution must not throw; the
     // difference between the two is what a report is for.
-    const raised = () => report('unserializable-value', placeholder, messageId, onReport);
+    const raised = () => report('unserializable-value', spelling, messageId, onReport);
+
+    // The budget is tested before this placeholder reads, so one that found a
+    // budget and spent it past the limit resolved all the same, and this is
+    // the one that pays for it.
+    if (read < 0) {
+      report('read-limit', spelling, messageId, onReport);
+
+      return '';
+    }
+
+    const { key, modifier: modifierKey, options: segments, inlineDefault } = parsePlaceholder(source, open, close, scan.end);
     const entry = ownValue(payload, key, raised);
     // The payload's root `default` is the fallback itself, never configuration.
     const wrapper = key !== 'default' && isWrapped(entry, wrappers, raised) ? entry : undefined;
     const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
 
-    const payloadText = (declared: any) => describedText(declared, raised, conversions);
+    // Value text is what a placeholder takes from the payload, and every
+    // character of it is spent whether or not any of it reaches the output: a
+    // placeholder that reads a long value and selects nothing from it has
+    // still done the reading.
+    const payloadText = (declared: any) => {
+      const declaredText = describedText(declared, raised, conversions);
+
+      if (declaredText !== undefined) read -= declaredText.length;
+
+      return declaredText;
+    };
+
+    // An option value is the message's own text, so it is rendered rather than
+    // read, and the placeholders it writes resolve one level deeper. A
+    // modifier asks for the options it was given when it wants them and may
+    // ask twice, so a value is rendered where it is first asked for and not
+    // again — and an option the modifier passes over is never rendered at all,
+    // so however deeply it nests it costs nothing and reaches no limit.
+    const rendered = new Map<[number, number], string>();
+    const valueOf = (span: [number, number]) => {
+      const known = rendered.get(span);
+
+      if (known !== undefined) return known;
+
+      const resolved = render(span[0], span[1], depth + 1);
+
+      rendered.set(span, resolved);
+
+      return resolved;
+    };
+
+    const options = segments.map((segment) => ({ key: segment.key, get value() { return valueOf(segment.value); } }));
 
     const valueText = payloadText(value);
 
@@ -186,7 +316,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // A placeholder can name `default` itself, and then the chain's payload
     // link is the entry it has already read as its value. One entry is read
     // once: reading it again would describe a single value that cannot become
-    // text as two.
+    // text as two, and would spend the read budget twice over.
     const payloadDefault = key === 'default' ? () => valueText : () => payloadText(ownValue(payload, 'default', raised));
 
     // The wrapper speaks for its own value, the payload for every key it does
@@ -195,10 +325,20 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // come back empty, and the chain waits for a reader.
     const defaultText = () => {
       resolvedDefault ??= [() => payloadText(ownValue(wrapper, 'default', raised)), payloadDefault]
-        .reduce<string | undefined>((output, read) => output ?? read(), undefined) ?? inlineDefault ?? '';
+        .reduce<string | undefined>((chain, link) => chain ?? link(), undefined) ?? (inlineDefault && valueOf(inlineDefault)) ?? '';
 
       return resolvedDefault;
     };
+
+    // The nesting limit bounds resolution and not derivation: every
+    // placeholder's span is settled before the walk starts, and what the limit
+    // refuses is resolving this one. It is a defect of the message, so the
+    // placeholder takes its fallback chain and the walk carries on.
+    if (depth > MAX_NESTING) {
+      report('nesting-limit', spelling, messageId, onReport);
+
+      return defaultText();
+    }
 
     const hasModifier = !!modifierKey;
 
@@ -206,7 +346,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // running `eq` in its place would render a plausible answer to a question the
     // message never asked.
     if (hasModifier && !modifierKeys.includes(modifierKey)) {
-      report('unknown-modifier', placeholder, messageId, onReport);
+      report('unknown-modifier', spelling, messageId, onReport);
 
       return defaultText();
     }
@@ -220,7 +360,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     // asked nothing. A host that registered its own modifier under the name
     // replaced the comparison, so the placeholder asks the host's modifier
     // and is no selection either.
-    if (key !== undefined && !options.length && isComparison(modifierKey, modifiers)) report('missing-options', placeholder, messageId, onReport);
+    if (key !== undefined && !options.length && isComparison(modifierKey, modifiers)) report('missing-options', spelling, messageId, onReport);
 
     // An absent value is nothing to compare against, whatever the modifier
     // asks: the placeholder takes the fallback chain rather than measuring the
@@ -252,6 +392,9 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // The default reaches the modifier as a property it reads, not as work
       // done before it was called: a modifier that never asks leaves the chain
       // unresolved, so a link nobody consulted is never described as missing.
+      // What the modifier answers with is this placeholder's result rather than
+      // text it read, so it is bounded by the output limit and spends nothing
+      // of the read budget.
       const input = { value: valueText, options, props: modifierProps, get defaultValue() { return defaultText(); }, locale, parserOptions };
 
       return describedText(modifier(input), raised, conversions) ?? defaultText();
@@ -261,7 +404,7 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
       // failure it has always been.
       const code = failureCode(failure) ?? 'failed-modifier';
 
-      report(code, placeholder, messageId, onReport);
+      report(code, spelling, messageId, onReport);
 
       // A locale nobody supplied is the one failure the chain does not answer:
       // a declared default stands in for a value the modifier cannot read,
@@ -270,131 +413,40 @@ const placeholders: Interpolate = ({ value: message, props, payload, parserOptio
     }
   };
 
-  // A pass already past the output limit is discarded whole, and what follows
-  // it can shrink to nothing but no further, so a pass that reaches the limit
-  // has nothing left worth building: what it would resolve, nobody reads, and
-  // what it would assemble is text no string can hold. Such a pass answers
-  // with its length alone.
-  const source = `${message}`;
-  const parts: string[] = [];
-  let growth = 0;
-  let from = 0;
+  // A span of the message: the characters it wrote itself, with their escape
+  // sequences removed, and the placeholders it wrote resolved. The whole
+  // message is one such span, and so is each option value a modifier asks for.
+  const render = (from: number, to: number, depth: number): string => {
+    const parts: string[] = [];
+    let at = from;
 
-  for (let match = nextPlaceholder(source, from); match; match = nextPlaceholder(source, from)) {
-    const [open, end] = match;
+    for (let match = scan.next(at, to); match; match = scan.next(at, to)) {
+      const [open, close] = match;
 
-    // Where this placeholder falls in the output is what the pass has produced
-    // up to it, and a pass produces its text in order, so past the limit here
-    // is past it at the end.
-    if (open + growth > MAX_INTERPOLATION_LENGTH) return undefined;
+      parts.push(unesc(source.slice(at, open)));
 
-    const placeholder = source.slice(open, end);
-    const resolved = resolvePlaceholder(placeholder);
+      const resolved = resolvePlaceholder(open, close, depth);
 
-    parts.push(source.slice(from, open), resolved);
+      // Only what the output carries is counted, and a result nested in
+      // another reaches the output through the one around it, so the charge is
+      // made where the walk meets the message itself and a result is counted
+      // once. The message's own text is the caller's and always renders.
+      if (depth > 1) parts.push(resolved);
+      else if (resolved.length <= output) {
+        output -= resolved.length;
 
-    growth += resolved.length - placeholder.length;
-    from = end;
+        parts.push(resolved);
+      } else report('output-limit', source.slice(open, close), messageId, onReport);
 
-    // And the same measure taken where the source it has left begins, so a
-    // pass over the limit is not scanned to its end for placeholders it has
-    // already decided not to resolve.
-    if (from + growth > MAX_INTERPOLATION_LENGTH) return undefined;
-  }
-
-  return source.length + growth > MAX_INTERPOLATION_LENGTH ? undefined : [...parts, source.slice(from)].join('');
-};
-
-const MAX_INTERPOLATION_PASSES = 10;
-
-// The modifier module's exports are the registry a host's table composes with.
-// They are a constant of the module, so the registry is read off them once.
-const builtInModifiers = ownModifiers(defaultModifiers);
-
-const MAX_INTERPOLATION_LENGTH = 100000;
-
-const MAX_REPORTED_LENGTH = 120;
-
-// A cut that would fall between the halves of a surrogate pair stops one unit
-// short, so an excerpt ends on a whole character and not on an escaped half.
-const cut = (value: string) => value.slice(0, (value.codePointAt(MAX_REPORTED_LENGTH - 1) ?? 0) > 0xffff ? MAX_REPORTED_LENGTH - 1 : MAX_REPORTED_LENGTH);
-
-// `JSON.stringify` leaves a terminator it has no short escape for raw, so
-// every terminator the format holds is escaped again on top of it. The ones
-// it did escape are two characters by then and no longer match.
-const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${cut(value)}...` : value).slice(1, -1).replace(EVERY_TERMINATOR, unicodeEscape);
-
-const REPORT_MESSAGES: Record<Report['code'], string> = {
-  'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
-  'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
-  'missing-options': 'A comparison was given no options to select from, so the placeholder took its fallback chain.',
-  'unserializable-value': 'A value could not become text, so resolution read it as missing.',
-  'missing-locale': 'A formatting modifier was given no locale, so the placeholder resolved to the empty string.',
-  'pass-limit': `Interpolation stopped after ${MAX_INTERPOLATION_PASSES} passes. A payload value probably references its own placeholder.`,
-  'output-limit': `Interpolation stopped before exceeding ${MAX_INTERPOLATION_LENGTH} characters. A payload value probably multiplies its own placeholder.`,
-};
-
-// A code that reached no limit names one all the same, because a table read by
-// a key it does not carry answers for its prototype, and a report would then
-// carry out whatever somebody else had written there.
-const REPORT_LIMITS: Record<Report['code'], number | undefined> = {
-  'unknown-modifier': undefined,
-  'failed-modifier': undefined,
-  'missing-options': undefined,
-  'unserializable-value': undefined,
-  'missing-locale': undefined,
-  'pass-limit': MAX_INTERPOLATION_PASSES,
-  'output-limit': MAX_INTERPOLATION_LENGTH,
-};
-
-// The axis is a property of the code rather than of the site that reported it,
-// so every code names its own here and no report site chooses one. The table
-// names them all for the reason the limits do. A modifier that could not
-// produce a result was handed the caller's value, props and locale, or is the
-// caller's own, so what it reports is the payload's.
-const REPORT_ORIGINS: Record<Report['code'], Report['origin']> = {
-  'unknown-modifier': 'message',
-  'failed-modifier': 'payload',
-  'missing-options': 'message',
-  'unserializable-value': 'payload',
-  'missing-locale': 'payload',
-  'pass-limit': 'limit',
-  'output-limit': 'limit',
-};
-
-const report = (code: Report['code'], reported: string, id: Parser.Id | undefined, onReport: Parser.OnReport | undefined) => {
-  if (!onReport) return;
-
-  try {
-    onReport({ code, origin: REPORT_ORIGINS[code], message: REPORT_MESSAGES[code], id, limit: REPORT_LIMITS[code], text: excerpt(reported) });
-  } catch {
-    // Reporting is an observation, not a step of the resolution. A host whose
-    // logger fails must still get its message back.
-  }
-};
-
-const interpolate: Interpolation = ({ value, props, payload, parserOptions, modifiers, modifierDefaults, onReport, locale, id, conversions, wrappers }) => {
-  let output = value;
-
-  for (let pass = 0; hasPlaceholders(output); pass += 1) {
-    if (pass === MAX_INTERPOLATION_PASSES) {
-      report('pass-limit', output, id, onReport);
-
-      break;
+      at = close;
     }
 
-    const next = placeholders({ value: output, payload, props, parserOptions, modifiers, modifierDefaults, onReport, locale, id, conversions, wrappers });
+    parts.push(unesc(source.slice(at, to)));
 
-    if (next === undefined) {
-      report('output-limit', output, id, onReport);
+    return parts.join('');
+  };
 
-      break;
-    }
-
-    output = next;
-  }
-
-  return text(unesc(output), conversions) ?? '';
+  return render(0, source.length, 1);
 };
 
 export const createParser: Parser.Factory = (parserOptions) => ({

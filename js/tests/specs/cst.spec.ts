@@ -4,17 +4,24 @@ import type { Case, TreeCase } from '@curly-message/conformance';
 import { createExtractor, cst } from '../../src';
 import type { Cst } from '../../src';
 import { MESSAGES } from '../data';
-import { LINE_TERM, parsePlaceholder, unesc } from '../../src/utils';
+import { LINE_TERM, parsePlaceholder, scanner } from '../../src/utils';
 
 const leaves = (node: Cst.Node): Cst.Node[] => ('nodes' in node && node.nodes.length ? node.nodes.flatMap(leaves) : [node]);
 
 const kinds = (message: string) => cst(message).nodes.map(({ type }) => type);
 
-const of = (message: string, type: Cst.Name['type']) =>
+const parts = (message: string) =>
   cst(message)
     .nodes.filter((node): node is Cst.Placeholder => node.type === 'placeholder')
-    .flatMap(({ nodes }) => nodes)
-    .filter((node): node is Cst.Name => node.type === type);
+    .flatMap(({ nodes }) => nodes);
+
+const of = (message: string, type: Cst.Name['type']) => parts(message).filter((node): node is Cst.Name => node.type === type);
+
+// An option value answers to nobody, so it carries the subtree the message
+// spells and no name to compare: what it states is the text it spans.
+const valued = (message: string) => parts(message)
+  .filter((node): node is Cst.OptionValue => node.type === 'option-value')
+  .map(({ start, end }) => message.slice(start, end));
 
 // A generated case names a construction rather than a message, so only the
 // cases that state one are read, each through the set's own decoding. A file
@@ -56,26 +63,29 @@ const cuts = (message: string, at: number) => at > 0 && at < message.length && m
 
 // What a placeholder declares, read off the tree the way resolution reads it
 // off the text. An option that names nothing declares nothing, and one named
-// `default` is the inline default rather than an option (section 9.4).
+// `default` is the inline default rather than an option (section 9.4). A
+// value is where it is written and not what it says, because an option value
+// is message text a modifier asks for rather than a name to compare.
 const stated = (placeholder: Cst.Placeholder) => {
-  const named = placeholder.nodes.filter((node): node is Cst.Name => 'name' in node);
-  const options: { key: string, value: string }[] = [];
-  let inlineDefault: string | undefined;
+  const declared = placeholder.nodes.filter((node): node is Cst.Name | Cst.OptionValue => node.type === 'key' || node.type === 'modifier' || node.type === 'option-key' || node.type === 'option-value');
+  const name = (type: Cst.Name['type']) => declared.find((node): node is Cst.Name => node.type === type)?.name;
+  const options: { key: string, value: [number, number] }[] = [];
+  let inlineDefault: [number, number] | undefined;
 
-  named.forEach((node, index) => {
+  declared.forEach((node, index) => {
     if (node.type !== 'option-key' || !node.name) return;
 
-    const next = named[index + 1];
+    const next = declared[index + 1];
     // A segment that states no value stands for its own key.
-    const value = next?.type === 'option-value' ? next.name : node.name;
+    const value: [number, number] = next?.type === 'option-value' ? [next.start, next.end] : [node.start, node.end];
 
     if (inlineDefault === undefined && node.name === 'default') inlineDefault = value;
     if (node.name !== 'default') options.push({ key: node.name, value });
   });
 
   return {
-    key: named.find(({ type }) => type === 'key')?.name || undefined,
-    modifier: named.find(({ type }) => type === 'modifier')?.name ?? '',
+    key: name('key') || undefined,
+    modifier: name('modifier') ?? '',
     options,
     inlineDefault,
   };
@@ -157,13 +167,13 @@ describe('the tree a message is described by', () => {
 
   it('reads an option to its first colon and the value through every later one', () => {
     expect(of('{{v; a:b:c;}}', 'option-key').map(({ name }) => name)).toEqual(['a', '']);
-    expect(of('{{v; a:b:c;}}', 'option-value').map(({ name }) => name)).toEqual(['b:c']);
+    expect(valued('{{v; a:b:c;}}')).toEqual(['b:c']);
   });
 
   it('describes a segment that states no value by its key alone', () => {
     expect(of('{{v; shipped;}}', 'option-key').map(({ name }) => name)).toEqual(['shipped', '']);
-    expect(of('{{v; shipped;}}', 'option-value')).toEqual([]);
-    expect(of('{{v; shipped:;}}', 'option-value').map(({ name }) => name)).toEqual(['']);
+    expect(valued('{{v; shipped;}}')).toEqual([]);
+    expect(valued('{{v; shipped:;}}')).toEqual(['']);
     // The `;` an idiomatic placeholder ends with opens a segment of its own,
     // and that segment is empty: section 6 derives `{ ";" , segment }`.
     expect(of('{{v; shipped:;}}', 'option-key').map(({ name }) => name)).toEqual(['shipped', '']);
@@ -194,12 +204,40 @@ describe('the tree a message is described by', () => {
     expect([text.type, message.slice(text.start, text.end)]).toEqual(['text', 'x']);
   });
 
-  it('describes a construct enclosing another as the text section 12 resolves it as', () => {
+  it('describes a placeholder an option value holds inside that value (section 6, note 10)', () => {
     const message = '{{count:gt; 0:{{count:number;}}; default:no;}}';
-    const [text, placeholder, rest] = cst(message).nodes;
+    const [placeholder, ...rest] = cst(message).nodes;
 
-    expect([text.type, placeholder.type, rest.type]).toEqual(['text', 'placeholder', 'text']);
-    expect(message.slice(placeholder.start, placeholder.end)).toBe('{{count:number;}}');
+    expect([placeholder.type, rest]).toEqual(['placeholder', []]);
+    expect(message.slice(placeholder.start, placeholder.end)).toBe(message);
+
+    const [value] = parts(message).filter((node): node is Cst.OptionValue => node.type === 'option-value');
+    const [inner, ...after] = value.nodes;
+
+    expect([message.slice(value.start, value.end), after]).toEqual(['{{count:number;}}', []]);
+    expect([inner.type, message.slice(inner.start, inner.end)]).toEqual(['placeholder', '{{count:number;}}']);
+  });
+
+  it('derives a placeholder inside an option value and nowhere else (section 6, note 10)', () => {
+    const spans = (message: string) => cst(message).nodes.map(({ type, start, end }) => `${type}:${message.slice(start, end)}`);
+
+    // A value is the one position that reads into a nested construct, so a
+    // `{{` in a key, in a modifier name or in an option key belongs to no
+    // construct around it: that one does not derive, and the scan resumes one
+    // brace along, where the inner construct derives on its own (note 7).
+    expect(spans('{{a{{b}}c}}')).toEqual(['text:{{a', 'placeholder:{{b}}', 'text:c}}']);
+    expect(spans('{{a:b{{c}}d}}')).toEqual(['text:{{a:b', 'placeholder:{{c}}', 'text:d}}']);
+    expect(spans('{{v; a{{b}}c:d;}}')).toEqual(['text:{{v; a', 'placeholder:{{b}}', 'text:c:d;}}']);
+
+    // In a value the `{{` must open a complete placeholder, and where it does
+    // not the construct around it does not derive either -- again leaving the
+    // inner spelling to the scan that resumes.
+    expect(spans('{{v; a:{{b;}}')).toEqual(['text:{{v; a:', 'placeholder:{{b;}}']);
+
+    // Where it does, the whole construct derives and the inner one is a child
+    // of the value rather than a sibling of it.
+    expect(spans('{{v; a:{{b}}c;}}')).toEqual(['placeholder:{{v; a:{{b}}c;}}']);
+    expect(valued('{{v; a:{{b}}c;}}')).toEqual(['{{b}}c']);
   });
 
   it('derives no placeholder where a backslash consumed a brace (appendix A.15 and A.16)', () => {
@@ -223,16 +261,13 @@ describe('the tree a message is described by', () => {
         if (node.type !== 'placeholder') continue;
 
         const source = message.slice(node.start, node.end);
-        const read = parsePlaceholder(source);
+        const read = parsePlaceholder(message, node.start, node.end, scanner(message).end);
 
-        // An option value is the source spelling, unescaped once with the rest
-        // of the output rather than matched by name (section 7), so that is
-        // where the two readings meet.
         expect([source, stated(node)]).toEqual([source, {
           key: read.key,
           modifier: read.modifier,
-          options: read.options.map(({ key, value }) => ({ key, value: unesc(value) })),
-          inlineDefault: read.inlineDefault === undefined ? undefined : unesc(read.inlineDefault),
+          options: read.options,
+          inlineDefault: read.inlineDefault,
         }]);
       }
     }
@@ -240,19 +275,15 @@ describe('the tree a message is described by', () => {
 
   it('names the keys the extractor names, over every message the set states', () => {
     const extract = createExtractor();
+    // A placeholder an option value holds is described inside that value, so
+    // the keys are read through the whole tree rather than off its top row.
+    const keys = (node: Cst.Node): string[] => [
+      ...(node.type === 'key' && node.name !== '' ? [node.name] : []),
+      ...('nodes' in node ? node.nodes.flatMap(keys) : []),
+    ];
 
     for (const message of CORPUS) {
-      const named = [
-        ...new Set(
-          cst(message)
-            .nodes.filter((node): node is Cst.Placeholder => node.type === 'placeholder')
-            .flatMap(({ nodes }) => nodes.filter((node): node is Cst.Name => node.type === 'key'))
-            .map(({ name }) => name)
-            .filter((name) => name !== ''),
-        ),
-      ];
-
-      expect([message, named]).toEqual([message, extract(message).map(({ name }) => name)]);
+      expect([message, [...new Set(keys(cst(message)))]]).toEqual([message, extract(message).map(({ name }) => name)]);
     }
   });
 });

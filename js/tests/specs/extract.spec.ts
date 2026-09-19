@@ -52,8 +52,11 @@ describe('the parameters a message names', () => {
     });
   });
 
-  it('names what the surviving placeholder names where one holds another', () => {
-    expect(names('{{n:eq; 1:you have {{x}}}}')).toEqual(['x']);
+  it('names what both placeholders name where one holds another', () => {
+    // An option value is message text, so a placeholder it holds is one the
+    // message names a key through, in the order the message writes them.
+    expect(names('{{n:eq; 1:you have {{x}}}}')).toEqual(['n', 'x']);
+    expect(names('{{n:eq; 1:{{a}}; default:{{b}};}} {{c}}')).toEqual(['n', 'a', 'b', 'c']);
   });
 });
 

@@ -1,5 +1,6 @@
 import type { Modifier, Parser } from './types';
-import { nextPlaceholder, ownModifiers, ownValue, parsePlaceholder } from './utils';
+import { ownModifiers, ownValue, parsePlaceholder, scanner } from './utils';
+import type { Segment } from './utils';
 
 export type { Modifier, Parser };
 
@@ -54,34 +55,52 @@ export const createExtractor: Parser.ExtractorFactory = (options) => {
   // the parameter takes: `ne`'s keys are what the value must differ from, and
   // an inequality's are thresholds it is ordered against. A placeholder naming
   // no modifier selects with `eq` too (SPEC.md section 9.5).
-  const named = (modifier: string, declared: Modifier.ModifierOption[]) => (!registered.eq && (modifier === 'eq' || !modifier) ? declared.map(({ key }) => key) : []);
+  const named = (modifier: string, declared: readonly Segment[]) => (!registered.eq && (modifier === 'eq' || !modifier) ? declared.map(({ key }) => key) : []);
 
   return (message) => {
     const drafts = new Map<string, Draft>();
 
     if (typeof message !== 'string') return [];
 
-    let from = 0;
+    const scan = scanner(message);
 
-    for (let match = nextPlaceholder(message, from); match; match = nextPlaceholder(message, from)) {
-      const [open, end] = match;
+    // An option value is the message's own text, so a placeholder written in
+    // one names a parameter like any other (SPEC.md section 12). The outer
+    // placeholder is written first and is drafted first, which is the order
+    // the parameters come back in.
+    const walk = (from: number, to: number) => {
+      let at = from;
 
-      from = end;
+      for (let match = scan.next(at, to); match; match = scan.next(at, to)) {
+        const [open, close] = match;
 
-      const { key, modifier, options, inlineDefault } = parsePlaceholder(message.slice(open, end));
+        at = close;
 
-      // A placeholder naming no key reads no payload entry, so it names no
-      // parameter either.
-      if (key === undefined) continue;
+        const { key, modifier, options, inlineDefault } = parsePlaceholder(message, open, close, scan.end);
 
-      const draft = drafts.get(key) ?? EMPTY;
+        // A placeholder naming no key reads no payload entry, so it names no
+        // parameter itself — what it writes in its options it still names.
+        if (key !== undefined) {
+          const draft = drafts.get(key) ?? EMPTY;
 
-      drafts.set(key, {
-        kinds: [...new Set([...draft.kinds, ...narrowed(modifier)])],
-        values: [...new Set([...draft.values, ...named(modifier, options)])],
-        optional: draft.optional || inlineDefault !== undefined,
-      });
-    }
+          drafts.set(key, {
+            kinds: [...new Set([...draft.kinds, ...narrowed(modifier)])],
+            values: [...new Set([...draft.values, ...named(modifier, options)])],
+            optional: draft.optional || inlineDefault !== undefined,
+          });
+        }
+
+        // The spans the placeholder holds message text in, read in the order
+        // the message writes them: an option and the inline default are one
+        // sequence of segments, and a parameter a nested placeholder names
+        // comes back where the message names it.
+        const held = [...options.map(({ value }) => value), ...(inlineDefault ? [inlineDefault] : [])].sort(([a], [b]) => a - b);
+
+        for (const [start, stop] of held) walk(start, stop);
+      }
+    };
+
+    walk(0, message.length);
 
     return [...drafts].map(([name, draft]) => ({
       name,
