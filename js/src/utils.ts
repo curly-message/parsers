@@ -1,4 +1,4 @@
-import type { Modifier, Report } from './types';
+import type { Report } from './types';
 
 /**
  * The format's `line-term` production (SPEC.md section 6, note 1): the four
@@ -59,56 +59,156 @@ export const escapeEnd = (value: string, index: number, to: number) => (index + 
  */
 export const EVERY_TERMINATOR = new RegExp(TERMINATOR_CLASS, 'g');
 
-// A backslash consumes the character after it, so a brace an escape claimed
-// is text rather than half of a delimiter, and a placeholder holds no line
-// terminator in any position. Both delimiters are two characters, so each scan
-// reads one character ahead, and `charAt` stops at the end of the message where
-// an index would answer for its prototype.
-const placeholderEnd = (value: string, open: number) => {
-  for (let index = open + 2; index < value.length; index += 1) {
-    const character = value[index];
+// Which part of a placeholder the scan is inside. Only a value admits a
+// nested placeholder (SPEC.md section 6, note 10), so the scan carries the
+// part to know whether a `{{` it meets opens one or refuses the construct.
+type Part = 'key' | 'modifier' | 'option-key' | 'option-value';
 
-    if (character === '\\') {
-      if (TERMINATOR.test(value.charAt(index + 1))) return undefined;
-
-      index = escapeEnd(value, index, value.length) - 1;
-      continue;
-    }
-
-    if (TERMINATOR.test(character)) return undefined;
-
-    if (character === '{' && value.charAt(index + 1) === '{') return undefined;
-
-    if (character === '}' && value.charAt(index + 1) === '}') return index + 2;
-  }
-
-  return undefined;
+/**
+ * Reads one message for the placeholders it derives. It is scoped to that
+ * message because it records what it has decided, and a verdict belongs to a
+ * message and a position rather than to the parser.
+ */
+export type Scanner = {
+  /** Where a complete placeholder opening at `open` ends, or nothing. */
+  end: (open: number) => number | undefined,
+  /**
+   * Where the next placeholder opening at or after `from` opens and ends, or
+   * nothing. The search stops at `to`, so a span of the message is read for
+   * what it holds rather than for what follows it.
+   */
+  next: (from: number, to: number) => [number, number] | undefined,
 };
 
 /**
- * Where the next placeholder opens and where it ends, or nothing where the
- * text holds none from `from` on.
+ * A scanner for one message.
  *
- * Both scans skip an escape sequence whole, so the parity of a run of
- * backslashes is never counted backwards and the cost stays linear in the
- * length of the message. An attempt that fails leaves the braces it rejected
- * to a later pair.
+ * A backslash consumes the character after it, so a brace an escape claimed is
+ * text rather than half of a delimiter, and a placeholder holds no line
+ * terminator in any position. Both delimiters are two characters, so the scan
+ * reads one character ahead, and `charAt` stops at the end of the message
+ * where an index would answer for its prototype.
+ *
+ * A verdict is final (section 6, note 11): whether a placeholder derives at a
+ * position is a function of the message and that position alone, so an answer
+ * is recorded and never recomputed. That record is what keeps the scan linear
+ * in the length of the message — note 7 has the scan resume one code point
+ * past a brace that opened nothing, so the attempts overlap, and without the
+ * record a message that nests deeply costs time growing faster than any
+ * polynomial in its length.
  */
-export const nextPlaceholder = (value: string, from: number): [number, number] | undefined => {
-  for (let index = from; index < value.length; index += 1) {
-    if (value[index] === '\\') {
-      index = escapeEnd(value, index, value.length) - 1;
-      continue;
+export const scanner = (value: string): Scanner => {
+  // A position answered `-1` derives no placeholder. Absent means unasked.
+  const verdict = new Map<number, number>();
+
+  const end = (open: number) => {
+    const known = verdict.get(open);
+
+    if (known !== undefined) return known < 0 ? undefined : known;
+
+    // An explicit stack rather than recursion: nesting is not otherwise
+    // limited (section 6, note 10), and a message twenty thousand levels deep
+    // must not take the host's call stack down with it.
+    const stack: { open: number, index: number, part: Part }[] = [{ open, index: open + 2, part: 'key' }];
+    // Every construct still open when the scan dies is one whose closing pair
+    // never arrived, so each of them derives nothing.
+    const refuse = () => {
+      stack.forEach((frame) => verdict.set(frame.open, -1));
+
+      return undefined;
+    };
+
+    while (stack.length) {
+      const frame = stack[stack.length - 1];
+
+      if (frame.index >= value.length) return refuse();
+
+      const character = value[frame.index];
+
+      if (character === '\\') {
+        if (TERMINATOR.test(value.charAt(frame.index + 1))) return refuse();
+
+        frame.index = escapeEnd(value, frame.index, value.length);
+        continue;
+      }
+
+      if (TERMINATOR.test(character)) return refuse();
+
+      if (character === ';') {
+        frame.part = 'option-key';
+        frame.index += 1;
+        continue;
+      }
+
+      if (character === ':') {
+        // The first colon of a part is its separator and a later one is
+        // content (section 6, notes 3 and 4), so a part only ever moves on.
+        if (frame.part === 'key') frame.part = 'modifier';
+        else if (frame.part === 'option-key') frame.part = 'option-value';
+
+        frame.index += 1;
+        continue;
+      }
+
+      if (character === '{' && value.charAt(frame.index + 1) === '{') {
+        // A `{{` in a value must open a complete placeholder or the construct
+        // around it does not derive at all; anywhere else it opens none, so
+        // the construct around it does not derive either (note 10).
+        if (frame.part !== 'option-value') return refuse();
+
+        const nested = verdict.get(frame.index);
+
+        if (nested !== undefined) {
+          if (nested < 0) return refuse();
+
+          frame.index = nested;
+          continue;
+        }
+
+        stack.push({ open: frame.index, index: frame.index + 2, part: 'key' });
+        continue;
+      }
+
+      if (character === '}' && value.charAt(frame.index + 1) === '}') {
+        const close = frame.index + 2;
+
+        verdict.set(frame.open, close);
+        stack.pop();
+
+        if (!stack.length) return close;
+
+        stack[stack.length - 1].index = close;
+        continue;
+      }
+
+      frame.index += 1;
     }
 
-    if (value[index] !== '{' || value.charAt(index + 1) !== '{') continue;
+    return undefined;
+  };
 
-    const end = placeholderEnd(value, index);
+  const next = (from: number, to: number): [number, number] | undefined => {
+    for (let index = from; index < to; index += 1) {
+      if (value[index] === '\\') {
+        index = escapeEnd(value, index, to) - 1;
+        continue;
+      }
 
-    if (end !== undefined) return [index, end];
-  }
+      // Both braces belong to the span: a placeholder that derives inside one
+      // closes inside it, so a lone brace at the end opens nothing.
+      if (value[index] !== '{' || index + 1 >= to || value[index + 1] !== '{') continue;
 
-  return undefined;
+      const close = end(index);
+
+      // The braces a refused construct opened are text, and the scan resumes
+      // at the very next code point rather than past the pair (note 7).
+      if (close !== undefined) return [index, close];
+    }
+
+    return undefined;
+  };
+
+  return { end, next };
 };
 
 // The syntax reserves a colon, a semicolon, either brace, a backslash and
@@ -152,16 +252,28 @@ export const trimmed = (value: string, from: number, to: number): [number, numbe
 
 /**
  * The spans between `from` and `to` that `separator` divides, passing over
- * every occurrence an escape sequence claims. There is always one span: a
+ * every occurrence an escape sequence claims and every one a nested
+ * placeholder writes (SPEC.md section 6, note 5). There is always one span: a
  * range the separator does not occur in is itself.
+ *
+ * `end` is the scanner's, and a caller that has none passes none: a key, a
+ * modifier name and an option key hold no placeholder (note 10), so a range
+ * inside one is divided by escapes alone.
  */
-export const separated = (value: string, from: number, to: number, separator: string): [number, number][] => {
+export const separated = (value: string, from: number, to: number, separator: string, end?: Scanner['end']): [number, number][] => {
   const parts: [number, number][] = [];
   let start = from;
 
   for (let index = from; index < to; index += 1) {
-    if (value[index] === '\\') index = escapeEnd(value, index, to) - 1;
-    else if (value[index] === separator) {
+    if (value[index] === '\\') { index = escapeEnd(value, index, to) - 1; continue; }
+
+    if (end && value[index] === '{' && value.charAt(index + 1) === '{') {
+      const close = end(index);
+
+      if (close !== undefined && close <= to) { index = close - 1; continue; }
+    }
+
+    if (value[index] === separator) {
       parts.push([start, index]);
       start = index + 1;
     }
@@ -170,51 +282,66 @@ export const separated = (value: string, from: number, to: number, separator: st
   return [...parts, [start, to]];
 };
 
-// Reading a placeholder and describing one split it the same way, so both read
-// the spans above rather than a second implementation of the same rule.
-const trim = (value: string) => {
-  const [start, end] = trimmed(value, 0, value.length);
+/** A span with its blank padding dropped, unescaped: a name as it answers. */
+const named = (value: string, from: number, to: number) => {
+  const [start, end] = trimmed(value, from, to);
 
-  return value.slice(start, end);
+  return { empty: start === end, name: unesc(value.slice(start, end)) as string };
 };
 
-const split = (value: string, separator: string) => separated(value, 0, value.length, separator).map(([start, end]) => value.slice(start, end));
+/** An option a placeholder declares, with its value left as a span to read. */
+export type Segment = {
+  /** The option key, padding dropped and escapes removed. */
+  key: string,
+  /**
+   * Where the value is written, padding dropped. A segment that states no
+   * value stands for its own key (section 9.4), so the span is the key's.
+   * It is a span and not text because a value is message text: it may hold a
+   * placeholder, and reading it is work the modifier asks for rather than
+   * work collecting it does (section 9.4).
+   */
+  value: [number, number],
+};
 
 /**
  * What a placeholder declares: the payload key it names, the modifier it
  * names, the options it carries and the default it states inline. Every name
  * arrives unescaped, because a name answers to itself rather than to the
- * spelling a message needed to write it.
+ * spelling a message needed to write it. Every value arrives unread.
  *
  * Reading a placeholder is the same work whether it is being resolved or only
  * described, so resolution and extraction read it here.
  */
-export const parsePlaceholder = (placeholder: string): { key?: string, modifier: string, options: Modifier.ModifierOption[], inlineDefault?: string } => {
-  const [declaration, ...declaredOptions] = split(placeholder.slice(2, -2), ';');
-  const [declaredKey, ...declaredModifier] = split(declaration, ':');
+export const parsePlaceholder = (message: string, open: number, close: number, end: Scanner['end']): { key?: string, modifier: string, options: Segment[], inlineDefault?: [number, number] } => {
+  const [declaration, ...segments] = separated(message, open + 2, close - 2, ';', end);
+  // The selector's colon is the first one no escape claims, and everything
+  // after it is the modifier name (section 6, note 3).
+  const [declaredKey] = separated(message, declaration[0], declaration[1], ':');
+  const declaredName = named(message, declaredKey[0], declaredKey[1]);
+  const declaredModifier = named(message, Math.min(declaredKey[1] + 1, declaration[1]), declaration[1]);
 
-  const declaredName = trim(declaredKey);
-  const options: Modifier.ModifierOption[] = [];
-  let inlineDefault: string | undefined;
+  const options: Segment[] = [];
+  let inlineDefault: [number, number] | undefined;
 
-  declaredOptions.forEach((option) => {
-    const [declaredOptionKey, ...declaredValue] = split(option, ':');
-    const optionKey = unesc(trim(declaredOptionKey));
+  segments.forEach(([from, to]) => {
+    const [declaredOptionKey] = separated(message, from, to, ':', end);
+    const optionKey = named(message, declaredOptionKey[0], declaredOptionKey[1]).name;
     // The first colon is the separator and every later one is value. An
     // option that names no value at all stands for itself; one that ends
     // at its colon declares the empty string.
-    const optionValue = declaredValue.length ? trim(declaredValue.join(':')) : trim(declaredOptionKey);
+    const declaredValue: [number, number] = declaredOptionKey[1] < to ? [declaredOptionKey[1] + 1, to] : declaredOptionKey;
+    const value = trimmed(message, declaredValue[0], declaredValue[1]);
 
     if (!optionKey) return;
 
     // `default` is reserved in lowercase, so both gates read the same
     // spelling and a segment is either the inline default or an option.
-    if (inlineDefault === undefined && optionKey === 'default') inlineDefault = optionValue;
+    if (inlineDefault === undefined && optionKey === 'default') inlineDefault = value;
 
-    if (optionKey !== 'default') options.push({ key: optionKey, value: optionValue });
+    if (optionKey !== 'default') options.push({ key: optionKey, value });
   });
 
-  return { key: declaredName ? unesc(declaredName) : undefined, modifier: unesc(trim(declaredModifier.join(':'))), options, inlineDefault };
+  return { key: declaredName.empty ? undefined : declaredName.name, modifier: declaredModifier.name, options, inlineDefault };
 };
 
 /**

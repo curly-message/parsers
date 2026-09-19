@@ -11,7 +11,7 @@ import { createParser, cst, Modifier, Parser, Report } from '../../src';
  */
 export const adapter: Adapter = {
   levels: ['core', 'intl', 'extensions'],
-  limits: { passes: 10, output: 100000, conversion: 100000 },
+  limits: { output: 100000, read: 100000, conversion: 100000, nesting: 8 },
   // CST.md section 4 lets an implementation count its spans in whatever unit
   // its strings are indexed by, and asks it to say which: these are ECMAScript
   // string indices, so UTF-16 code units.

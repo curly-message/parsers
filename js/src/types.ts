@@ -43,27 +43,23 @@ export type Conversions = Map<any, string | undefined>;
 export type Wrappers = Map<object, boolean | undefined>;
 
 /**
- * What a pass reads. It sees the message's id on top of what a pass needs to
- * substitute, because a report names the message it came from, and what the
- * resolution around it has already converted and recognized. The option bag's
- * own entries reach it read: the modifiers a message can name and the defaults
- * they read are the call's own structure, read once for the call like the
- * context's entries, so a pass composes over them and asks the bag nothing. A
- * pass carries the host's props without reading one, so it names no props type
- * of its own.
+ * What the walk reads. It sees the message's id on top of what resolving one
+ * needs, because a report names the message it came from, and what the call
+ * around it has already converted and recognized. The option bag's own entries
+ * reach it read: the modifiers a message can name and the defaults they read
+ * are the call's own structure, read once for the call like the context's
+ * entries, so the walk composes over them and asks the bag nothing. The walk
+ * carries the host's props without reading one, so it names no props type of
+ * its own.
  */
-type PassProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
+type WalkProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifiers: Record<string, Modifier.T<any, any>>, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
 
 /**
- * A single interpolation pass, answering with nothing where the pass runs past
- * the output limit: the loop discards such a pass whole, so it is measured
- * rather than assembled — the text it would assemble can be longer than a
- * string this host will hold.
+ * Resolves a message. One walk produces the whole output: what a placeholder
+ * resolves to is data and is never read back as syntax, so there is nothing to
+ * repeat and nothing to answer with but the text.
  */
-export type Interpolate = (config: PassProps) => string | undefined;
-
-/** The interpolation loop, which answers with the last pass it kept. */
-export type Interpolation = (config: PassProps) => string;
+export type Interpolation = (config: WalkProps) => string;
 
 /**
  * A diagnostic the parser hands to its caller. The format does not specify a
@@ -72,7 +68,7 @@ export type Interpolation = (config: PassProps) => string;
  */
 export type Report = {
   /** What stopped resolution. */
-  code: 'unknown-modifier' | 'failed-modifier' | 'missing-options' | 'unserializable-value' | 'missing-locale' | 'pass-limit' | 'output-limit';
+  code: 'unknown-modifier' | 'failed-modifier' | 'missing-options' | 'unserializable-value' | 'missing-locale' | 'nesting-limit' | 'output-limit' | 'read-limit';
   /**
    * Which of the three the defect belongs to, and so who fixes it: the message
    * that was written, what the caller passed, or a limit this parser set. Every
@@ -90,15 +86,15 @@ export type Report = {
   /** The limit that was reached, where the report is about one. */
   limit?: number;
   /**
-   * Where the trouble came from: the placeholder for a report about one, the
-   * output that would not settle for the two limits, the message as the caller
-   * wrote it where a read of the call's own structure refused — a context
-   * entry, an entry of the option bag — and nothing at all where what could
-   * not be described is the chain a message itself resolves through. The last
-   * two name no placeholder, and a message that is not text carries none of
-   * itself either. Truncated — a cut is marked with a trailing `...` of the
-   * parser's own — and with its line terminators escaped, so payload content
-   * cannot forge a line wherever this is written.
+   * Where the trouble came from: the placeholder for a report about one, and
+   * the message as the caller wrote it where a read of the call's own
+   * structure refused — a context entry, an entry of the option bag. That one
+   * names no placeholder, and a message that is not text carries none of
+   * itself either. It is message text throughout and never a payload value:
+   * what a placeholder resolves to is data, and nothing reads it as text
+   * again. Truncated — a cut is marked with a trailing `...` of the parser's
+   * own — and with its line terminators escaped, so no message can forge a
+   * line wherever this is written.
    */
   text: string;
 };
@@ -263,12 +259,11 @@ export module Parser {
    * empty string whatever the value is. A timestamp or an ISO string keeps
    * both.
    *
-   * A value passes through the same unescaping as the message around it: a
-   * backslash before a character the syntax reserves — `:`, `;`, `{`, `}`, a
-   * backslash, or whitespace — writes that character as text and is dropped
-   * itself, while a backslash before anything else is left as it is. So a
-   * value holding `\d+` arrives as typed, and one holding `\\server\share`
-   * resolves to `\server\share` unless each consumed backslash is doubled.
+   * A value is data and is never read as syntax: no escape sequence is removed
+   * from it and no placeholder is found in it, so it reaches the output as it
+   * was passed. A value holding `\d+` renders `\d+`, one holding `\\server\share`
+   * renders `\\server\share`, and one holding the nine characters `{{count}}`
+   * renders those nine characters.
    */
   export type Payload<T = any, Props = Modifier.DefaultProps> = [Exclude<keyof T, keyof PayloadDefault>] extends [never] ? Record<string, PayloadEntry<any, Props>> & PayloadDefault : { [Key in keyof T]: PayloadEntry<T[Key], Props> } & PayloadDefault;
 
@@ -356,10 +351,10 @@ export module Parser {
    * render time, so resolution never calls it and a bundle that never reaches
    * it drops it.
    *
-   * A message that is not text names no parameters rather than raising: a
-   * catalogue leaf is arbitrary data. Text is also all that is scanned, so a
-   * placeholder a value carries into a later pass is not one the message
-   * itself names.
+   A message that is not text names no parameters rather than raising: a
+   * catalogue leaf is arbitrary data. Text is also all that is scanned, and a
+   * payload is never read as text, so a placeholder a value carries is not one
+   * the message names.
    */
   export type Extractor = (message: Value) => readonly ParamSpec[];
 
@@ -385,10 +380,11 @@ export module Parser {
  * It is a *concrete* tree, not an abstract one. A concrete tree describes the
  * source: every character of the message lies in exactly one leaf, the leaves
  * come in the order they are written, and concatenating them spells the
- * message back. There is no abstract tree to offer instead. Resolution is
- * passes of substitution over text (section 5), and section 12 derives no
- * placeholder inside another, so what a message resolves to is not a shape
- * this or any other tree could carry.
+ * message back. There is no abstract tree to offer instead. The tree does have
+ * a shape — a placeholder derives inside an option value (section 6, note 10)
+ * — but it is the shape the message writes, and an abstract tree would keep
+ * what a message means, which is what it resolves to against a payload it has
+ * not been given.
  */
 export module Cst {
   /** Where a node lies in the message, as `[start, end)` in code units. */
@@ -413,23 +409,32 @@ export module Cst {
 
   /**
    * Something a placeholder writes a name with: the key it selects on, the
-   * modifier it names, an option's key, an option's value. `name` is the span
-   * unescaped and `nodes` is how the message spells it.
+   * modifier it names, an option's key. `name` is the span unescaped and
+   * `nodes` is how the message spells it.
    *
-   * The first three answer to that name: a key and a modifier name are matched
-   * against something a host wrote, by code-point equality after unescaping
-   * (section 6, note 2), and an option key is unescaped the same way though it
-   * looks nothing up. An option value is matched by nobody — it is the source
-   * spelling, which reaches the output through the one removal section 7
-   * bounds — so `name` is what it renders as rather than what it answers to.
+   * Each answers to that name: a key and a modifier name are matched against
+   * something a host wrote, by code-point equality after unescaping (section
+   * 6, note 2), and an option key is unescaped the same way though it looks
+   * nothing up — the modifier compares it against the value. A name holds no
+   * placeholder: one derives in an option value and nowhere else (section 6,
+   * note 10).
    *
    * A name may be empty, and an empty one still has a position: a placeholder
    * that names no key carries a `key` node of no width where the key would be.
    */
-  export type Name = Span & { type: 'key' | 'modifier' | 'option-key' | 'option-value', name: string, nodes: (Text | Escape)[] };
+  export type Name = Span & { type: 'key' | 'modifier' | 'option-key', name: string, nodes: (Text | Escape)[] };
+
+  /**
+   * An option's value. It answers to nobody and is not a name: it is message
+   * text, so its escape sequences are removed when the message is parsed and a
+   * placeholder written in it derives. It carries the subtree rather than a
+   * string to compare, and a consumer that wants what the option renders as
+   * walks that subtree.
+   */
+  export type OptionValue = Span & { type: 'option-value', nodes: (Text | Escape | Placeholder)[] };
 
   /** A construct section 6 derives as a placeholder, and what it is made of. */
-  export type Placeholder = Span & { type: 'placeholder', nodes: (Punctuation | Space | Name)[] };
+  export type Placeholder = Span & { type: 'placeholder', nodes: (Punctuation | Space | Name | OptionValue)[] };
 
   /**
    * A whole message. Its parts are text and placeholders and nothing else:
@@ -440,7 +445,7 @@ export module Cst {
    */
   export type Message = Span & { type: 'message', nodes: (Text | Escape | Placeholder)[] };
 
-  export type Node = Message | Placeholder | Name | Text | Escape | Space | Punctuation;
+  export type Node = Message | Placeholder | Name | OptionValue | Text | Escape | Space | Punctuation;
 
   /**
    * Describes a message. It reads no options: a name is a name whether or not
