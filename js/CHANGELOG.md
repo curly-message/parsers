@@ -1,9 +1,24 @@
 # Changelog
 
-### 2.1.0 (Unreleased)
+### 3.0.0 (Unreleased)
 
-Two options, both opt-in, both leaving a parser that asks for neither exactly
-where it was.
+Implements `curly-message-3` — version 3 of the Curly Message Format. One
+payload value converts differently; every message resolves as it did.
+
+* **An array is read by its own prototype, the way a plain object already
+  was.** A plain array — one whose prototype is the running realm's
+  `Array.prototype` — still serializes as JSON. A value of a type derived from
+  `Array`, and an array built in another realm, carry a prototype of their own
+  and now convert with `String` instead, so a `class Tags extends Array`
+  holding `a` and `b` reaches the output as `a,b` where it used to reach it as
+  `["a","b"]`. An option comparison sees that same text. A caller that wants
+  the serialization passes a plain array; copying the entries into one is
+  enough. Section 4 of the specification states the reading and appendix D
+  says what it costs. Nothing a message spells changes, so no message needs
+  migrating.
+
+Two options join it, both opt-in, both leaving a parser that asks for neither
+exactly where it was.
 
 * **`recognizeWrappers`** says whether a payload entry shaped like a wrapper
   carries the value's own configuration. It is on where the caller says
