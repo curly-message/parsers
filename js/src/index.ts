@@ -247,10 +247,11 @@ const report = (code: Report['code'], reported: string, id: Parser.Id | undefine
 
 // Version 1 of this format resolved a message by repeated substitution over
 // the whole current text, so a value holding `{{` or a backslash was read back
-// as message source on the next pass. Version 2 reads none of it, and silently:
-// such a value renders as the characters it spells, which is correct and is the
-// whole point of the version. A catalogue being migrated wants to hear about it
-// all the same, so a host may ask and nobody is told otherwise.
+// as message source on the next pass. Version 2 stopped, no version since
+// reads any of it, and it stopped silently: such a value renders as the
+// characters it spells, which is correct and is the whole point of that
+// version. A catalogue being migrated wants to hear about it all the same, so
+// a host may ask and nobody is told otherwise.
 //
 // It is not a report. The codes of section 14.3 describe defects of a
 // resolution and this is none — the placeholder resolved to exactly the text

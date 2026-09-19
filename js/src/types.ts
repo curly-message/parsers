@@ -220,9 +220,10 @@ export module Parser {
    * syntax: `placeholder` where it holds `{{`, `escape` where it holds a
    * backslash. A value holding both is described by both, in that order.
    *
-   * Neither is anything in version 2 — a value is data and reaches the output
-   * as it stands — which is the whole point of the version and the whole
-   * reason a catalogue written for version 1 may render differently under it.
+   * Neither is anything since version 2 — a value is data and reaches the
+   * output as it stands — which is the whole point of that version and the
+   * whole reason a catalogue written for version 1 may render differently
+   * under it.
    */
   export type SuspectKind = 'placeholder' | 'escape';
 
