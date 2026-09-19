@@ -73,8 +73,8 @@ than making it.
 Minimum code that solves the problem. No speculative features or abstractions.
 Validate only at boundaries — internal contracts are contracts. That said, a
 parser deliberately **fails soft** at its public edges (see §11): an unknown
-modifier, a missing payload key, or a message that references its own
-placeholder must degrade to something sensible, not throw.
+modifier, a missing payload key, or a message nested deeper than the parser
+walks must degrade to something sensible, not throw.
 
 ## 3. Surgical changes
 
@@ -188,11 +188,11 @@ repository, not just these docs.
   `modifiers.ts`.
 - Diagnostics leave through the `onReport` option and nowhere else — from a
   placeholder the parser could not resolve, from the chain a message resolves
-  through, and from the interpolation guards. The format specifies no channel
-  to report through, so a parser writes to none — it describes what happened
-  and lets its caller decide where that goes. Reporting somewhere directly,
-  adding a `code`, or widening what a `Report` carries, is a change to the
-  public surface: propose it rather than introducing it in passing.
+  through, and from the limits a resolution stops at. The format specifies no
+  channel to report through, so a parser writes to none — it describes what
+  happened and lets its caller decide where that goes. Reporting somewhere
+  directly, adding a `code`, or widening what a `Report` carries, is a change
+  to the public surface: propose it rather than introducing it in passing.
 - **Reuse before reimplementing** — `ownValue`, `unesc`, `mergeLayer` already
   exist. Grep before adding a helper; bend an existing one rather than forking.
 - **Abstraction beats duplication.** When code repeats the same (or near-same)
@@ -220,24 +220,30 @@ risks are **DoS / robustness / prototype-chain**, not RCE/XSS.
   no own key is recorded and the object's prototype is replaced. Write with a
   computed-key spread (`{ ...target, [key]: value }`, which is
   `DefineProperty`) or target an `Object.create(null)` object.
-- **The interpolation guards are load-bearing.** `MAX_INTERPOLATION_PASSES`
-  and `MAX_INTERPOLATION_LENGTH` are what make a payload value that references
-  or multiplies its own placeholder terminate instead of hanging the caller.
-  Don't remove them, don't raise them to buy behavior, and treat a change to
-  either as a format change (§ Implementation independence).
-- **A report is the one thing that leaves carrying payload text.** `Report.text`
-  is derived from the payload, so it leaves truncated and with every line
-  terminator escaped — a consumer that writes a report somewhere must not be
-  able to have a payload forge a line there. `JSON.stringify` is not enough on
-  its own: it leaves raw every terminator it has no short escape for, U+2028
-  and U+2029 among them. The escaping reads its set from `LINE_TERM`, the one
-  list the scanner reads too, so amending `line-term` reaches both — never
-  spell the terminators out a second time. Anything new a `Report` carries out
-  of the payload takes the same treatment.
-- **Placeholder matching is regex over consumer-controlled text**, which makes
-  it the ReDoS surface here. A new or widened pattern needs an explicit check
-  for catastrophic backtracking before it lands; if you touch one and can't
-  establish that, flag it.
+- **The resolution limits are load-bearing.** `MAX_OUTPUT_LENGTH`,
+  `MAX_READ_LENGTH`, `MAX_CONVERSION_NODES` and `MAX_NESTING` are what keep the
+  cost of a resolution bounded by the message rather than by the payload: a
+  value no conversion terminates on, a message nested past what a host will
+  walk, and a payload handing back more text than a caller can hold each stop
+  at one of them. Don't remove them, don't raise them to buy behavior, and
+  treat a change to any of them as a format change
+  (§ Implementation independence).
+- **A report carries message text, and carries it escaped.** `Report.text` is
+  the placeholder that reported or the message that held it, never a payload
+  value: nothing reads what a placeholder resolved to as text again. It still
+  leaves truncated and with every line terminator escaped — a consumer that
+  writes a report somewhere must not be able to have a message forge a line
+  there. `JSON.stringify` is not enough on its own: it leaves raw every
+  terminator it has no short escape for, U+2028 and U+2029 among them. The
+  escaping reads its set from `LINE_TERM`, the one list the scanner reads too,
+  so amending `line-term` reaches both — never spell the terminators out a
+  second time. Anything new a `Report` carries out takes the same treatment.
+- **The scan is a hand-written walk over consumer-controlled text**, not a
+  pattern: it reads each code point once and settles each opening pair into a
+  memo, which is what keeps a message of nested braces linear instead of
+  exponential. Reaching for a regular expression here, or dropping the memo,
+  needs an explicit check that neither reintroduces backtracking or re-reading;
+  if you touch the scan and can't establish that, flag it.
 - **Fail soft at the edges.** A missing payload key yields the declared
   default, and so does a modifier the parser does not know — that one reports
   as well, because naming a modifier nobody registered is a defect in the

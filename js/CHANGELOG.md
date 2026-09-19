@@ -1,5 +1,55 @@
 # Changelog
 
+### 2.0.0 (Unreleased)
+
+Implements `curly-message-2` — version 2 of the Curly Message Format. Message
+text is syntax, payload text is data, and a message is resolved in one walk. A
+catalogue whose payload values carry neither a `{{` nor a backslash renders
+exactly as it did.
+
+* **A payload value is never read as syntax.** Version 1 substituted the whole
+  message and scanned what came back, so a value holding `{{v}}` named a
+  placeholder, a value holding `;` ended a segment, and a value holding `}}`
+  closed a construct. None of that happens now: a value holding the nine
+  characters `{{count}}` renders those nine characters. A catalogue that
+  composed a message out of a value carrying a placeholder is the one migration
+  this release asks for, and it breaks silently — nothing reports a placeholder
+  that is now text. `createExtractor` over the catalogue says where: a key
+  whose value holds `{{` is the one to look at.
+* **A placeholder may hold a placeholder, in an option value and nowhere
+  else.** `{{count:gt; 0:{{count:number;}} items; default:no items;}}` is one
+  message the scan reads whole, and the inner placeholder resolves only where
+  the option holding it is selected: a branch the message did not take reads no
+  payload entry, runs no modifier and makes no report. A `{{` in a key, in an
+  option key or in a modifier name opens nothing — the construct around it does
+  not derive, and the scan resumes one brace along, exactly as before.
+* **No escape sequence is removed from a payload value.** Version 1 unescaped
+  the finished text, so a value had to double a backslash standing before a
+  character the syntax reserves, and the JSON a plain object serialized to did
+  not necessarily reach the output parsable as JSON. A value now reaches the
+  output as it was passed: `\\server\share` renders `\\server\share`, and a
+  serialization reaches the output parsable as the format it was made in. A
+  catalogue that doubled backslashes in its payload renders them doubled.
+* **Three budgets bound a resolution, and `pass-limit` is gone with the passes
+  it counted.** The output budget is what the output carries: a placeholder
+  whose result would take it past 100000 code units resolves to the empty
+  string and reports `output-limit`, spends nothing, and the placeholder after
+  it is resolved and carried. The read budget is what the payload is read for,
+  100000 code units, spent by every character a placeholder takes whether or
+  not any of it reaches the output; the placeholder that meets it already spent
+  reports the new `read-limit`. The nesting budget is eight levels, the
+  outermost counting as level one; a placeholder deeper than that takes its
+  fallback chain and reports the new `nesting-limit`.
+* **A `Report` carries message text and never a payload value.** `Report.text`
+  is the placeholder that reported, or the message as the caller wrote it where
+  the read that refused is of the call's own structure. It is still cut at 120
+  code units, and still leaves with every line terminator escaped.
+* `Cst.OptionValue` carries no `name`. An option value is message text rather
+  than a name, so it states its children — among them any placeholder it holds
+  — and a consumer that wants what the option renders as walks that subtree.
+* `createExtractor` names the keys a nested placeholder names beside the ones
+  holding it, in the order the message writes them.
+
 ## 1.1.0
 
 Nothing about resolution changes. What is new is a second way to read a

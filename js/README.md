@@ -132,37 +132,45 @@ omits it. It is called with a `Report` describing what the parser could not do
 — `code`, the `origin` that code declares, an English `message` carrying
 nothing from the payload, the `limit` reached where the report is about one,
 the message's `id` where one was passed, and `text`, the source of the
-trouble: the placeholder that named it for `unknown-modifier`,
-`failed-modifier`, `missing-options`, `missing-locale` and
-`unserializable-value`, the output that would not settle for `pass-limit` and
-`output-limit`, the message as it was passed where the read that refused is of
-the call's own structure — a context entry, an entry of the option bag. That
-one names no placeholder, and a message that is not text carries none of itself
-either. `origin` says who fixes what `code`
-names — `'message'` for a defect in the message that was written, `'payload'`
-for one in what the caller passed, and `'limit'` for a bound this parser set.
-Every code declares one, and it ranks nothing: a report is no graver for coming
-from one of the three than from another. Only `text` derives from the payload.
-It is cut to 120 UTF-16 code units of what reached it — what a string's
-`length` counts — or one fewer where the last of them is the high half of a
-surrogate pair, so the cut never severs a character. A cut is marked with a
-trailing `...` of the parser's own, and the excerpt is escaped after that —
-quotes, backslashes, and every line terminator. So a cut excerpt arrives at
-122 code units at the shortest, one carrying something to escape arrives
-longer still, and no payload can forge a line where a report is written.
+trouble: the placeholder that named it, for every code a placeholder reports,
+and the message as it was passed where the read that refused is of the call's
+own structure — a context entry, an entry of the option bag. That one names no
+placeholder, and a message that is not text carries none of itself either.
+`origin` says who fixes what `code` names — `'message'` for a defect in the
+message that was written, `'payload'` for one in what the caller passed, and
+`'limit'` for a bound this parser set. Every code declares one, and it ranks
+nothing: a report is no graver for coming from one of the three than from
+another. `text` is message text throughout and never a payload value: what a
+placeholder resolves to is data, and nothing reads it as text again. It is cut
+to 120 UTF-16 code units of what reached it — what a string's `length` counts
+— or one fewer where the last of them is the high half of a surrogate pair, so
+the cut never severs a character. A cut is marked with a trailing `...` of the
+parser's own, and the excerpt is escaped after that — quotes, backslashes, and
+every line terminator. So a cut excerpt arrives at 122 code units at the
+shortest, one carrying something to escape arrives longer still, and no message
+can forge a line where a report is written.
 
-Two guards bound resolution, and reaching either is what the two limit codes
-report. A payload value may name another placeholder, so interpolation runs
-again over what the last pass produced — at most **10 passes**, after which the
-output is returned with its remaining placeholders unresolved. And the output
-may not exceed **100000 UTF-16 code units** — what a string's `length` counts,
-so a character outside the Basic Multilingual Plane counts twice; a pass that
-would carry it past that stops, and the last output under the bound is what
-resolves. Both are what make
-a payload value that references or multiplies its own placeholder terminate
-rather than hang the caller.
+Three budgets bound a resolution, and reaching one is what the three limit
+codes report. The **output** budget is what the output carries: at most
+**100000 UTF-16 code units** — what a string's `length` counts, so a character
+outside the Basic Multilingual Plane counts twice. A placeholder whose result
+would carry the output past it resolves to the empty string and reports
+`output-limit`, and what that result would have spent is still there, so the
+placeholder after it is resolved and carried. The **read** budget is what the
+payload is read for: **100000 code units** as well, spent by every character a
+placeholder takes from the payload whether or not any of it reaches the output,
+so a placeholder that reads a long value and selects nothing from it has still
+done the reading. It is tested before a placeholder reads, so the one that
+found a budget and spent it past the bound resolves all the same and the next
+one pays — resolving to the empty string and reporting `read-limit`. The
+**nesting** budget is how deep a message writes placeholders inside one
+another: the outermost is level 1, and one deeper than **8** levels is not
+resolved at all, taking its fallback chain and reporting `nesting-limit`. It
+bounds resolution rather than derivation, so which substrings are placeholders
+is what it always was. A message's own text is the caller's and always reaches
+the output; what these bound is what the payload and the nesting add to it.
 
-A third bound holds the conversion that feeds them. Turning a value into JSON
+A fourth bound holds the conversion that feeds them. Turning a value into JSON
 follows a shared reference again every time it meets one, so a value naming the
 same child twice at each of twenty-four levels holds twenty-five objects and
 describes sixteen million leaves — no cycle anywhere, and nothing an output
@@ -184,11 +192,11 @@ entry, so a resolution asks one entry once however many placeholders name it,
 and an entry that refuses the question is not asked again — though it reports
 at every placeholder that reads it.
 
-All three bounds belong to the call rather than to the parser, and a call is
+All four bounds belong to the call rather than to the parser, and a call is
 what a host begins by calling `resolve` again while one is running — from a
 custom modifier, from an `onReport` handler writing its diagnostic into a
 translated string, from a payload accessor, or from a value's own `toString`.
-Such a resolution counts its own passes, spends its own output and keeps its
+Such a resolution spends its own output, does its own reading and keeps its
 own record of what it has converted, so neither it nor the one around it can
 reach a bound the other owns, each report names the message its own call was
 resolving, and a value the two share is converted once for each of them.
@@ -338,6 +346,51 @@ write either as an option.
 { v: -172800000 }  { ago: { format: 'hour' } }                    ->  48 hours ago
 ```
 
+## Nesting
+
+An option value may hold a placeholder, and that is the one position where one
+placeholder holds another.
+
+```
+{{count:gt; 0:{{count:number;}} items; default:no items;}}
+```
+
+```
+{ count: 5 }     ->  "5 items"
+{ count: 1234 }  ->  "1,234 items"
+{ count: 0 }     ->  "no items"
+```
+
+The inner placeholder is part of the message, found by the same scan and
+resolved like any other — but only where the option holding it is the one
+selected. Over `{ count: 0 }` the comparison selects nothing, the default is
+read instead, and the inner placeholder is never resolved: no payload entry is
+read for it, no modifier runs, and no report it would have made is made. The
+`;` in `{{count:number;}}` is the inner placeholder's own separator and ends no
+segment of the outer one.
+
+A key, an option key and a modifier name hold no placeholder, so a `{{` in one
+of those opens nothing: the construct around it does not derive at all, and the
+scan resumes one brace along — where the inner spelling may well derive a
+placeholder of its own. `{{a{{b}}c}}` is therefore the text `{{a`, the
+placeholder `{{b}}`, and the text `c}}`.
+
+What a placeholder resolves to is nested in nothing. A value, a props value, a
+`default` and a modifier's answer are data: one holding the nine characters
+`{{count}}` renders those nine characters, one holding `;` ends no segment, one
+holding `}}` closes nothing. So no payload can reach a branch the message did
+not select for it, or write a construct the message did not spell.
+
+```
+{{state:eq; draft:{{note}}; live:Published; default:?;}}
+```
+
+Over `{ state: 'live', note: 'X; live:Leaked' }` this renders `Published`, and
+`note` is never read.
+
+How deeply a message nests is a fact about the message alone; how deeply this
+parser resolves is what the nesting budget above bounds.
+
 ## Escaping
 
 The syntax reserves a colon, a semicolon, either brace, a backslash and
@@ -373,24 +426,19 @@ Before anything the syntax does not reserve, a backslash is text itself, so a
 regular expression or a Windows path survives as typed: `\d+` resolves to
 `\d+`, and `C:\Users\name` to `C:\Users\name`.
 
-A payload value is read the same way, because a value may carry a placeholder
-of its own. A value that has to keep a backslash in front of a reserved
-character doubles it — `\\server\share` resolves to `\server\share`.
+None of this reaches a payload value. A message is syntax and a value is data,
+so escape removal runs over the text the message was written in and over
+nothing else: a value arrives as it was passed, a backslash it carries is a
+backslash, and a caller writing one into the payload writes it once —
+`\\server\share` resolves to `\\server\share`.
 
-Escape sequences are removed once, from the finished text, so the removal
-reaches the text a conversion produced as readily as the text a message was
-written in. The two characters JSON writes for a backslash are an escape
-sequence, and the removal takes one of them, so the JSON a plain object
-serializes to does not necessarily reach the output parsable as JSON.
+That is what lets a serialization reach the output parsable as the format it
+was made in. The two characters JSON writes for a backslash are the JSON that
+was asked for, and nothing takes one of them away.
 
 ```
-{ v: { a: 'C:\U' } }    serializes to  {"a":"C:\\U"}  and renders  {"a":"C:\U"}
+{ v: { a: 'C:\U' } }    serializes to  {"a":"C:\\U"}  and renders  {"a":"C:\\U"}
 ```
-
-A modifier is unaffected, because it reads its value before the removal runs:
-one that parses a serialized object back reads the serialization the conversion
-produced. A caller that needs the result itself to parse passes the text it
-wants as an ordinary string value, with every backslash doubled.
 
 ## Extracting parameters
 
@@ -460,8 +508,10 @@ extraction formats nothing and reports nothing.
 
 Only the text of a message is scanned. A message that is not text names no
 parameters rather than raising, a catalogue leaf being arbitrary data, and a
-placeholder a payload value carries into a later pass is not one the message
-itself names.
+placeholder a payload value carries is not one the message names — a value is
+data and is never read as syntax. A placeholder the message writes inside
+another is named beside the one holding it, in the order the message writes
+them.
 
 ## Describing a message
 
@@ -489,7 +539,7 @@ cst('Hi {{name; default:you;}}');
 //       { type: 'space', start: 10, end: 11 },
 //       { type: 'option-key', start: 11, end: 18, name: 'default', nodes: [ ... ] },
 //       { type: 'separator', start: 18, end: 19 },
-//       { type: 'option-value', start: 19, end: 22, name: 'you', nodes: [ ... ] },
+//       { type: 'option-value', start: 19, end: 22, nodes: [ ... ] },
 //       { type: 'separator', start: 22, end: 23 },
 //       { type: 'option-key', start: 23, end: 23, name: '', nodes: [] },
 //       { type: 'close', start: 23, end: 25 },
@@ -507,13 +557,14 @@ therefore walk the leaves and emit a span per node without tracking a position
 of its own.
 
 There is no abstract tree to ask for instead, and that is the format rather
-than an omission. Resolution is passes of substitution over text, and section
-12 of the specification derives no placeholder inside another, so what a
-message resolves to is not a shape a tree could carry. What a tree can carry
-is the text, which is what sections 6, 7 and 8 define — section 8 included,
-because which characters are padding is a fact about the spelling. Nothing
-from section 9 on appears here: which placeholders bind, what an option
-selects and what the message renders are not properties of what was typed.
+than an omission. What a tree can carry is the text, which is what sections 6,
+7 and 8 define — section 8 included, because which characters are padding is a
+fact about the spelling. The nesting section 12 gives a message is spelling
+too, so the concrete tree carries it: a placeholder written in an option value
+is a child of that value. Nothing from section 9 on appears here: which
+placeholders bind, what an option selects and what the message renders are not
+properties of what was typed, and an option no payload ever selects is text a
+tree describes all the same.
 
 | Node | Where | Carries |
 | --- | --- | --- |
@@ -524,16 +575,16 @@ selects and what the message renders are not properties of what was typed.
 | `open`, `close` | a placeholder | the `{{` and `}}` that delimit it |
 | `separator` | a placeholder | a `:` or `;` that divides |
 | `space` | a placeholder | blank padding a name is read without |
-| `key`, `modifier` | a placeholder | `name`, and `nodes`: how the message spells it |
-| `option-key`, `option-value` | a placeholder | the same |
+| `key`, `modifier`, `option-key` | a placeholder | `name`, and `nodes`: how the message spells it |
+| `option-value` | a placeholder | `nodes`: text, escape sequences and the placeholders it holds |
 
 `name` is the range unescaped and `nodes` is how the message spells it, so
 `{{my\;key}}` names the key `my;key` and the escape sequence that let it be
 written is a node of its own. A key, a modifier name and an option key answer
 to that name: the format matches them against a payload entry, a registered
-modifier or the value. An option value answers to nobody — it is the source
-spelling, and unescaping it is the removal every value reaches the output
-through — so its `name` is what it renders as.
+modifier or the value. An option value answers to nobody and carries no `name`:
+it is message text like the text around the placeholder, so what it states is
+its children — among them any placeholder it holds.
 
 `cancels` distinguishes the two readings of an escape sequence. A backslash
 before `:`, `;`, `{`, `}`, `\` or whitespace cancels a structural meaning, and
@@ -543,10 +594,12 @@ backslash denotes itself and both characters stand, so `\;` reports `true` and
 them.
 
 Two things surprise, and both are the grammar showing through. A `{{ … }}`
-construct that encloses another is not a placeholder — the inner one is, and
-the text around it is text, which is exactly how resolution reads it. And the
-`;` an idiomatic placeholder ends with opens a segment like any other, so that
-segment is there, empty, with a width of nothing.
+construct that encloses another outside an option value is not a placeholder —
+the inner one is, the text around it is text, and that is exactly how
+resolution reads it, because the scan that failed on the outer construct
+resumes one brace along. And the `;` an idiomatic placeholder ends with opens a
+segment like any other, so that segment is there, empty, with a width of
+nothing.
 
 `cst` reads no options. A name is a name whether or not a modifier answers to
 it, so nothing a host registers changes the text; a caller that wants to know
@@ -556,7 +609,7 @@ parts rather than raising.
 
 ## Status
 
-**Stable.** This package implements **`curly-message-1`**, version 1 of the
+**Stable.** This package implements **`curly-message-2`**, version 2 of the
 [Curly Message Format](https://github.com/curly-message/spec), which the
 specification states is stable: within that version, what a message resolves to
 does not change.
