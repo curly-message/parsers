@@ -180,6 +180,36 @@ describe('parser', () => {
     expect(resolve('{{v}}', { payload: { v: NaN } })).toBe('NaN');
     expect(resolve('{{v}}', { payload: { v: {} } })).toBe('{}');
   });
+  it('an array is read by its own prototype, the way a plain object is', () => {
+    class Tags extends Array<string> {}
+
+    const { resolve } = defaultParser;
+    const derived = Tags.from(['a', 'b']);
+    // An array from another realm is this same shape to this reading: an array
+    // whose prototype is not the running realm's, standing in here because a
+    // second realm is the host's to make and not the parser's.
+    const foreign = Object.setPrototypeOf(['a', 'b'], Object.create(Array.prototype)) as string[];
+
+    // Both answer to `Array.isArray`, which is what the narrow reading is not.
+    expect([Array.isArray(derived), Array.isArray(foreign)]).toEqual([true, true]);
+
+    expect(resolve('{{v}}', { payload: { v: ['a', 'b'] } })).toBe('["a","b"]');
+    expect(resolve('{{v}}', { payload: { v: derived } })).toBe('a,b');
+    expect(resolve('{{v}}', { payload: { v: foreign } })).toBe('a,b');
+
+    // An object that only inherits from `Array.prototype` is no sequence
+    // either, and serializing it would describe it as the object it is.
+    expect(resolve('{{v}}', { payload: { v: Object.create(Array.prototype) } })).toBe('');
+  });
+  it('a comparison sees the text a derived array converts to', () => {
+    class Tags extends Array<string> {}
+
+    const { resolve } = defaultParser;
+    const message = '{{v:eq; ["solo"]:JSON; solo:TEXT; default:D}}';
+
+    expect(resolve(message, { payload: { v: ['solo'] } })).toBe('JSON');
+    expect(resolve(message, { payload: { v: Tags.from(['solo']) } })).toBe('TEXT');
+  });
   it('a payload entry owning only wrapper keys is a wrapper', () => {
     const { resolve } = defaultParser;
 
