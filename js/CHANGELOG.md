@@ -1,6 +1,6 @@
 # Changelog
 
-### 3.0.0 (Unreleased)
+## 3.0.0
 
 Implements `curly-message-3` — version 3 of the Curly Message Format. One kind
 of payload value converts differently; nothing a message spells changes, so a
