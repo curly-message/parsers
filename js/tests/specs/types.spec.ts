@@ -259,7 +259,7 @@ describe('parser option typing', () => {
   });
 
   it('rejects an option bag carrying a key the parser does not read', () => {
-    // @ts-expect-error the parser reads `customModifiers`, `modifierDefaults` and `onReport`
+    // @ts-expect-error the parser reads `customModifiers`, `modifierDefaults`, `onReport` and `recognizeWrappers`
     const { resolve } = createParser({ onreport: () => {} });
 
     expect(resolve('Hi!')).toBe('Hi!');

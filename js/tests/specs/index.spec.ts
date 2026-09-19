@@ -706,6 +706,46 @@ describe('parser', () => {
     expect(resolve('{{v:nosuch}}', { payload: { v: 'V' } })).toBe('');
     expect(resolve('{{v:nosuch; default:D}}', { payload: { v: 'V' }, id: 'common.id' })).toBe('D');
   });
+  it('a wrapper-shaped entry is a value where recognition is off', () => {
+    const { resolve } = createParser({ recognizeWrappers: false });
+
+    expect(resolve('{{v}}', { payload: { v: { value: 1 } } })).toBe('{"value":1}');
+    expect(resolve('{{v}}', { payload: { v: { value: 1, default: 'D' } } })).toBe('{"value":1,"default":"D"}');
+    // The entry is the value, so the chain below it is never reached: there
+    // is a value here, and it is that object.
+    expect(resolve('{{v; default:INLINE}}', { payload: { v: { default: 'WRAPPER' }, default: 'PAYLOAD' } })).toBe('{"default":"WRAPPER"}');
+  });
+  it('a wrapper configures nothing where recognition is off', () => {
+    const payload = { v: { value: 1.23456, props: { number: { maximumFractionDigits: 5 } } } };
+
+    expect(createParser({}).resolve('{{v:number}}', { payload, locale: defaultLocale })).toBe('1.23456');
+    // The entry is a JSON object now, and that is not a number, so the
+    // formatter has nothing to format and the placeholder takes its chain.
+    expect(createParser({ recognizeWrappers: false }).resolve('{{v:number; default:D}}', { payload, locale: defaultLocale })).toBe('D');
+  });
+  it('recognition is on where the caller says nothing', () => {
+    const payload = { v: { value: 1 } };
+
+    expect(createParser({}).resolve('{{v}}', { payload })).toBe('1');
+    expect(createParser({ recognizeWrappers: true }).resolve('{{v}}', { payload })).toBe('1');
+    expect(createParser({ recognizeWrappers: undefined }).resolve('{{v}}', { payload })).toBe('1');
+    expect(createParser({ recognizeWrappers: null as any }).resolve('{{v}}', { payload })).toBe('1');
+  });
+  it('the switch is read as an own property, like every other option', () => {
+    const payload = { v: { value: 1 } };
+    const seen: Report[] = [];
+    const refusing = Object.defineProperty(
+      { onReport: (entry: Report) => seen.push(entry) },
+      'recognizeWrappers',
+      { get() { throw new Error('unreadable'); }, enumerable: true },
+    );
+
+    // A prototype somebody else wrote to turns nothing off, and an entry that
+    // refuses to be read leaves recognition where it was and says so.
+    expect(polluted('recognizeWrappers', false, () => createParser({}).resolve('{{v}}', { payload }))).toBe('1');
+    expect(createParser(refusing).resolve('{{v}}', { payload })).toBe('1');
+    expect(seen.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
   it('a polluted prototype configures no formatter', () => {
     const { resolve } = createParser({});
 
