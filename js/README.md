@@ -163,9 +163,9 @@ meant.
 
 `onSuspectValue` is a migration aid and not a second report channel. Version 1
 of the format resolved a message by repeated substitution, so a value holding
-`{{` or a backslash was read back as message source; version 2 reads none of
-it, which is correct and is silent — the placeholder resolves to exactly the
-characters the value spells. Set this and the parser says which values those
+`{{` or a backslash was read back as message source; no version since reads
+any of it, which is correct and is silent — the placeholder resolves to exactly
+the characters the value spells. Set this and the parser says which values those
 are, once for each placeholder that reads one, with a `Suspect`: `found`
 listing what it holds (`'placeholder'` for `{{`, `'escape'` for a backslash,
 both in that order where it holds both), the `placeholder` that read it as the
@@ -235,7 +235,7 @@ still answers with text.
 ## Payload
 
 Everything the format carries is text. A payload value reaches a modifier, and
-the output, as text whatever type it was written at: a plain object and an
+the output, as text whatever type it was written at: a plain object and a plain
 array become JSON, and every other value becomes what the host makes of it, so
 a `Date`, a `RegExp` or a class instance reads as its own `toString` writes it.
 
@@ -245,6 +245,15 @@ a `Date`, a `RegExp` or a class instance reads as its own `toString` writes it.
 { v: { a: 1 } }    ->  {"a":1}
 { v: /re/g }       ->  /re/g
 ```
+
+**Plain** is the value's own prototype, and the running realm's: an object
+whose prototype is `Object.prototype` or null, and an array whose prototype is
+`Array.prototype`. A value of a type an application declared or derived, and
+one built in another realm, carries a prototype of its own and keeps whatever
+text it describes itself as — so a `class Tags extends Array` holding `a` and
+`b` reaches the output as `a,b` rather than as `["a","b"]`. A caller that wants
+the serialization passes a plain array; copying the entries into one is
+enough.
 
 That conversion costs a `Date` its sub-second precision, because `String(date)`
 writes seconds: `{{v:date}}` over `new Date('2024-03-05T10:00:00.123Z')`
@@ -637,7 +646,7 @@ parts rather than raising.
 
 ## Status
 
-**Stable.** This package implements **`curly-message-2`**, version 2 of the
+**Stable.** This package implements **`curly-message-3`**, version 3 of the
 [Curly Message Format](https://github.com/curly-message/spec), which the
 specification states is stable: within that version, what a message resolves to
 does not change.

@@ -10,21 +10,30 @@ export type { Cst, Parser, Modifier, Locale, Report };
 export { createExtractor } from './extract';
 export { cst } from './cst';
 
-// A `Date`, a `RegExp` and a `Map` all say what they are through `toString`; a
-// plain object says `[object Object]`, so it is the one shape JSON describes
-// better.
-const isPlainObject = (value: any) => {
+// A `Date`, a `RegExp` and a `Map` all say what they are through `toString`,
+// and so does a type an application declared or derived; a plain object says
+// `[object Object]` and a plain array says its entries joined, so those two are
+// the shapes JSON describes better.
+//
+// Which is a question about the value's own type, and the running realm's: a
+// value built elsewhere, or of a derived type, carries a prototype of its own
+// and keeps whatever text it describes itself as (specification, section 4).
+const prototypeIs = (value: any, ...prototypes: unknown[]) => {
   if (!value || typeof value !== 'object') return false;
 
   // A value the host will not describe is not a shape this can read.
   try {
-    const prototype = Object.getPrototypeOf(value);
-
-    return prototype === Object.prototype || prototype === null;
+    return prototypes.includes(Object.getPrototypeOf(value));
   } catch {
     return false;
   }
 };
+
+const isPlainObject = (value: any) => prototypeIs(value, Object.prototype, null);
+
+// An object that merely inherits from `Array.prototype` holds no entries in
+// order, so the sequence is what is asked for first and the prototype second.
+const isPlainArray = (value: any) => Array.isArray(value) && prototypeIs(value, Array.prototype);
 
 // Serialization follows a shared reference again every time it meets one, so a
 // value holding twenty-five objects — each of twenty-four levels naming the
@@ -54,7 +63,7 @@ const convert = (value: any): string | undefined => {
   // Classifying a value reads it, and a value the host will not describe raises
   // at that read as readily as at its coercion.
   try {
-    if (!isPlainObject(value) && !Array.isArray(value)) return String(value);
+    if (!isPlainObject(value) && !isPlainArray(value)) return String(value);
   } catch {
     return undefined;
   }
@@ -64,8 +73,8 @@ const convert = (value: any): string | undefined => {
 
 /**
  * The text a value resolves to. Everything the format carries is text: a plain
- * object and an array become JSON, so a custom modifier can read them back,
- * and every other value becomes what the host makes of it.
+ * object and a plain array become JSON, so a custom modifier can read them
+ * back, and every other value becomes what the host makes of it.
  *
  * `undefined` answers "this is not a value" — for a value nobody passed, and
  * for one no conversion can describe. Both fall through to the fallback chain,
@@ -238,10 +247,11 @@ const report = (code: Report['code'], reported: string, id: Parser.Id | undefine
 
 // Version 1 of this format resolved a message by repeated substitution over
 // the whole current text, so a value holding `{{` or a backslash was read back
-// as message source on the next pass. Version 2 reads none of it, and silently:
-// such a value renders as the characters it spells, which is correct and is the
-// whole point of the version. A catalogue being migrated wants to hear about it
-// all the same, so a host may ask and nobody is told otherwise.
+// as message source on the next pass. Version 2 stopped, no version since
+// reads any of it, and it stopped silently: such a value renders as the
+// characters it spells, which is correct and is the whole point of that
+// version. A catalogue being migrated wants to hear about it all the same, so
+// a host may ask and nobody is told otherwise.
 //
 // It is not a report. The codes of section 14.3 describe defects of a
 // resolution and this is none — the placeholder resolved to exactly the text
