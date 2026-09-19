@@ -746,6 +746,77 @@ describe('parser', () => {
     expect(createParser(refusing).resolve('{{v}}', { payload })).toBe('1');
     expect(seen.map(({ code }) => code)).toEqual(['unserializable-value']);
   });
+  it('announces a value version 1 would have read as syntax', () => {
+    const seen: Parser.Suspect[] = [];
+    const { resolve } = createParser({ onSuspectValue: (entry) => seen.push(entry) });
+
+    expect(resolve('{{v}}', { payload: { v: '{{other}}' }, id: 'common.id' })).toBe('{{other}}');
+    expect(seen).toEqual([{ found: ['placeholder'], placeholder: '{{v}}', id: 'common.id', text: '{{other}}' }]);
+  });
+  it('announces an escape a value carries, and both where it carries both', () => {
+    const seen: Parser.Suspect[] = [];
+    const { resolve } = createParser({ onSuspectValue: (entry) => seen.push(entry) });
+
+    expect(resolve('{{v}}', { payload: { v: '\\d+' } })).toBe('\\d+');
+    expect(resolve('{{v}}', { payload: { v: 'C:\\x {{y}}' } })).toBe('C:\\x {{y}}');
+    expect(seen.map(({ found, text }) => [found, text])).toEqual([
+      [['escape'], '\\\\d+'],
+      [['placeholder', 'escape'], 'C:\\\\x {{y}}'],
+    ]);
+  });
+  it('message text is never suspect, an option value included', () => {
+    const seen: Parser.Suspect[] = [];
+    const { resolve } = createParser({ onSuspectValue: (entry) => seen.push(entry) });
+
+    expect(resolve('{{v:eq; a:{{w}}}}', { payload: { v: 'a', w: 'W' } })).toBe('W');
+    expect(resolve('{{v; default:\\{}}', { payload: {} })).toBe('{');
+    expect(seen).toEqual([]);
+  });
+  it('a default link is suspect where a placeholder read it, and only then', () => {
+    const seen: Parser.Suspect[] = [];
+    const { resolve } = createParser({ onSuspectValue: (entry) => seen.push(entry) });
+
+    expect(resolve('{{v}}', { payload: { v: { default: '{{a}}' } } })).toBe('{{a}}');
+    expect(resolve('{{v}}', { payload: { default: '{{b}}' } })).toBe('{{b}}');
+    // A link the chain never reached is a link nobody read.
+    expect(resolve('{{v}}', { payload: { v: 'V', default: '{{c}}' } })).toBe('V');
+    expect(seen.map(({ text }) => text)).toEqual(['{{a}}', '{{b}}']);
+  });
+  it('a modifier\u2019s answer is not a payload value', () => {
+    const seen: Parser.Suspect[] = [];
+    const { resolve } = createParser({ customModifiers: { test: () => '{{injected}}' }, onSuspectValue: (entry) => seen.push(entry) });
+
+    expect(resolve('{{v:test}}', { payload: { v: 'V' } })).toBe('{{injected}}');
+    expect(seen).toEqual([]);
+  });
+  it('every placeholder that reads a suspect value announces its own', () => {
+    const seen: Parser.Suspect[] = [];
+    const { resolve } = createParser({ onSuspectValue: (entry) => seen.push(entry) });
+
+    expect(resolve('{{v}} {{v}}', { payload: { v: '{{a}}' } })).toBe('{{a}} {{a}}');
+    expect(seen).toHaveLength(2);
+  });
+  it('the announced text is cut and escaped the way a report\u2019s is', () => {
+    const limit = 120;
+    const seen: Parser.Suspect[] = [];
+    const { resolve } = createParser({ onSuspectValue: (entry) => seen.push(entry) });
+
+    resolve('{{v}}', { payload: { v: `{{a}}${'x'.repeat(limit)}` } });
+    resolve('{{v}}', { payload: { v: '{{a}}\nb' } });
+
+    expect(seen.map(({ text }) => text)).toEqual([`{{a}}${'x'.repeat(limit - 5)}...`, '{{a}}\\nb']);
+  });
+  it('looks for nothing under a null `onSuspectValue`, as it does under none', () => {
+    const payload = { v: '{{a}}\\b' };
+
+    expect(createParser({ onSuspectValue: null }).resolve('{{v}}', { payload })).toBe('{{a}}\\b');
+    expect(createParser({}).resolve('{{v}}', { payload })).toBe('{{a}}\\b');
+  });
+  it('an announcement that raises is an observation all the same', () => {
+    const { resolve } = createParser({ onSuspectValue: () => { throw new Error('unreadable'); } });
+
+    expect(resolve('{{v}}', { payload: { v: '{{a}}' } })).toBe('{{a}}');
+  });
   it('a polluted prototype configures no formatter', () => {
     const { resolve } = createParser({});
 

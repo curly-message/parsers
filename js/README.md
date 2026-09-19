@@ -111,9 +111,10 @@ The id is not text the format resolves over and not text it falls back to. One
 shaped like a placeholder is neither resolved nor echoed: nothing reads it on
 the way to an output, and a report is the one place it is named.
 
-`options` carries `customModifiers`, `modifierDefaults`, `onReport` and
-`recognizeWrappers`. Nothing else is read, and the package has no runtime
-dependencies — locale-dependent formatting is delegated to `Intl`.
+`options` carries `customModifiers`, `modifierDefaults`, `onReport`,
+`recognizeWrappers` and `onSuspectValue`. Nothing else is read, and the package
+has no runtime dependencies — locale-dependent formatting is delegated to
+`Intl`.
 
 `customModifiers` registers modifiers by name, over the built-in ones, so a
 name it carries is a name a message may write, and so is a name the parser
@@ -159,6 +160,22 @@ untrusted data passes it — an entry the caller did not write, shaped like a
 wrapper, otherwise reconfigures every modifier the placeholder reaches without
 spelling any syntax at all, and nothing can tell it from an entry the caller
 meant.
+
+`onSuspectValue` is a migration aid and not a second report channel. Version 1
+of the format resolved a message by repeated substitution, so a value holding
+`{{` or a backslash was read back as message source; version 2 reads none of
+it, which is correct and is silent — the placeholder resolves to exactly the
+characters the value spells. Set this and the parser says which values those
+are, once for each placeholder that reads one, with a `Suspect`: `found`
+listing what it holds (`'placeholder'` for `{{`, `'escape'` for a backslash,
+both in that order where it holds both), the `placeholder` that read it as the
+message spells it, the message's `id` where one was passed, and `text`. Unlike
+a report's, that `text` **is** payload text — cut and escaped the same way, so
+writing it somewhere forges no line, but what it carries is what the payload
+holds. Nothing is looked for while this is unset or `null`, and a host that has
+finished migrating unsets it: every value a placeholder reads is searched while
+it is on. `createExtractor` answers the same question over a catalogue at build
+time, without a payload and without a render.
 
 Three budgets bound a resolution, and reaching one is what the three limit
 codes report. The **output** budget is what the output carries: at most
@@ -513,9 +530,9 @@ expected.
 An extractor is built from the same options the parser beside it is built from:
 a host's own modifier registered under a name this format defines changes what
 a message naming it says about its value, and a message naming a replaced
-modifier narrows nothing. `modifierDefaults`, `onReport` and
-`recognizeWrappers` reach nothing — extraction formats nothing, reports nothing
-and reads no payload.
+modifier narrows nothing. `modifierDefaults`, `onReport`, `recognizeWrappers`
+and `onSuspectValue` reach nothing — extraction formats nothing, reports
+nothing and reads no payload.
 
 Only the text of a message is scanned. A message that is not text names no
 parameters rather than raising, a catalogue leaf being arbitrary data, and a

@@ -236,11 +236,41 @@ const report = (code: Report['code'], reported: string, id: Parser.Id | undefine
   }
 };
 
+// Version 1 of this format resolved a message by repeated substitution over
+// the whole current text, so a value holding `{{` or a backslash was read back
+// as message source on the next pass. Version 2 reads none of it, and silently:
+// such a value renders as the characters it spells, which is correct and is the
+// whole point of the version. A catalogue being migrated wants to hear about it
+// all the same, so a host may ask and nobody is told otherwise.
+//
+// It is not a report. The codes of section 14.3 describe defects of a
+// resolution and this is none — the placeholder resolved to exactly the text
+// the payload holds. The channel is separate for what it carries as well: a
+// report's text is message text throughout, and this is payload text.
+const suspect = (declaredText: string, placeholder: string, id: Parser.Id | undefined, onSuspectValue: Parser.OnSuspectValue | undefined) => {
+  if (!onSuspectValue) return;
+
+  const found: Parser.SuspectKind[] = [];
+
+  if (declaredText.includes('{{')) found.push('placeholder');
+
+  if (declaredText.includes('\\')) found.push('escape');
+
+  if (!found.length) return;
+
+  try {
+    onSuspectValue({ found, placeholder: excerpt(placeholder), id, text: excerpt(declaredText) });
+  } catch {
+    // An observation, the way a report is: a host whose logger fails must
+    // still get its message back.
+  }
+};
+
 // A message is resolved in one walk (specification, section 5). The message's
 // own text is syntax and is scanned for placeholders; what a placeholder
 // resolves to is data and is never scanned again, so nesting is what the
 // message spells rather than what a payload arranges (section 12).
-const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, recognizeWrappers, locale, id: messageId, conversions, wrappers }) => {
+const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id: messageId, conversions, wrappers }) => {
   const source = `${message}`;
   // One scanner for the walk: a verdict is final, so the span an opening brace
   // derives is settled once however many times the walk asks for it.
@@ -285,7 +315,10 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
     const payloadText = (declared: any) => {
       const declaredText = describedText(declared, raised, conversions);
 
-      if (declaredText !== undefined) read -= declaredText.length;
+      if (declaredText !== undefined) {
+        read -= declaredText.length;
+        suspect(declaredText, spelling, messageId, onSuspectValue);
+      }
 
       return declaredText;
     };
@@ -473,6 +506,7 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     const locale: Locale | undefined = ownValue(context, 'locale', callRaised);
     const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', callRaised);
     const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', callRaised);
+    const onSuspectValue: Parser.OnSuspectValue | undefined = ownValue(parserOptions, 'onSuspectValue', callRaised) ?? undefined;
     // Recognition is on where the caller says nothing (specification, section
     // 4.1), so an entry that refuses to be read leaves it where it was and is
     // reported like every other refusal.
@@ -503,6 +537,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
 
     if (value === undefined) return '';
 
-    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, recognizeWrappers, locale, id, conversions, wrappers });
+    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id, conversions, wrappers });
   },
 });
