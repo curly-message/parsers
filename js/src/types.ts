@@ -306,9 +306,11 @@ export module Parser {
    * The values a message's placeholders name, plus `default` — the fallback
    * for every key the payload does not carry.
    *
-   * A value reaches a modifier as text: a plain object and an array become
-   * JSON, and anything else becomes what the host makes of it. An entry may
-   * instead be a `Modifier.Wrapper`, which configures the value it carries.
+   * A value reaches a modifier as text: a plain object and a plain array become
+   * JSON, and anything else becomes what the host makes of it — a class
+   * instance, and an array of a type derived from `Array` or built in another
+   * realm, among them. An entry may instead be a `Modifier.Wrapper`, which
+   * configures the value it carries.
    *
    * A `Date` loses its sub-second precision to that conversion, and the text
    * `String` writes for one is not numeric, so `number`, `currency`, `ago`,
