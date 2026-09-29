@@ -1,6 +1,6 @@
 # Changelog
 
-### 3.1.0 (Unreleased)
+## 3.1.0
 
 Implements revision 3.1.0 of the Curly Message Format: the plural selections
 `plural` and `ordinal`. A message that names neither renders as it did.
