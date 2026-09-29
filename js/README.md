@@ -6,7 +6,7 @@ The JavaScript implementation of the
 ```json
 {
   "greeting": "Hello, {{name; default:Guest;}}!",
-  "inbox": "You have {{count:number;}} {{count; 1:message; default:messages;}}."
+  "inbox": "You have {{count:number;}} {{count:plural; one:message; other:messages;}}."
 }
 ```
 
@@ -22,42 +22,43 @@ anywhere between them are text rather than a placeholder, and escaping the
 terminator does not make them one. A placeholder that names no key — `{{}}`,
 `{{ }}` — is a placeholder still, and resolves through the fallback chain.
 
-Placeholders may carry a modifier (`:number`, `:date`, `:ago`, `:currency`, or
-one of the comparisons `eq`, `ne`, `lt`, `lte`, `gt`, `gte`), a set of options,
-and a `default`. Locale-dependent formatting is delegated to `Intl`; the
-package itself has no runtime dependencies. A modifier that cannot produce a
-result — a locale the host rejects, a custom modifier that throws — resolves
-the placeholder to its `default` rather than raising, and so does a value that
-no conversion turns into text. Neither is silent: containment keeps the failure
-out of the caller's render path, and a report is how the caller hears about it
-anyway. A placeholder naming a modifier the parser does not know resolves to
-its `default` and is reported as well; it is never run as a comparison instead.
-A comparison that declares no options has been asked to select from nothing —
-the inline `default` is the fallback itself rather than something to select, so
-`{{v:eq; default:D}}` declares none either. It resolves to the fallback chain,
-as it always did, and reports `missing-options`. That is a defect in how the
-placeholder was written, so it reports whether or not the payload carries the
-key. The six names are the format's comparisons while the format's own
-modifier answers to them: a host that registers its own `eq` has replaced the
-comparison, and whether its modifier needs options is that modifier's business,
-so `{{v:eq}}` over that registration reports nothing. A placeholder naming no
-key has nothing to compare, so `{{:eq}}` is no selection and reports nothing;
-`{{:zz}}` still reports the modifier nobody registered.
-Given no locale the formatting modifiers resolve to the empty string, not to
-the fallback chain: a declared default does not stand in for a locale nobody
-supplied. A caller that passes none and a caller that passes the empty string
-resolve alike; one that passes a locale the host then rejects has supplied one,
-and takes the fallback chain like any other formatting failure. The empty
-string is reported as `missing-locale`, whose origin is the payload: a locale
-nobody supplied is a defect in what the caller passed rather than in the
-message that was written.
+Placeholders may carry a modifier (`:number`, `:date`, `:ago`, `:currency`, one
+of the comparisons `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, or one of the plural
+selections `plural` and `ordinal`), a set of options, and a `default`.
+Locale-dependent formatting is delegated to `Intl`; the package itself has no
+runtime dependencies. A modifier that cannot produce a result — a locale the
+host rejects, a custom modifier that throws — resolves the placeholder to its
+`default` rather than raising, and so does a value that no conversion turns into
+text. Neither is silent: containment keeps the failure out of the caller's
+render path, and a report is how the caller hears about it anyway. A placeholder
+naming a modifier the parser does not know resolves to its `default` and is
+reported as well; it is never run as a comparison instead. A comparison or a
+plural selection that declares no options has been asked to select from nothing
+— the inline `default` is the fallback itself rather than something to select,
+so `{{v:eq; default:D}}` declares none either. It resolves to the fallback
+chain, before the locale or the value is asked anything, and reports
+`missing-options`. That is a defect in how the placeholder was written, so it
+reports whether or not the payload carries the key. The eight names are the
+format's selections while the format's own modifier answers to them: a host that
+registers its own `eq` has replaced the comparison, and whether its modifier
+needs options is that modifier's business, so `{{v:eq}}` over that registration
+reports nothing. A placeholder naming no key has nothing to compare, so
+`{{:eq}}` is no selection and reports nothing; `{{:zz}}` still reports the
+modifier nobody registered. Given no locale the formatting modifiers and the
+plural selections resolve to the empty string, not to the fallback chain: a
+declared default does not stand in for a locale nobody supplied. A caller that
+passes none and a caller that passes the empty string resolve alike; one that
+passes a locale the host then rejects has supplied one, and takes the fallback
+chain like any other formatting failure. The empty string is reported as
+`missing-locale`, whose origin is the payload: a locale nobody supplied is a
+defect in what the caller passed rather than in the message that was written.
 
-Given a locale, each formatting modifier reads its value as a particular kind
-of number, and a value that is not one resolves the placeholder to its
-`default` and is reported as `failed-modifier`, like any other result a
-modifier could not produce. Its origin is the payload too: the value, the props
-and the locale a modifier is handed are the caller's, and so is a
-`customModifiers` entry that raised, so none of it is a defect in the message
+Given a locale, each formatting modifier and plural selection reads its value as
+a particular kind of number, and a value that is not one resolves the
+placeholder to its `default` and is reported as `failed-modifier`, like any
+other result a modifier could not produce. Its origin is the payload too: the
+value, the props and the locale a modifier is handed are the caller's, and so is
+a `customModifiers` entry that raised, so none of it is a defect in the message
 that was written. The kind each reads:
 
 | Modifier | Value |
@@ -66,6 +67,8 @@ that was written. The kind each reads:
 | `date` | milliseconds since the Unix epoch, or text the host can parse as a date |
 | `ago` | a signed millisecond delta relative to now, negative for the past |
 | `currency` | a number, multiplied by the `ratio` property below |
+| `plural` | a number |
+| `ordinal` | an integer: an ordinal of a fraction names no position |
 
 Empty text and text that is only whitespace are none of these, whatever the
 host's own numeric conversion makes of them: `{{v:number}}` over `{ v: '' }`
@@ -232,6 +235,55 @@ it again recurses until the host's own stack runs out, which is contained like
 any other failure — the placeholder takes its fallback chain and `resolve`
 still answers with text.
 
+## Plural selection
+
+`plural` and `ordinal` select an option by the category the locale's plural
+rules put a number in — `Intl.PluralRules`, cardinal and ordinal. The
+categories are CLDR's six, `zero`, `one`, `two`, `few`, `many` and `other`, and
+each locale has its own subset: in Russian 1, 21 and 101 are `one`, which is
+why a comparison, which can order a count but cannot spell a remainder, could
+not do this.
+
+```js
+resolve('{{n}} {{n:plural; one:файл; few:файла; many:файлов; other:файла;}}', { payload: { n: 21 }, locale: 'ru' });
+// -> '21 файл'
+resolve('{{n}}{{n:ordinal; one:st; two:nd; few:rd; other:th;}}', { payload: { n: 22 }, locale: 'en' });
+// -> '22nd'
+```
+
+A key is a category or a number. A category is compared exactly as written, so
+`One:` selects nothing. A number selects for the value it equals, compared
+numerically, and it wins over a category wherever it is written, so
+`{{n:plural; one:{{n}} file; other:{{n}} files; 0:No files;}}` renders
+`No files` over `0` in English, where 0 is `other`. The two are not
+interchangeable: `0` is the number, and `zero` is a category that in Latvian
+holds 10 and 20 as well and in English holds nothing. The host is asked for a
+category only where no number matched.
+
+Where nothing is selected — the value absent, no option declared, a value the
+modifier cannot take (for `ordinal`, a fraction), a request the host cannot
+make, or a category the placeholder writes no option for — the placeholder takes
+the fallback chain, whose inline link is `default`. `default` is no category:
+over a placeholder that writes every category its locale has, it answers only
+where no category is asked for, so it can say the count is not known where
+`other` says it is many.
+
+`plural` takes its category from the digits `number` would show, because the
+plural rules are written over the number as it is shown: Czech says `1 soubor`
+but `1,0 souboru`. It reads the digit properties composed under `number` —
+`minimumIntegerDigits`, `minimumFractionDigits`, `maximumFractionDigits`,
+`minimumSignificantDigits`, `maximumSignificantDigits`, `roundingIncrement`,
+`roundingMode`, `roundingPriority` and `trailingZeroDisplay`, and nothing else
+of `number`'s — beneath its own props, and `number`'s default of two fraction
+digits widens for it as it does for `number`. A style or a notation that scales
+or abbreviates what `number` shows, `percent` or `compact`, is not read. So
+`{{n:number}} {{n:plural; one:soubor; few:soubory; many:souboru; other:souborů;}}`
+over `1.999` renders `2 soubory`, the category of the `2` that is shown. A count
+in a localized message is best shown with `{{n:number}}` for that reason.
+`ordinal` takes integers, which show no fraction, and reads its own props
+alone; a fraction fails and takes the chain. The rule type is what each
+modifier is, so a `type` a layer names changes neither.
+
 ## Payload
 
 Everything the format carries is text. A payload value reaches a modifier, and
@@ -333,11 +385,12 @@ property: the parser's `modifierDefaults`, then the `props` the call passes,
 then the wrapper's own `props`. Each layer overrides only the properties it
 names, so a layer cannot reset an earlier one: a property set to `undefined`
 names nothing, where one set to the host's null is named and null — a value,
-like zero — is what the modifier is handed. Only what a layer owns composes,
-and only under the name the placeholder wrote: what a layer holds under other
-names is not read for it. The object a modifier is handed owns every entry it
-is configured with and carries no prototype, so a prototype somebody else wrote
-to configures nothing.
+like zero — is what the modifier is handed. Only what a layer owns composes, and
+only under the name the placeholder wrote: what a layer holds under other names
+is not read for it, save the digit properties of `number`, which the format's
+own `plural` reads beneath its own (see [Plural selection](#plural-selection)).
+The object a modifier is handed owns every entry it is configured with and
+carries no prototype, so a prototype somebody else wrote to configures nothing.
 
 ```
 modifierDefaults  { number: { maximumFractionDigits: 4, useGrouping: false } }
@@ -348,10 +401,11 @@ effective         { maximumFractionDigits: 1, useGrouping: true }  ->  1,234.6
 
 A modifier is handed that composition under its own name and nothing else — the
 `effective` line is what `number` reads — so what one modifier is configured
-with never reaches the next, and a modifier nobody configured is handed an empty
-object rather than nothing. A modifier a host registers reads its properties the
-same way, `modifierDefaults` included, and the object it holds is the parser's
-own copy: writing into it reaches neither the next placeholder nor the caller.
+with never reaches the next, save `number`'s digits, which reach the format's
+own `plural`, and a modifier nobody configured is handed an empty object rather
+than nothing. A modifier a host registers reads its properties the same way,
+`modifierDefaults` included, and the object it holds is the parser's own copy:
+writing into it reaches neither the next placeholder nor the caller.
 
 `number` formats at most two fraction digits when no layer names a maximum.
 That two is a default rather than a cap: a layer naming a
@@ -516,6 +570,7 @@ so a modifier that reads it as text narrows nothing and the parameter accepts
 | `number`, `currency` | `'number'` |
 | `ago` | `'number'` — a signed millisecond delta relative to now, not a point in time |
 | `date` | `['date', 'string']` — milliseconds since the epoch, and failing that text the host reads as a date |
+| `plural`, `ordinal` | `'number'` — `ordinal`'s an integer, which the kinds have no word for |
 
 A parameter several placeholders name accepts what all of them say together,
 and `unknown` is the top of that lattice rather than a member of it: it is what
@@ -524,11 +579,14 @@ something does. So `{{count}}` alone reports `unknown`, and the example above �
 where a second placeholder formats the same key with `number` — reports
 `'number'` rather than `['unknown', 'number']`.
 
-`values` lists the option keys of an `eq` selection, which is the one
-comparison whose keys are values of the parameter: `ne`'s are what the value
-must differ from, and an inequality's are thresholds it is ordered against. It
-is a hint and never a closed set — a value none of them matches resolves
-through the fallback chain rather than failing.
+`values` lists the option keys of an `eq` selection, which is the one comparison
+whose keys are values of the parameter: `ne`'s are what the value must differ
+from, and an inequality's are thresholds it is ordered against. It lists a
+plural selection's keys that are numbers too — of `ordinal`'s, the integers —
+because each selects for the value it equals; its categories are forms of the
+language rather than values, and are not listed. It is a hint and never a closed
+set — a value none of them matches resolves through the fallback chain, or in a
+plural selection by its category, rather than failing.
 
 `optional` reports what the message says rather than what resolution tolerates.
 Every placeholder renders without its value, an absent one taking the fallback
@@ -655,11 +713,11 @@ Nothing here references a host framework: `resolve` takes the format's own
 inputs, and an adapter that presents this parser to a host library belongs in
 that host's own repository.
 
-This implementation satisfies every conformance level the specification
-defines: **Core**, **Intl** and **Extensions**. Section 2 asks an
-implementation to say so, because a level it does not satisfy changes what a
-message resolves to rather than merely what it can do — without Intl, `number`,
-`date`, `ago` and `currency` are modifier names nobody registered.
+This implementation satisfies every conformance level the specification defines:
+**Core**, **Intl** and **Extensions**. Section 2 asks an implementation to say
+so, because a level it does not satisfy changes what a message resolves to
+rather than merely what it can do — without Intl, `number`, `date`, `ago`,
+`currency`, `plural` and `ordinal` are modifier names nobody registered.
 
 The specification is normative — where this implementation and the
 specification disagree, this implementation is wrong. The specification's

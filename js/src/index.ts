@@ -147,28 +147,50 @@ const isWrapped = (value: any, wrappers: Wrappers, onRaise?: () => void) => {
 // composes.
 const isLayer = (value: any) => !!value && (typeof value === 'object' || typeof value === 'function');
 
-// What a modifier reads is the properties under its own name, so that name is
-// what the layers are read for and nothing else: each contributes the entry it
+// The properties the layers hold under one name: each contributes the entry it
 // holds under it, and an entry overrides only the properties it names, so an
-// entry that is no layer names none and overrides nothing. What leaves is the
-// parser's own copy, so a modifier that writes into what it was handed reaches
-// neither the next placeholder nor the caller.
+// entry that is no layer names none and overrides nothing. A modifier reads the
+// composition under its own name, and the format's own `plural` the digits
+// composed under `number` beneath it. What leaves is the parser's own copy, so
+// a modifier that writes into what it was handed reaches neither the next
+// placeholder nor the caller.
 const ownSlice = (layers: any[], name: string, onRaise?: () => void) => layers.reduce((from, layer) => {
   const to = isLayer(layer) ? ownValue(layer, name, onRaise) : undefined;
 
   return isLayer(to) ? mergeLayer(from, to, onRaise) : from;
 }, Object.create(null));
 
-// The names this format defines as comparisons, typed off the registry so a
-// name that stops being a built-in stops compiling here. A message that writes
-// one has asked for a selection while the format's own modifier answers to the
-// name; a host that registered its own has replaced the comparison, and
-// whether that modifier needs options is its own business.
-const COMPARISONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'];
+// The names this format defines as selections — the comparisons and the plural
+// selections — typed off the registry so a name that stops being a built-in
+// stops compiling here. A message that writes one has asked for a selection
+// while the format's own modifier answers to the name; a host that registered
+// its own has replaced the format's, and whether that modifier needs options
+// is its own business.
+const SELECTIONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte', 'plural', 'ordinal'];
 
-// Whether the modifier answering to a name is the comparison this format
+// Whether the modifier answering to a name is the selection this format
 // defines under it, and not one a host registered in its place.
-const isComparison = (name: string, modifiers: Record<string, unknown>) => COMPARISONS.includes(name as Modifier.DefaultKeys) && modifiers[name] === defaultModifiers[name as Modifier.DefaultKeys];
+const isSelection = (name: string, modifiers: Record<string, unknown>) => SELECTIONS.includes(name as Modifier.DefaultKeys) && modifiers[name] === defaultModifiers[name as Modifier.DefaultKeys];
+
+// The properties that decide which digits a number is shown with, which are
+// the ones the host's plural rules take from its number formatting so that a
+// category can be asked of a number as it is shown.
+const SHOWN_DIGITS = ['minimumIntegerDigits', 'minimumFractionDigits', 'maximumFractionDigits', 'minimumSignificantDigits', 'maximumSignificantDigits', 'roundingIncrement', 'roundingMode', 'roundingPriority', 'trailingZeroDisplay'];
+
+// The digit properties the layers hold under `number`, composed per property
+// and read name by name, so that nothing else `number` is configured with is
+// read on `plural`'s account.
+const shownDigitsOf = (layers: any[], onRaise?: () => void) => layers.reduce((from, layer) => {
+  const entry = isLayer(layer) ? ownValue(layer, 'number', onRaise) : undefined;
+
+  if (!isLayer(entry)) return from;
+
+  return SHOWN_DIGITS.reduce((to, name) => {
+    const value = ownValue(entry, name, onRaise);
+
+    return value === undefined ? to : { ...to, [name]: value };
+  }, from);
+}, {});
 
 // The modifier module's exports are the registry a host's table composes with.
 // They are a constant of the module, so the registry is read off them once.
@@ -196,9 +218,9 @@ const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LE
 const REPORT_MESSAGES: Record<Report['code'], string> = {
   'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
   'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
-  'missing-options': 'A comparison was given no options to select from, so the placeholder took its fallback chain.',
+  'missing-options': 'A selection was given no options to select from, so the placeholder took its fallback chain.',
   'unserializable-value': 'A value could not become text, so resolution read it as missing.',
-  'missing-locale': 'A formatting modifier was given no locale, so the placeholder resolved to the empty string.',
+  'missing-locale': 'A modifier that depends on a locale was given none, so the placeholder resolved to the empty string.',
   'nesting-limit': `A placeholder was nested deeper than ${MAX_NESTING} levels, so it took its fallback chain.`,
   'output-limit': `A placeholder resolved to text this resolution has no room for, and would have carried the output past ${MAX_OUTPUT_LENGTH} characters, so it resolved to the empty string.`,
   'read-limit': `Resolution read more than ${MAX_READ_LENGTH} characters of value text, so this placeholder resolved to the empty string.`,
@@ -396,16 +418,20 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
       return defaultText();
     }
 
-    // A comparison selects among the options a placeholder declares, so one
+    // A selection selects among the options a placeholder declares, so one
     // declaring none was asked to select from nothing. It is how the
     // placeholder is written that says so, which is why the report does not
-    // wait on the value: a placeholder whose value is absent takes the chain
-    // below and is reported all the same. A placeholder naming no key has
-    // nothing to compare and is no selection, so a comparison it names was
-    // asked nothing. A host that registered its own modifier under the name
-    // replaced the comparison, so the placeholder asks the host's modifier
-    // and is no selection either.
-    if (key !== undefined && !options.length && isComparison(modifierKey, modifiers)) report('missing-options', spelling, messageId, onReport);
+    // wait on the value, and why the placeholder takes the chain as every
+    // message error does, before a locale or a value is asked anything. A
+    // placeholder naming no key has nothing to compare and is no selection, so
+    // a selection it names was asked nothing. A host that registered its own
+    // modifier under the name replaced the format's, so the placeholder asks
+    // the host's modifier and is no selection either.
+    if (key !== undefined && !options.length && isSelection(modifierKey, modifiers)) {
+      report('missing-options', spelling, messageId, onReport);
+
+      return defaultText();
+    }
 
     // An absent value is nothing to compare against, whatever the modifier
     // asks: the placeholder takes the fallback chain rather than measuring the
@@ -425,7 +451,13 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
       // slice its own name holds rather than the table those layers are: what
       // one modifier is configured with is not what the next reads, and a
       // modifier nobody configured reads an object all the same.
-      const modifierProps = ownSlice([modifierDefaults, props, ownValue(wrapper, 'props', raised)], modifierName, raised);
+      const layers = [modifierDefaults, props, ownValue(wrapper, 'props', raised)];
+      const ownProps = ownSlice(layers, modifierName, raised);
+      // The format's own `plural` takes its category from the number `number`
+      // shows, so it is handed the digit properties composed under `number`
+      // beneath its own. One a host registered reads its own name alone, like
+      // any modifier a host registered.
+      const modifierProps = modifier === defaultModifiers.plural ? mergeLayer(shownDigitsOf(layers, raised), ownProps, raised) : ownProps;
 
       // A modifier answers with a host value like any other, so it becomes text
       // by the conversion a payload entry does: an object it built stays

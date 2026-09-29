@@ -77,6 +77,10 @@ describe('what a parameter accepts', () => {
     expect(kinds('{{a:number}} {{b:currency}} {{c:ago}} {{d:date}}')).toEqual(['number', 'number', 'number', ['date', 'string']]);
   });
 
+  it('narrows a plural selection to a number', () => {
+    expect(kinds('{{a:plural; one:A}} {{b:ordinal; one:B}}')).toEqual(['number', 'number']);
+  });
+
   it('narrows nothing for a modifier nobody registered', () => {
     expect(kinds('{{a:nosuch}} {{b:toString}} {{c:constructor}}')).toEqual(['unknown', 'unknown', 'unknown']);
   });
@@ -103,6 +107,15 @@ describe('the values a message names', () => {
 
   it('lists a key the way the message compares it', () => {
     expect(params('{{a; y\\:z:Y; \\ pad\\ :P}}')[0]?.values).toEqual(['y:z', ' pad ']);
+  });
+
+  it('lists the numbers a plural selection selects for, and none of its categories', () => {
+    expect(params('{{a:plural; 0:none; one:A; 1e3:K; 1,000:G; other:B}}')[0]?.values).toEqual(['0', '1e3']);
+    expect(params('{{a:plural; one:A; few:B; other:C}}')[0]).not.toHaveProperty('values');
+  });
+
+  it('lists only the integers of an ordinal, the only numbers it can take', () => {
+    expect(params('{{a:ordinal; 1:first; 1.5:half; 2:second; other:th}}')[0]?.values).toEqual(['1', '2']);
   });
 
   it('never lists the inline default', () => {
@@ -161,6 +174,12 @@ describe('a host that registered its own modifiers', () => {
 
     expect(params('{{a; yes:Y}}', replaced)[0]).not.toHaveProperty('values');
     expect(params('{{a:eq; yes:Y}}', replaced)[0]).not.toHaveProperty('values');
+  });
+
+  it('stops reading a plural selection the host replaced', () => {
+    const replaced = { customModifiers: { plural: ({ value }: { value: string }) => value } };
+
+    expect(params('{{a:plural; 0:none; one:A}}', replaced)[0]).toEqual({ name: 'a', kind: 'unknown', optional: false });
   });
 
   it('reads a registry entry that is not a modifier as registering nothing', () => {

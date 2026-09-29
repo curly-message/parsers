@@ -1,5 +1,5 @@
 import type { Modifier, Parser } from './types';
-import { ownModifiers, ownValue, parsePlaceholder, scanner } from './utils';
+import { getModifierInput, ownModifiers, ownValue, parsePlaceholder, scanner } from './utils';
 import type { Segment } from './utils';
 
 export type { Modifier, Parser };
@@ -28,6 +28,10 @@ const NARROWED: Record<Modifier.DefaultKeys, readonly Parser.ParamKind[]> = {
   // Milliseconds since the epoch, and failing that text the host reads as a
   // date — which is what keeps a value authored as a date instance formattable.
   date: ['date', 'string'],
+  plural: ['number'],
+  // A whole number: a fraction is a value an ordinal cannot take, though the
+  // kinds have no word for the difference.
+  ordinal: ['number'],
 };
 
 // What the message has said about a key so far. A key several placeholders
@@ -51,11 +55,30 @@ export const createExtractor: Parser.ExtractorFactory = (options) => {
 
   const narrowed = (modifier: string): readonly Parser.ParamKind[] => (registered[modifier] ? undefined : ownValue(NARROWED, modifier)) ?? [];
 
-  // Only `eq` selects on the value itself, so only its option keys are values
-  // the parameter takes: `ne`'s keys are what the value must differ from, and
-  // an inequality's are thresholds it is ordered against. A placeholder naming
-  // no modifier selects with `eq` too (SPEC.md section 9.5).
-  const named = (modifier: string, declared: readonly Segment[]) => (!registered.eq && (modifier === 'eq' || !modifier) ? declared.map(({ key }) => key) : []);
+  // Only `eq` and the plural selections select on the value itself, so only
+  // their keys are values the parameter takes: `ne`'s keys are what the value
+  // must differ from, and an inequality's are thresholds it is ordered
+  // against. A placeholder naming no modifier selects with `eq` too (SPEC.md
+  // section 9.5). A plural selection's category keys are forms of the language
+  // rather than values, so only its numbers are named — and of `ordinal`'s,
+  // only the integers it can take (SPEC.md section 11.5).
+  const exactly = (declared: readonly Segment[], takes: (input: number) => boolean) => declared.map(({ key }) => key).filter((key) => {
+    const input = getModifierInput(key);
+
+    return input !== undefined && takes(input);
+  });
+
+  const named = (modifier: string, declared: readonly Segment[]) => {
+    const name = modifier || 'eq';
+
+    if (registered[name]) return [];
+
+    if (name === 'eq') return declared.map(({ key }) => key);
+
+    if (name === 'plural') return exactly(declared, () => true);
+
+    return name === 'ordinal' ? exactly(declared, Number.isInteger) : [];
+  };
 
   return (message) => {
     const drafts = new Map<string, Draft>();

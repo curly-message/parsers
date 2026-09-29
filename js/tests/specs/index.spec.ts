@@ -12,6 +12,30 @@ const message = (locale: string, id: string) => {
   return MESSAGES[locale]?.[namespace]?.[path.join('.')];
 };
 
+// What the host's plural rules were asked for while `run` ran: the locale and
+// the properties of each request, copied as plain data.
+const askedForCategories = (run: () => void) => {
+  const Original = Intl.PluralRules;
+  const asked: unknown[][] = [];
+
+  Object.assign(Intl, {
+    PluralRules: class extends Original {
+      constructor(locale?: string | string[], options?: Intl.PluralRulesOptions) {
+        asked.push([locale, { ...options }]);
+        super(locale, options);
+      }
+    },
+  });
+
+  try {
+    run();
+  } finally {
+    Object.assign(Intl, { PluralRules: Original });
+  }
+
+  return asked;
+};
+
 const defaultParser = createParser({
   customModifiers: {
     test: ({ value }) => value,
@@ -1250,6 +1274,168 @@ describe('parser', () => {
     expect(resolve('{{v:currency}}', { payload: { v: 0.5 }, props: { currency: { style: 'percent' } }, locale: defaultLocale })).toBe(expected);
     expect(resolve('{{v:currency}}', { payload: { v: { value: 0.5, props: { currency: { style: 'decimal' } } } }, locale: defaultLocale })).toBe(expected);
   });
+  it('`plural` selects by the category the locale puts a number in', () => {
+    const { resolve } = defaultParser;
+    const files = '{{n:plural; one:A; few:B; many:C; other:D;}}';
+    const pick = (locale: string, n: unknown) => resolve(files, { payload: { n }, locale });
+
+    // A remainder, not a size: no set of keys a comparison orders spells it.
+    expect([1, 21, 101, 2, 22, 102, 5, 11, 12].map((n) => pick('ru', n)).join('')).toBe('AAABBBCCC');
+    expect([1, 2, 4, 5, 1.5].map((n) => pick('cs', n)).join('')).toBe('ABBDC');
+    expect(resolve('{{n:plural; zero:Z; one:O; two:T; few:F; many:M; other:X;}}', { payload: { n: 0 }, locale: 'ar' })).toBe('Z');
+    expect([0, 1, 2, 3, 11, 100].map((n) => resolve('{{n:plural; zero:Z; one:O; two:T; few:F; many:M; other:X;}}', { payload: { n }, locale: 'ar' })).join('')).toBe('ZOTFMX');
+  });
+  it('a category is grammar and a number is a number, and a message may write both', () => {
+    const { resolve } = defaultParser;
+    const both = '{{n:plural; 0:NONE; zero:ZERO; one:ONE; other:OTHER;}}';
+
+    // In Latvian `zero` is not zero alone, and English has no `zero` at all.
+    expect([0, 10, 20, 21].map((n) => resolve(both, { payload: { n }, locale: 'lv' }))).toEqual(['NONE', 'ZERO', 'ZERO', 'ONE']);
+    expect(resolve('{{n:plural; zero:ZERO; other:OTHER;}}', { payload: { n: 0 }, locale: defaultLocale })).toBe('OTHER');
+    // French puts zero in `one`.
+    expect(resolve('{{n:plural; one:ONE; other:OTHER;}}', { payload: { n: 0 }, locale: 'fr' })).toBe('ONE');
+  });
+  it('a number wins over a category wherever the two are written', () => {
+    const { resolve } = defaultParser;
+    const files = '{{n:plural; one:{{n}} file; other:{{n}} files; 0:No files;}}';
+
+    expect([0, 1, 5].map((n) => resolve(files, { payload: { n }, locale: defaultLocale }))).toEqual(['No files', '1 file', '5 files']);
+    // A key is compared as a number, and the first of two equal keys wins.
+    expect(resolve('{{n:plural; 2.0:FIRST; 2:SECOND; other:OTHER;}}', { payload: { n: '+2' }, locale: defaultLocale })).toBe('FIRST');
+    expect(resolve('{{n:plural; 1e3:THOUSAND; other:OTHER;}}', { payload: { n: 1000 }, locale: defaultLocale })).toBe('THOUSAND');
+    // A key the number test does not read as one is no number, and it is no
+    // category either, so it never selects.
+    expect(resolve('{{n:plural; 1,000:GROUPED; other:OTHER;}}', { payload: { n: 1000 }, locale: defaultLocale })).toBe('OTHER');
+    expect(resolve('{{n:plural; Infinity:INF; twelve:TWELVE; default:D;}}', { payload: { n: 12 }, locale: defaultLocale })).toBe('D');
+    // A key is compared with the value, not with the number as it is shown.
+    expect(resolve('{{n:plural; 2:TWO; few:FEW; many:MANY; other:OTHER;}}', { payload: { n: 1.999 }, locale: altLocale })).toBe('FEW');
+  });
+  it('a category is compared exactly as written', () => {
+    const { resolve } = defaultParser;
+
+    expect(resolve('{{n:plural; One:CAPITAL; default:D;}}', { payload: { n: 1 }, locale: defaultLocale })).toBe('D');
+    expect(resolve('{{n:plural; One:CAPITAL; one:ONE;}}', { payload: { n: 1 }, locale: defaultLocale })).toBe('ONE');
+  });
+  it('a plural selection that selects nothing takes the fallback chain', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const files = '{{n:plural; one:{{n}} soubor; few:{{n}} soubory; other:{{n}} souborů; default:neznámý počet;}}';
+
+    expect(resolve(files, { payload: { n: 5 }, locale: altLocale })).toBe('5 souborů');
+    // Czech puts a fraction in `many`, which this placeholder writes no option for.
+    expect(resolve(files, { payload: { n: 1.5 }, locale: altLocale })).toBe('neznámý počet');
+    expect(resolve(files, { payload: {}, locale: altLocale })).toBe('neznámý počet');
+    // The payload's own default outranks the message's, as it does for every selection.
+    expect(resolve(files, { payload: { n: 1.5, default: 'PAYLOAD' }, locale: altLocale })).toBe('PAYLOAD');
+    expect(reports).toEqual([]);
+  });
+  it('a plural selection over a value that is not a number fails and takes the chain', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    for (const n of ['abc', '', ' ', 'Infinity', '12px']) {
+      expect(resolve('{{n:plural; one:ONE; other:OTHER; default:D;}}', { payload: { n }, locale: defaultLocale })).toBe('D');
+    }
+
+    expect(reports.map(({ code, origin }) => `${code}/${origin}`)).toEqual(Array(5).fill('failed-modifier/payload'));
+  });
+  it('`plural` takes its category from the number `number` would show', () => {
+    const { resolve } = createParser({ modifierDefaults: { number: { minimumFractionDigits: 1 } } });
+    const files = '{{n:number}} {{n:plural; one:soubor; few:soubory; many:souboru; other:souborů;}}';
+
+    // `number` shows two fraction digits at most by default, so 1.999 is shown
+    // as 2, and it is 2 whose category is asked for.
+    expect(defaultParser.resolve(files, { payload: { n: 1.5 }, locale: altLocale })).toBe('1,5 souboru');
+    expect(defaultParser.resolve(files, { payload: { n: 1.999 }, locale: altLocale })).toBe('2 soubory');
+    expect(defaultParser.resolve(files, { payload: { n: 4.999 }, locale: altLocale })).toBe('5 souborů');
+    // A layer that has `number` show a fraction has `plural` select for one,
+    // whichever layer names it, the wrapper's included.
+    expect(resolve(files, { payload: { n: 1 }, locale: altLocale })).toBe('1,0 souboru');
+    expect(defaultParser.resolve(files, { payload: { n: 2 }, props: { number: { minimumFractionDigits: 1 } }, locale: altLocale })).toBe('2,0 souboru');
+    expect(defaultParser.resolve(files, { payload: { n: { value: 1, props: { number: { minimumFractionDigits: 1 } } } }, locale: altLocale })).toBe('1,0 souboru');
+  });
+  it('`plural` reads the digits of `number` beneath its own, and nothing else of it', () => {
+    const { resolve } = defaultParser;
+    const pick = (props: Parser.Context['props'], n = 1.999) => resolve('{{n:plural; one:ONE; few:FEW; many:MANY; other:OTHER;}}', { payload: { n }, props, locale: altLocale });
+
+    // Its own properties override `number`'s, property by property.
+    expect(pick({ plural: { maximumFractionDigits: 3 } })).toBe('MANY');
+    expect(pick({ number: { maximumFractionDigits: 0 }, plural: { maximumFractionDigits: 3 } })).toBe('MANY');
+    expect(pick({ number: { maximumFractionDigits: 3 } })).toBe('MANY');
+    // Its own minimum widens the default maximum the way `number`'s does.
+    expect(pick({ plural: { minimumFractionDigits: 3 } }, 2)).toBe('MANY');
+    // How a number is written, as against which digits it is shown with, is
+    // not `plural`'s concern: a percent style would have it select for 50.
+    expect(pick({ number: { style: 'percent' } }, 0.5)).toBe('MANY');
+    // The rule type is what the modifier is, whatever a layer names.
+    expect(resolve('{{n:plural; one:ONE; two:TWO; other:OTHER;}}', { payload: { n: 2 }, props: { plural: { type: 'ordinal' } }, locale: defaultLocale })).toBe('OTHER');
+  });
+  it('`plural` reads nothing of `number` but its digits', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const number = { minimumFractionDigits: 1, get style(): string { throw new Error('read'); } };
+
+    // A property of `number`'s that `plural` does not read is never asked for,
+    // so one that raises when read leaves the selection unreported.
+    expect(resolve('{{n:plural; one:ONE; few:FEW; many:MANY; other:OTHER;}}', { payload: { n: 1 }, props: { number } as Parser.Context['props'], locale: altLocale })).toBe('MANY');
+    expect(reports).toEqual([]);
+  });
+  it('a plural selection the host cannot make fails and takes the chain', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    expect(resolve('{{n:plural; one:ONE; default:D;}}', { payload: { n: 5 }, props: { plural: { minimumFractionDigits: 3, maximumFractionDigits: 2 } }, locale: defaultLocale })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['failed-modifier']);
+  });
+  it('the host is asked for a category only where no number matched', () => {
+    const { resolve } = defaultParser;
+
+    const asked = askedForCategories(() => {
+      expect(resolve('{{n:plural; 0:NONE; other:OTHER;}}', { payload: { n: 0 }, locale: defaultLocale })).toBe('NONE');
+      expect(resolve('{{n:plural; 0:NONE; other:OTHER; default:D;}}', { payload: { n: 'abc' }, locale: defaultLocale })).toBe('D');
+      expect(resolve('{{n:plural; 0:NONE; other:OTHER;}}', { payload: { n: 0 } })).toBe('');
+      expect(resolve('{{n:plural; 0:NONE; other:OTHER;}}', { payload: { n: 3 }, locale: defaultLocale })).toBe('OTHER');
+    });
+
+    expect(asked).toEqual([[defaultLocale, { maximumFractionDigits: 2, type: 'cardinal' }]]);
+  });
+  it('an option a plural selection passes over is never read', () => {
+    const read: string[] = [];
+    const payload = { n: 1, get a() { read.push('a'); return 'A'; }, get b() { read.push('b'); return 'B'; } };
+
+    expect(defaultParser.resolve('{{n:plural; one:{{a}}; other:{{b}};}}', { payload, locale: defaultLocale })).toBe('A');
+    expect(read).toEqual(['a']);
+  });
+  it('`ordinal` selects by the ordinal rules, over integers alone', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const place = '{{n}}{{n:ordinal; one:st; two:nd; few:rd; other:th; default:?;}}';
+    const places = (ns: unknown[]) => ns.map((n) => resolve(place, { payload: { n }, locale: defaultLocale })).join(' ');
+
+    expect(places([1, 2, 3, 4, 11, 12, 13, 21, 22, 23, 101, 111])).toBe('1st 2nd 3rd 4th 11th 12th 13th 21st 22nd 23rd 101st 111th');
+    expect(places(['3.0', -1])).toBe('3.0rd -1st');
+    expect(reports).toEqual([]);
+
+    // An ordinal of a fraction names no position, whatever a locale's rules
+    // would make of it.
+    expect(places([1.5])).toBe('1.5?');
+    expect(resolve('{{n:ordinal; one:ONE; two:TWO; many:MANY; other:OTHER; default:D;}}', { payload: { n: 1.5 }, locale: 'mk' })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['failed-modifier', 'failed-modifier']);
+  });
+  it('`ordinal` reads its own properties alone, and its rule type is pinned', () => {
+    const asked = askedForCategories(() => {
+      expect(defaultParser.resolve('{{n:ordinal; one:ONE; two:TWO; other:OTHER;}}', { payload: { n: 2 }, props: { number: { minimumFractionDigits: 1 }, ordinal: { type: 'cardinal', minimumIntegerDigits: 2 } }, locale: defaultLocale })).toBe('TWO');
+    });
+
+    expect(asked).toEqual([[defaultLocale, { minimumIntegerDigits: 2, type: 'ordinal' }]]);
+  });
+  it('a host that registers its own `plural` replaces the format\'s, and reads its own name alone', () => {
+    const seen: unknown[] = [];
+    const { resolve } = createParser({ customModifiers: { plural: ({ props }) => { seen.push({ ...props }); return 'HOST'; } } });
+
+    expect(resolve('{{n:plural}}', { payload: { n: 1 }, props: { number: { minimumFractionDigits: 1 }, plural: { own: true } } as Parser.Context['props'], locale: defaultLocale })).toBe('HOST');
+    expect(seen).toEqual([{ own: true }]);
+  });
   it('a formatting modifier reads its properties from `props`, never from an option', () => {
     const { resolve } = defaultParser;
     const usd = (amount: number) => new Intl.NumberFormat(defaultLocale, { style: 'currency', currency: 'USD' }).format(amount);
@@ -1461,19 +1647,19 @@ describe('parser', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
 
-    expect(resolve('{{value:plural; 1:one; default:many}}', { payload: { value: 1 }, id: 'common.plural' })).toBe('many');
-    expect(resolve('{{value:plural; 1:one}}', { payload: { value: 1 } })).toBe('');
+    expect(resolve('{{value:duration; 1:one; default:many}}', { payload: { value: 1 }, id: 'common.duration' })).toBe('many');
+    expect(resolve('{{value:duration; 1:one}}', { payload: { value: 1 } })).toBe('');
     expect(resolve('{{value:GT; 1:ONE; default:FALLBACK}}', { payload: { value: 1 } })).toBe('FALLBACK');
     expect(resolve('{{value:x-icon; ok:CHECK; default:FALLBACK}}', { payload: { value: 'ok' } })).toBe('FALLBACK');
-    expect(resolve('{{value:plural; 1:one; default:FALLBACK}}', { payload: {} })).toBe('FALLBACK');
+    expect(resolve('{{value:duration; 1:one; default:FALLBACK}}', { payload: {} })).toBe('FALLBACK');
 
     expect(reports).toHaveLength(5);
     expect(reports[0]).toEqual({
       code: 'unknown-modifier',
       origin: 'message',
       message: 'A placeholder named a modifier this parser does not know.',
-      id: 'common.plural',
-      text: '{{value:plural; 1:one; default:many}}',
+      id: 'common.duration',
+      text: '{{value:duration; 1:one; default:many}}',
     });
   });
   it('the modifier registry holds modifiers alone', () => {
@@ -1522,12 +1708,12 @@ describe('parser', () => {
   it('a modifier the caller registers is one the parser knows', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({
-      customModifiers: { plural: ({ value }) => (`${value}` === '1' ? 'one' : 'many') },
+      customModifiers: { duration: ({ value }) => (`${value}` === '1' ? 'one' : 'many') },
       onReport: (report) => { reports.push(report); },
     });
 
-    expect(resolve('{{value:plural}}', { payload: { value: 1 } })).toBe('one');
-    expect(resolve('{{value:plural}}', { payload: { value: 7 } })).toBe('many');
+    expect(resolve('{{value:duration}}', { payload: { value: 1 } })).toBe('one');
+    expect(resolve('{{value:duration}}', { payload: { value: 7 } })).toBe('many');
 
     expect(reports).toHaveLength(0);
   });
@@ -1728,6 +1914,15 @@ describe('parser', () => {
     }
 
     expect(resolve(message(defaultLocale, 'common.modifier_number_default'), { payload: { value: 10 } })).toBe('');
+
+    // The plural selections test the locale first as well, before a number
+    // that would have matched a key exactly is compared.
+    for (const modifier of ['plural', 'ordinal']) {
+      for (const value of [10, 'not a number']) {
+        expect(resolve(`{{value:${modifier}; 10:TEN; other:OTHER; default:FALLBACK;}}`, { payload: { value } })).toBe('');
+        expect(resolve(`{{value:${modifier}; 10:TEN; other:OTHER; default:FALLBACK;}}`, { payload: { value }, locale: '' })).toBe('');
+      }
+    }
   });
   it('a formatting modifier given no locale reports', () => {
     const reports: Report[] = [];
@@ -1756,8 +1951,12 @@ describe('parser', () => {
     // have formatted either reports the locale and nothing else.
     expect(answer('{{v:number; default:FALLBACK}}', { payload: { v: 'not a number' } })).toEqual({ text: '', reported: ['missing-locale/payload'] });
 
+    for (const modifier of ['plural', 'ordinal']) {
+      expect(answer(`{{v:${modifier}; 10:TEN; default:FALLBACK}}`, { payload: { v: 10 } })).toEqual({ text: '', reported: ['missing-locale/payload'] });
+    }
+
     expect(answer('{{v:date}}', { payload: { v: 10 } })).toEqual({ text: '', reported: ['missing-locale/payload'] });
-    expect(reports[0].message).toBe('A formatting modifier was given no locale, so the placeholder resolved to the empty string.');
+    expect(reports[0].message).toBe('A modifier that depends on a locale was given none, so the placeholder resolved to the empty string.');
     expect(reports[0].text).toBe('{{v:date}}');
 
     // A placeholder whose value is absent takes its chain before any modifier
@@ -1794,7 +1993,7 @@ describe('parser', () => {
       lowered.mockRestore();
     }
   });
-  it('a comparison given no options to select from reports', () => {
+  it('a selection given no options to select from reports', () => {
     const reports: Report[] = [];
     const onReport = (entry: Report) => reports.push(entry);
     const { resolve } = createParser({ onReport });
@@ -1807,11 +2006,11 @@ describe('parser', () => {
       return { text, reported: reports.map(({ code, origin }) => `${code}/${origin}`) };
     };
 
-    // A comparison selects among the options a placeholder declares, so one
+    // A selection selects among the options a placeholder declares, so one
     // declaring none has nothing to select from: the placeholder takes the
-    // fallback chain it always took, and the report is what says the message
-    // asked for a selection it never described.
-    for (const modifier of ['eq', 'ne', 'lt', 'gt', 'lte', 'gte']) {
+    // fallback chain, and the report is what says the message asked for a
+    // selection it never described. The plural selections are selections too.
+    for (const modifier of ['eq', 'ne', 'lt', 'gt', 'lte', 'gte', 'plural', 'ordinal']) {
       expect(answer(`{{v:${modifier}; default:FALLBACK}}`, { payload: { v: 10 } })).toEqual({ text: 'FALLBACK', reported: ['missing-options/message'] });
 
       // The check reads how the placeholder is written, so what the payload
@@ -1822,8 +2021,13 @@ describe('parser', () => {
     }
 
     expect(answer('{{v:eq}}', { payload: { v: 10 } })).toEqual({ text: '', reported: ['missing-options/message'] });
-    expect(reports[0].message).toBe('A comparison was given no options to select from, so the placeholder took its fallback chain.');
+    expect(reports[0].message).toBe('A selection was given no options to select from, so the placeholder took its fallback chain.');
     expect(reports[0].text).toBe('{{v:eq}}');
+
+    // A message error takes the chain before anything is asked of the locale
+    // or the value, so a plural selection declaring nothing reports that alone.
+    expect(answer('{{v:plural; default:FALLBACK}}', { payload: { v: 'not a number' } })).toEqual({ text: 'FALLBACK', reported: ['missing-options/message'] });
+    expect(answer('{{v:ordinal; default:FALLBACK}}', { payload: { v: 1.5 }, locale: defaultLocale })).toEqual({ text: 'FALLBACK', reported: ['missing-options/message'] });
 
     // An option is what a comparison selects from, and the inline `default` is
     // the fallback itself rather than something to select, so a placeholder

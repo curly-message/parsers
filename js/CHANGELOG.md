@@ -1,5 +1,33 @@
 # Changelog
 
+### 3.1.0 (Unreleased)
+
+Implements revision 3.1.0 of the Curly Message Format: the plural selections
+`plural` and `ordinal`. A message that names neither renders as it did.
+
+* **`plural` and `ordinal`** select an option by the category the locale's
+  plural rules put a number in, cardinal and ordinal, through
+  `Intl.PluralRules`. A key is a category or a number. A number selects for the
+  value it equals, before any category is asked for and wherever it is
+  written, and a category is compared exactly as written. Where nothing is
+  selected the placeholder takes the fallback chain. Both need a locale as the
+  formatting modifiers do, and a value that is not a number — for `ordinal`,
+  not an integer — reports `failed-modifier` and takes the chain.
+* **`plural` takes its category from the number `number` would show.** It
+  reads the digit properties composed under `number` beneath its own props, so
+  `{{n:number}} {{n:plural; …}}` agrees on `1,0 souboru`, and on the `2` that
+  `1.999` is shown as.
+* **A plural selection declaring no options reports `missing-options`**, as a
+  comparison does, and takes the chain before the locale is tested or the value
+  compared.
+  The report's `message` says "selection" now, and `missing-locale`'s names a
+  modifier that depends on a locale rather than a formatting one.
+* **`createExtractor` narrows both to `number`**, and lists a plural
+  selection's number keys under `values` — `ordinal`'s integers alone — but not
+  its categories, which are forms of the language rather than values.
+* A host's own `plural` or `ordinal` still answers in the format's place, and
+  is handed the props under its own name alone.
+
 ## 3.0.0
 
 Implements `curly-message-3` — version 3 of the Curly Message Format. One kind
