@@ -286,7 +286,7 @@ describe('parser option typing', () => {
 describe('modifier typing', () => {
   it('names the registered modifiers, and nothing else', () => {
     type Exact<A, B> = [A] extends [B] ? [B] extends [A] ? true : never : never;
-    type Registered = 'eq' | 'ne' | 'lt' | 'gt' | 'lte' | 'gte' | 'number' | 'date' | 'ago' | 'currency';
+    type Registered = 'eq' | 'ne' | 'lt' | 'gt' | 'lte' | 'gte' | 'number' | 'date' | 'ago' | 'currency' | 'plural' | 'ordinal';
 
     const registered: Exact<Modifier.DefaultKeys, Registered> = true;
 

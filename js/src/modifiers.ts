@@ -64,6 +64,18 @@ const formattable = (input: number | undefined) => {
   return input;
 };
 
+// Two fraction digits is what `number` shows when nobody named a maximum: a
+// default, not a cap. `Intl` widens its own default maximum to reach a larger
+// minimum, and this default widens the same way — held at two over a layer's
+// `minimumFractionDigits`, it would contradict it, `Intl` would raise, and the
+// number would resolve to a fallback nobody asked for.
+const shownDigits = (props: object) => {
+  const minimum = Number(ownValue(props, 'minimumFractionDigits')) || 0;
+  const maximumFractionDigits = stated(ownValue(props, 'maximumFractionDigits'), Math.max(minimum, 2));
+
+  return mergeLayer(props, { maximumFractionDigits });
+};
+
 export const number: Modifier.T<Modifier.NumberProperties> = (config) => {
   const { value, props, locale = '' } = config;
 
@@ -71,15 +83,7 @@ export const number: Modifier.T<Modifier.NumberProperties> = (config) => {
 
   const input = formattable(getModifierInput(value));
 
-  // Two fraction digits is what this modifier formats when nobody named a
-  // maximum: a default, not a cap. `Intl` widens its own default maximum to
-  // reach a larger minimum, and this default widens the same way — held at two
-  // over a layer's `minimumFractionDigits`, it would contradict it, `Intl`
-  // would raise, and the number would resolve to a fallback nobody asked for.
-  const minimum = Number(ownValue(props, 'minimumFractionDigits')) || 0;
-  const maximumFractionDigits = stated(ownValue(props, 'maximumFractionDigits'), Math.max(minimum, 2));
-
-  return new Intl.NumberFormat(locale, mergeLayer(props, { maximumFractionDigits })).format(input);
+  return new Intl.NumberFormat(locale, shownDigits(props)).format(input);
 };
 
 export const date: Modifier.T<Modifier.DateProperties> = (config) => {
@@ -143,6 +147,41 @@ export const ago: Modifier.T<Modifier.AgoProperties> = (config) => {
 
   return new Intl.RelativeTimeFormat(locale, mergeLayer(props, { numeric })).format(...formatParams);
 };
+
+// A plural selection selects by the category the locale's rules put a number
+// in. A key that is a number selects for the value it equals before any
+// category is asked for, wherever it is written, so the host is asked only
+// where none did. The rule type is what the modifier is rather than a property
+// it layers, so it is pinned over every layer the way `currency`'s style is.
+const byCategory = (type: Intl.PluralRuleType, properties: (props: object) => object): Modifier.T => (config) => {
+  const { value, options = [], props, locale = '' } = config;
+
+  if (!locale) throw new ModifierFailure('missing-locale');
+
+  const input = formattable(getModifierInput(value));
+
+  // An ordinal of a fraction names no position, and the ordinal rules are
+  // written for whole numbers: what they make of one differs from locale to
+  // locale, so a fraction is a value this modifier cannot take.
+  if (type === 'ordinal' && !Number.isInteger(input)) throw new ModifierFailure('failed-modifier');
+
+  const exact = options.find(({ key }) => getModifierInput(key) === input);
+
+  if (exact) return exact.value;
+
+  const category = new Intl.PluralRules(locale, mergeLayer(properties(props), { type })).select(input);
+
+  return selected(options.find(({ key }) => key === category), config);
+};
+
+// A count and the word that agrees with it are two placeholders, so `plural`
+// takes its category from the number `number` would show: the digits it was
+// handed are `number`'s beneath its own, and they widen the way `number`'s do.
+export const plural: Modifier.T<Modifier.PluralProperties> = byCategory('cardinal', shownDigits);
+
+// An ordinal takes integers, which show no fraction, so there is nothing of
+// `number`'s for it to agree with.
+export const ordinal: Modifier.T<Modifier.OrdinalProperties> = byCategory('ordinal', (props) => props);
 
 export const currency: Modifier.T<Modifier.CurrencyProperties> = (config) => {
   const { value, locale = '', props } = config;

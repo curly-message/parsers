@@ -136,7 +136,21 @@ export module Modifier {
 
   export type CurrencyProps = { currency?: CurrencyProperties };
 
-  export type DefaultProps = NumberProps & AgoProps & DateProps & CurrencyProps;
+  /**
+   * What the plural selections layer. `plural` is also handed the digit
+   * properties composed under `number`, beneath its own, so the category it
+   * selects by is that of the number `number` shows; the rule type is what
+   * each modifier is, and a `type` a layer names does not change it.
+   */
+  export type PluralProperties = Intl.PluralRulesOptions;
+
+  export type PluralProps = { plural?: PluralProperties };
+
+  export type OrdinalProperties = Intl.PluralRulesOptions;
+
+  export type OrdinalProps = { ordinal?: OrdinalProperties };
+
+  export type DefaultProps = NumberProps & AgoProps & DateProps & CurrencyProps & PluralProps & OrdinalProps;
 
   export type Props<T = DefaultProps> = T & DefaultProps;
 
@@ -391,9 +405,13 @@ export module Parser {
      * The values the message names explicitly: the option keys of an `eq`
      * selection, which is the one comparison whose keys are values of the
      * parameter rather than thresholds it is ordered against or a value it
-     * must differ from. A hint and never a closed set — a value none of them
-     * matches resolves through the fallback chain rather than failing — and
-     * absent where the message names none.
+     * must differ from, and the keys of a plural selection that are numbers —
+     * of `ordinal`'s, the integers — which select for the value they equal.
+     * A plural selection's categories are forms of the language rather than
+     * values, and are not listed. A hint and never a closed set — a value none
+     * of them matches resolves through the fallback chain, or in a plural
+     * selection by its category, rather than failing — and absent where the
+     * message names none.
      */
     values?: readonly string[];
     /**
