@@ -1,6 +1,6 @@
 # Changelog
 
-### 3.1.1 (Unreleased)
+## 3.1.1
 
 A resolution costs less. Nothing a message resolves to changes, save where
 the host's own `Intl` answers one request differently over time, as it does a
