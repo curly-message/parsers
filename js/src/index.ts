@@ -170,7 +170,7 @@ const SELECTIONS: Modifier.DefaultKeys[] = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte'
 
 // Whether the modifier answering to a name is the selection this format
 // defines under it, and not one a host registered in its place.
-const isSelection = (name: string, modifiers: Record<string, unknown>) => SELECTIONS.includes(name as Modifier.DefaultKeys) && modifiers[name] === defaultModifiers[name as Modifier.DefaultKeys];
+const isSelection = (name: string, modifierFor: (name: string) => unknown) => SELECTIONS.includes(name as Modifier.DefaultKeys) && modifierFor(name) === defaultModifiers[name as Modifier.DefaultKeys];
 
 // The properties that decide which digits a number is shown with, which are
 // the ones the host's plural rules take from its number formatting so that a
@@ -302,12 +302,11 @@ const suspect = (declaredText: string, placeholder: string, id: Parser.Id | unde
 // own text is syntax and is scanned for placeholders; what a placeholder
 // resolves to is data and is never scanned again, so nesting is what the
 // message spells rather than what a payload arranges (section 12).
-const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifiers, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id: messageId, conversions, wrappers }) => {
+const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id: messageId, conversions, wrappers }) => {
   const source = `${message}`;
   // One scanner for the walk: a verdict is final, so the span an opening brace
   // derives is settled once however many times the walk asks for it.
   const scan = scanner(source);
-  const modifierKeys = Object.keys(modifiers);
 
   // What the output carries and what the payload is read for are budgets of
   // the resolution rather than of a placeholder: each is spent by what reaches
@@ -412,7 +411,7 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
     // A modifier nobody registered is a defect in the message, not a selection:
     // running `eq` in its place would render a plausible answer to a question the
     // message never asked.
-    if (hasModifier && !modifierKeys.includes(modifierKey)) {
+    if (hasModifier && modifierFor(modifierKey) === undefined) {
       report('unknown-modifier', spelling, messageId, onReport);
 
       return defaultText();
@@ -427,7 +426,7 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
     // a selection it names was asked nothing. A host that registered its own
     // modifier under the name replaced the format's, so the placeholder asks
     // the host's modifier and is no selection either.
-    if (key !== undefined && !options.length && isSelection(modifierKey, modifiers)) {
+    if (key !== undefined && !options.length && isSelection(modifierKey, modifierFor)) {
       report('missing-options', spelling, messageId, onReport);
 
       return defaultText();
@@ -441,7 +440,7 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
     if (!hasModifier && !options.length) return valueText;
 
     const modifierName = hasModifier ? modifierKey : 'eq';
-    const modifier = modifiers[modifierName];
+    const modifier = modifierFor(modifierName)!;
 
     // Fail soft: a modifier that raises resolves its placeholder, never out of `resolve`.
     // Containment is what keeps that failure out of the caller's render path,
@@ -555,11 +554,12 @@ export const createParser: Parser.Factory = (parserOptions) => ({
     const recognizeWrappers = !!(ownValue(parserOptions, 'recognizeWrappers', callRaised) ?? true);
     // Each layer of the registry contributes the modifiers it holds and nothing
     // else: an entry that cannot be called is not one a message can name and
-    // not one that shadows the name it would replace. Filtered after the merge
-    // instead, a host's bad entry would take the built-in down with it. A call
-    // that holds no table composes nothing over the built-in registry, which
-    // nothing writes to.
-    const modifiers = customModifiers === undefined ? builtInModifiers : mergeLayer(builtInModifiers, ownModifiers(customModifiers, callRaised));
+    // not one that shadows the name it would replace. Filtered after the
+    // lookup instead, a host's bad entry would take the built-in down with it.
+    // A name is looked up in the host's table and then in the built-in
+    // registry, which nothing writes to, rather than the two merged anew.
+    const registered = customModifiers === undefined ? undefined : ownModifiers(customModifiers, callRaised);
+    const modifierFor = (name: string): Modifier.T<any, any> | undefined => registered?.[name] ?? builtInModifiers[name];
     // One value converts once, however many placeholders read it: the walk is
     // the costly step. So is one entry asked once whether it configures its
     // value, because asking enumerates it. The call is the scope — a payload
@@ -579,6 +579,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
 
     if (value === undefined) return '';
 
-    return interpolate({ value, payload, props, parserOptions, modifiers, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id, conversions, wrappers });
+    return interpolate({ value, payload, props, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id, conversions, wrappers });
   },
 });
