@@ -1836,6 +1836,27 @@ describe('parser', () => {
 
     expect(reports).toHaveLength(0);
   });
+  it('the modifier registry is read again on every call', () => {
+    const reports: Report[] = [];
+    const registry: Record<string, unknown> = {};
+    const { resolve } = createParser({ customModifiers: registry as Parser.Options['customModifiers'], onReport: (report) => { reports.push(report); } });
+    const shout = () => resolve('{{v:shout; default:D}}', { payload: { v: 'a' } });
+    let reads = 0;
+
+    // An entry added after a call, or replaced in place, is one the next call
+    // knows.
+    expect(shout()).toBe('D');
+    registry.shout = ({ value }: { value: string }) => value.toUpperCase();
+    expect(shout()).toBe('A');
+    registry.shout = () => 'REPLACED';
+    expect(shout()).toBe('REPLACED');
+
+    // An accessor is read once for each call, and one that refuses on a later
+    // call reports on that call.
+    Object.defineProperty(registry, 'shout', { enumerable: true, get: () => { reads += 1; if (reads > 2) throw new Error('SHOUT FAILURE'); return () => `READ ${reads}`; } });
+    expect([shout(), shout(), shout()]).toEqual(['READ 1', 'READ 2', 'D']);
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier', 'unserializable-value', 'unknown-modifier']);
+  });
   it('a modifier the caller registers under a built-in name answers in its place', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({

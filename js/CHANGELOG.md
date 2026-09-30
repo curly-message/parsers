@@ -17,6 +17,13 @@ date shown in a default time zone the host changes while it runs.
   host showed when it was built: a date shows in the default time zone the
   host had then, so a zone changed at runtime does not reach a kept request's
   times.
+* **A modifier is looked up by name.** A call holding `customModifiers` copied
+  the built-in modifiers and the host's into a new table and searched its
+  names for every modifier a placeholder wrote, and a call without one still
+  listed the built-ins' names. A name is now looked up in the host's table and
+  then among the built-ins. The table is still read once for each call, so an
+  entry added, replaced or refusing since the last call is what this one reads
+  and reports.
 
 ## 3.1.0
 
