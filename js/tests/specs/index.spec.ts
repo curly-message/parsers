@@ -12,15 +12,16 @@ const message = (locale: string, id: string) => {
   return MESSAGES[locale]?.[namespace]?.[path.join('.')];
 };
 
-// What the host's plural rules were asked for while `run` ran: the locale and
-// the properties of each request, copied as plain data.
-const askedForCategories = (run: () => void) => {
-  const Original = Intl.PluralRules;
+// What a host formatter was asked for while `run` ran: the locale and the
+// options of each construction, copied as plain data, including one the host
+// refused.
+const built = (name: 'NumberFormat' | 'DateTimeFormat' | 'RelativeTimeFormat' | 'PluralRules', run: () => void) => {
+  const Original = Intl[name] as unknown as new (locale?: unknown, options?: object) => object;
   const asked: unknown[][] = [];
 
   Object.assign(Intl, {
-    PluralRules: class extends Original {
-      constructor(locale?: string | string[], options?: Intl.PluralRulesOptions) {
+    [name]: class extends Original {
+      constructor(locale?: unknown, options?: object) {
         asked.push([locale, { ...options }]);
         super(locale, options);
       }
@@ -30,10 +31,33 @@ const askedForCategories = (run: () => void) => {
   try {
     run();
   } finally {
-    Object.assign(Intl, { PluralRules: Original });
+    Object.assign(Intl, { [name]: Original });
   }
 
   return asked;
+};
+
+const askedForCategories = (run: () => void) => built('PluralRules', run);
+
+// The host formatters `run` formatted or selected with, one entry for each use,
+// so that one used twice is the same object twice.
+const used = (name: 'NumberFormat' | 'DateTimeFormat' | 'RelativeTimeFormat' | 'PluralRules', run: () => void) => {
+  const { prototype } = Intl[name] as unknown as { prototype: object };
+  const member = name === 'PluralRules' ? 'select' : 'format';
+  const original = Object.getOwnPropertyDescriptor(prototype, member)!;
+  const seen: object[] = [];
+
+  Object.defineProperty(prototype, member, original.get
+    ? { ...original, get(this: object) { seen.push(this); return original.get!.call(this); } }
+    : { ...original, value(this: object, ...args: unknown[]) { seen.push(this); return (original.value as (...args: unknown[]) => unknown).apply(this, args); } });
+
+  try {
+    run();
+  } finally {
+    Object.defineProperty(prototype, member, original);
+  }
+
+  return seen;
 };
 
 const defaultParser = createParser({
@@ -1435,6 +1459,101 @@ describe('parser', () => {
 
     expect(resolve('{{n:plural}}', { payload: { n: 1 }, props: { number: { minimumFractionDigits: 1 }, plural: { own: true } } as Parser.Context['props'], locale: defaultLocale })).toBe('HOST');
     expect(seen).toEqual([{ own: true }]);
+  });
+  it('a host formatter is built once for every request spelled alike', () => {
+    const props = { currency: { currency: 'EUR' }, date: { timeZone: 'UTC' } };
+    const once = (name: Parameters<typeof used>[0], message: string, v: unknown, locale = altLocale) => {
+      const seen = used(name, () => {
+        const [first, second] = [1, 2].map(() => defaultParser.resolve(message, { payload: { v }, props, locale }));
+
+        expect(second).toBe(first);
+      });
+
+      expect([seen.length, new Set(seen).size]).toEqual([2, 1]);
+    };
+
+    once('NumberFormat', '{{v:number}}', 1234.5);
+    once('NumberFormat', '{{v:currency}}', 2);
+    once('DateTimeFormat', '{{v:date}}', 0);
+    once('RelativeTimeFormat', '{{v:ago}}', -3600000);
+    once('PluralRules', '{{v:plural; one:A; other:B;}}', 1);
+    once('PluralRules', '{{v:ordinal; one:A; other:B;}}', 1, defaultLocale);
+  });
+  it('a constructor installed after the package loaded is asked on every call', () => {
+    const Original = Intl.NumberFormat;
+    const twice = () => [1, 2].forEach(() => expect(defaultParser.resolve('{{v:number}}', { payload: { v: 1234 }, locale: defaultLocale })).toBe('1,234'));
+    let builds = 0;
+
+    // A subclass, and a Proxy of the host's own that prints as native code.
+    expect(built('NumberFormat', twice)).toHaveLength(2);
+
+    Object.assign(Intl, { NumberFormat: new Proxy(Original, { construct: (target, args: [string, object]) => { builds += 1; return new target(...args); } }) });
+
+    try {
+      twice();
+    } finally {
+      Object.assign(Intl, { NumberFormat: Original });
+    }
+
+    expect(builds).toBe(2);
+  });
+  it('a host formatter is kept for the exact spelling of its request, types included', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const number = (options: object) => resolve('{{v:number; default:D}}', { payload: { v: 12345.5 }, props: { number: options }, locale: defaultLocale });
+
+    expect(number({ useGrouping: false })).toBe('12345.5');
+    expect(number({ useGrouping: 'false' })).toBe('12,345.5');
+    expect(number({ 'useGrouping","boolean",false': true })).toBe('12,345.5');
+    expect(number({ minimumFractionDigits: null })).toBe('12,345.5');
+    expect(reports).toEqual([]);
+
+    // JSON writes `NaN` as it writes `null`, and the host refuses the one it
+    // takes the other for.
+    expect(number({ minimumFractionDigits: NaN })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['failed-modifier']);
+  });
+  it('a request the host refuses is never kept', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+
+    [1, 2].forEach(() => expect(resolve('{{v:number; default:D}}', { payload: { v: 1 }, props: { number: { minimumFractionDigits: NaN } }, locale: defaultLocale })).toBe('D'));
+    expect(reports.map(({ code }) => code)).toEqual(['failed-modifier', 'failed-modifier']);
+  });
+  it('a request holding an object is built afresh, since converting it runs host code', () => {
+    let calls = 0;
+    const currency = { toString: () => (calls++ % 2 ? 'USD' : 'EUR') };
+    const amounts = [1, 2, 3, 4].map(() => defaultParser.resolve('{{v:currency}}', { payload: { v: 1 }, props: { currency: { currency } } as unknown as Parser.Context['props'], locale: defaultLocale }));
+
+    expect(amounts).toEqual(['€1.00', '$1.00', '€1.00', '$1.00']);
+  });
+  it('a host formatter table keeps 256 requests, the oldest making room', () => {
+    const number = (tag: number) => defaultParser.resolve('{{v:number}}', { payload: { v: 1 }, props: { number: { tag: `evicted ${tag}` } } as Parser.Context['props'], locale: defaultLocale });
+    const seen = used('NumberFormat', () => {
+      for (let tag = 0; tag <= 256; tag += 1) number(tag);
+
+      number(256);
+      number(0);
+    });
+
+    expect(seen).toHaveLength(259);
+    expect(seen[257]).toBe(seen[256]);
+    expect(seen[258]).not.toBe(seen[0]);
+  });
+  it('a request with a part or a key past the bounds is never kept', () => {
+    const locale = `en-x-${Array(10).fill('abcdefgh').join('-')}`;
+    const long = 'x'.repeat(65);
+    const many = Object.fromEntries(Array.from({ length: 40 }, (_, index) => [`option ${index}`, 'x'.repeat(30)]));
+    const seen = used('NumberFormat', () => {
+      [1, 2].forEach(() => {
+        expect(defaultParser.resolve('{{v:number}}', { payload: { v: 1234 }, locale })).toBe('1,234');
+        expect(defaultParser.resolve('{{v:number}}', { payload: { v: 1234 }, props: { number: { [long]: 1 } }, locale: defaultLocale })).toBe('1,234');
+        expect(defaultParser.resolve('{{v:number}}', { payload: { v: 1234 }, props: { number: { tag: long } } as Parser.Context['props'], locale: defaultLocale })).toBe('1,234');
+        expect(defaultParser.resolve('{{v:number}}', { payload: { v: 1234 }, props: { number: many }, locale: defaultLocale })).toBe('1,234');
+      });
+    });
+
+    expect(new Set(seen).size).toBe(8);
   });
   it('a formatting modifier reads its properties from `props`, never from an option', () => {
     const { resolve } = defaultParser;
