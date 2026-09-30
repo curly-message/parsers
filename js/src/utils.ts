@@ -31,13 +31,29 @@ export const AGO_LADDER = [
  */
 export const unicodeEscape = (character: string) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`;
 
+// The whitespace class SPEC.md section 6 enumerates: the line terminators and
+// twenty-one code points besides, each a single code unit.
+const WHITESPACE = new Set([
+  ...LINE_TERM,
+  '\u0009', '\u000b', '\u000c', '\u0020', '\u00a0', '\u1680',
+  '\u2000', '\u2001', '\u2002', '\u2003', '\u2004', '\u2005', '\u2006', '\u2007', '\u2008', '\u2009', '\u200a',
+  '\u202f', '\u205f', '\u3000', '\ufeff',
+].map((character) => character.charCodeAt(0)));
+
+/** Whether the code unit at `index` is in the whitespace class. */
+export const isBlankAt = (value: string, index: number) => WHITESPACE.has(value.charCodeAt(index));
+
+// A whole text is tested in one native scan for a unit outside the class,
+// which a long run of padding reaches the end of faster than a lookup per unit.
+const NON_BLANK = new RegExp(`[^${[...WHITESPACE].map((unit) => unicodeEscape(String.fromCharCode(unit))).join('')}]`);
+
 /**
  * Whether text carries nothing outside the whitespace class SPEC.md section 6
  * enumerates and forbids substituting. The host's own notion is no substitute
  * anyway: it is defined over a live Unicode general category and has changed
  * membership before.
  */
-export const isBlank = (value: string) => !/[^\t\n\v\f\r\u0020\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]/.test(value);
+export const isBlank = (value: string) => !NON_BLANK.test(value);
 
 const TERMINATOR_CLASS = `[${LINE_TERM.map(unicodeEscape).join('')}]`;
 
@@ -239,7 +255,7 @@ export const trimmed = (value: string, from: number, to: number): [number, numbe
   for (let index = from; index < to; index += 1) {
     const escaped = value[index] === '\\' && index + 1 < to;
 
-    if (!escaped && isBlank(value[index])) continue;
+    if (!escaped && isBlankAt(value, index)) continue;
 
     if (start < 0) start = index;
 
