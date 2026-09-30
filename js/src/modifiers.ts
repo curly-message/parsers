@@ -1,5 +1,5 @@
 import type { Modifier } from './types';
-import { AGO_LADDER, getDateInput, getModifierInput, mergeLayer, ModifierFailure, ownValue } from './utils';
+import { AGO_LADDER, formatter, getDateInput, getModifierInput, mergeLayer, ModifierFailure, ownValue } from './utils';
 
 // A selection that matched answers with its own value, empty or not. Only a
 // selection that matched nothing falls back, and the fallback is read off the
@@ -83,7 +83,7 @@ export const number: Modifier.T<Modifier.NumberProperties> = (config) => {
 
   const input = formattable(getModifierInput(value));
 
-  return new Intl.NumberFormat(locale, shownDigits(props)).format(input);
+  return formatter(Intl.NumberFormat, locale, shownDigits(props)).format(input);
 };
 
 export const date: Modifier.T<Modifier.DateProperties> = (config) => {
@@ -93,7 +93,7 @@ export const date: Modifier.T<Modifier.DateProperties> = (config) => {
 
   const input = formattable(getDateInput(value));
 
-  return new Intl.DateTimeFormat(locale, mergeLayer(props, undefined)).format(input);
+  return formatter(Intl.DateTimeFormat, locale, mergeLayer(props, undefined)).format(input);
 };
 
 // A property a layer holds the host's null under is one the layer names: null
@@ -145,7 +145,7 @@ export const ago: Modifier.T<Modifier.AgoProperties> = (config) => {
 
   const formatParams = agoFormat(input, format);
 
-  return new Intl.RelativeTimeFormat(locale, mergeLayer(props, { numeric })).format(...formatParams);
+  return formatter(Intl.RelativeTimeFormat, locale, mergeLayer(props, { numeric })).format(...formatParams);
 };
 
 // A plural selection selects by the category the locale's rules put a number
@@ -169,7 +169,7 @@ const byCategory = (type: Intl.PluralRuleType, properties: (props: object) => ob
 
   if (exact) return exact.value;
 
-  const category = new Intl.PluralRules(locale, mergeLayer(properties(props), { type })).select(input);
+  const category = formatter(Intl.PluralRules, locale, mergeLayer(properties(props), { type })).select(input);
 
   return selected(options.find(({ key }) => key === category), config);
 };
@@ -195,5 +195,5 @@ export const currency: Modifier.T<Modifier.CurrencyProperties> = (config) => {
   // layers: a layer naming another style asks it to stop being the modifier the
   // message named, so the style is pinned over every layer, the wrapper's
   // included.
-  return new Intl.NumberFormat(locale, mergeLayer(props, { style: 'currency' })).format(input);
+  return formatter(Intl.NumberFormat, locale, mergeLayer(props, { style: 'currency' })).format(input);
 };

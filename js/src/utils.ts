@@ -445,6 +445,102 @@ export const failureCode = (raised: any): Report['code'] | undefined => {
   }
 };
 
+// The locale and the options are the caller's to vary, so a table keeps at
+// most `FORMATTERS` requests, the oldest making room, and none with a part or a
+// key longer than the bounds below.
+const FORMATTERS = 256;
+
+const SPELLED_PART = 64;
+
+const SPELLED_KEY = 1024;
+
+const SPELLED_TYPES = ['string', 'number', 'boolean', 'undefined'];
+
+// A constructor the host did not build in can answer for state of its own as
+// well — a polyfill loads a locale's data after it is installed — so a table
+// is kept only for a constructor this module found in place when it loaded,
+// and only where it and its prototype's methods print as native code, which a
+// polyfill's do not, whether or not a Proxy or a binding wraps it.
+const HOST: unknown[] = typeof Intl === 'object' ? [Intl.NumberFormat, Intl.DateTimeFormat, Intl.RelativeTimeFormat, Intl.PluralRules] : [];
+
+const sourceOf = Reflect.get(Function.prototype, 'toString');
+
+const NATIVE = /\{\s*\[native code\]\s*\}\s*$/;
+
+const isNative = (value: unknown) => typeof value === 'function' && NATIVE.test(sourceOf.call(value));
+
+const formatters = new WeakMap<object, Map<string, object> | undefined>();
+
+const hosted = (Constructor: object) => {
+  try {
+    return HOST.includes(Constructor) && isNative(Constructor) && isNative((Constructor as { prototype?: { resolvedOptions?: unknown } }).prototype?.resolvedOptions);
+  } catch {
+    return false;
+  }
+};
+
+const tableFor = (Constructor: object) => {
+  if (!formatters.has(Constructor)) formatters.set(Constructor, hosted(Constructor) ? new Map() : undefined);
+
+  return formatters.get(Constructor);
+};
+
+// A request is spelled only where every part is a primitive the host reads
+// without running code: an object is converted on every build, and a kept
+// formatter would have converted it once. Each value goes in with its type,
+// and a number by its own text, since JSON writes `NaN` and both infinities
+// as `null`. The joined key is never shorter than the parts measured here, so
+// a request past the bound is refused before it is joined.
+const spelled = (locale: unknown, options: Record<string, unknown>) => {
+  if (typeof locale !== 'string' || locale.length > SPELLED_PART) return undefined;
+
+  const parts: unknown[] = [locale];
+  let size = locale.length;
+
+  for (const name of Object.keys(options)) {
+    const value = options[name];
+
+    if (name.length > SPELLED_PART || (value !== null && !SPELLED_TYPES.includes(typeof value))) return undefined;
+
+    const text = String(value);
+
+    size += name.length + text.length;
+
+    if (text.length > SPELLED_PART || size > SPELLED_KEY) return undefined;
+
+    parts.push(name, value === null ? 'null' : typeof value, typeof value === 'number' ? text : value);
+  }
+
+  const key = JSON.stringify(parts);
+
+  return key.length > SPELLED_KEY ? undefined : key;
+};
+
+/**
+ * The host formatter `Constructor` builds for a locale and options, kept for
+ * later requests spelled alike while its table holds it. A request the host
+ * refuses raises and is never kept, and the constructor is the one read at
+ * the call, so one installed later is the one asked, and asked every time.
+ */
+export const formatter = <T extends object>(Constructor: new (locale: any, options: any) => T, locale: unknown, options: Record<string, unknown>): T => {
+  const key = spelled(locale, options);
+  const table = key === undefined ? undefined : tableFor(Constructor);
+
+  if (key === undefined || table === undefined) return new Constructor(locale, options);
+
+  const kept = table.get(key);
+
+  if (kept) return kept as T;
+
+  const built = new Constructor(locale, options);
+
+  if (table.size >= FORMATTERS) table.delete(table.keys().next().value!);
+
+  table.set(key, built);
+
+  return built;
+};
+
 /**
  * The number a formatting modifier will format, by the host's own conversion.
  * A value that does not convert is one the modifier cannot format — the

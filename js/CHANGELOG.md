@@ -1,5 +1,23 @@
 # Changelog
 
+### 3.1.1 (Unreleased)
+
+A resolution costs less. Nothing a message resolves to changes, save where
+the host's own `Intl` answers one request differently over time, as it does a
+date shown in a default time zone the host changes while it runs.
+
+* **The `Intl` objects are kept.** `number`, `currency`, `date`, `ago`,
+  `plural` and `ordinal` built a new `Intl` object on every call, and that was
+  nearly all they cost. Each of the host's own `Intl` constructors now keeps
+  the 256 requests it built most recently, and a request spelled like one of
+  them reuses its object, so each of these placeholders costs a fraction of
+  what it did. A polyfill's constructor or one installed after the package
+  loaded, a request holding an object, one the host refused and one past the
+  bounds on its size are built afresh as before. A kept object shows what the
+  host showed when it was built: a date shows in the default time zone the
+  host had then, so a zone changed at runtime does not reach a kept request's
+  times.
+
 ## 3.1.0
 
 Implements revision 3.1.0 of the Curly Message Format: the plural selections

@@ -75,6 +75,22 @@ host's own numeric conversion makes of them: `{{v:number}}` over `{ v: '' }`
 takes the fallback chain rather than formatting a zero, and `{{v:date}}` over
 the same value takes it rather than formatting the epoch.
 
+The `Intl` object each of these modifiers asks is kept once it is built, and a
+later request that spells the same locale and properties the same way reuses it.
+Each `Intl` constructor keeps the 256 requests it built most recently, the
+oldest making room, so `number` and `currency` share one table and `plural` and
+`ordinal` another. A request is built afresh every time where a property holds
+an object, where a part of it is longer than 64 code units or the whole longer
+than 1024, and where the constructor is not the host's own as this package found
+it on loading: a polyfill can load a locale's data after it has built for that
+locale. A wrapper already in place then, printing as native code, is taken for
+the host's own. A kept object shows what the host's `Intl` showed when it was
+built. A date shows in the host's default time zone wherever no layer names a
+`timeZone`, so a host whose zone changes while it runs — `process.env.TZ` set at
+runtime, or a system zone that moves under an open browser tab — goes on showing
+a kept request's times in the old zone. A layer that names a `timeZone` is
+unaffected.
+
 ## Installation
 
 ```bash
