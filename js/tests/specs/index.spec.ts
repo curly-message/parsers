@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createParser, Modifier, Parser, Report } from '../../src';
-import { getDateInput, getModifierInput, LINE_TERM } from '../../src/utils';
+import { getDateInput, getModifierInput, isBlank, isBlankAt, LINE_TERM } from '../../src/utils';
 import { MESSAGES } from '../data';
 
 const defaultLocale = 'en';
@@ -2853,6 +2853,23 @@ describe('parser', () => {
     expect(resolve('{{v; 1:ONE\\  }}', { payload: { v: 1 } })).toBe('ONE ');
     expect(resolve('{{v; default:D\\: }}', { payload: {} })).toBe('D:');
     expect(resolve('{{v\\: ; default:D}}', { payload: { 'v:': 'HIT' } })).toBe('HIT');
+  });
+  it('the whitespace class is the twenty-five code points section 6 enumerates', () => {
+    const members = [
+      0x000a, 0x000d, 0x2028, 0x2029, 0x0009, 0x000b, 0x000c, 0x0020, 0x00a0, 0x1680,
+      0x2000, 0x2001, 0x2002, 0x2003, 0x2004, 0x2005, 0x2006, 0x2007, 0x2008, 0x2009, 0x200a,
+      0x202f, 0x205f, 0x3000, 0xfeff,
+    ];
+    const misread: number[] = [];
+
+    for (let unit = 0; unit <= 0xffff; unit += 1) {
+      const text = String.fromCharCode(unit);
+
+      if (isBlank(text) !== members.includes(unit) || isBlankAt(text, 0) !== members.includes(unit)) misread.push(unit);
+    }
+
+    expect(misread).toEqual([]);
+    expect([isBlank(''), isBlank(' \u3000\t'), isBlank(' \u0085'), isBlank('\u{1F600}')]).toEqual([true, true, false, false]);
   });
   it('only the whitespace class is trimmed around a key', () => {
     const { resolve } = defaultParser;

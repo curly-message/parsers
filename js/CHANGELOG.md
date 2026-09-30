@@ -24,6 +24,11 @@ date shown in a default time zone the host changes while it runs.
   then among the built-ins. The table is still read once for each call, so an
   entry added, replaced or refusing since the last call is what this one reads
   and reports.
+* **Whitespace is tested by code unit.** Trimming a key, a modifier name or an
+  option tested every code unit of the span with a regular expression; a set
+  of the class's code units answers now, in about a third of the time.
+  `createExtractor` and `cst` trim the same way. The class is still the
+  twenty-five code points section 6 enumerates.
 
 ## 3.1.0
 
