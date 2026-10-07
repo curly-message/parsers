@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { decode, fixtures } from '@curly-message/conformance';
 import type { Case, TreeCase } from '@curly-message/conformance';
-import { createExtractor, cst } from '../../src';
-import type { Cst } from '../../src';
+import { createExtractor, cst } from '@curly-message/parser';
+import type { Cst } from '@curly-message/parser';
 import { MESSAGES } from '../data';
 import { LINE_TERM, parsePlaceholder, scanner } from '../../src/utils';
 
