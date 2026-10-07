@@ -56,7 +56,7 @@ Commands, run from `js/`:
 | Command | What it does |
 |---------|--------------|
 | `npm ci` | install from the lockfile |
-| `npm test` | build, typecheck, lint, then the suite — what CI runs |
+| `npm test` | build, typecheck, lint, then the suite against the source and against the build — what CI runs |
 | `npm run lint:fix` | fix what the formatting contract reports |
 | `npm run dev` | rebuild on change |
 
@@ -139,6 +139,10 @@ its `CHANGELOG.md` and the doc comments in `src/types.ts`.
 - Drive behavior through `createParser(options).resolve`, `createExtractor`
   and `cst`; pure helpers may be imported from `src/` when that yields a more
   deterministic test.
+- The suite imports the package by its name, `@curly-message/parser`, and
+  runs twice: against the source, and under `--mode dist` against the build a
+  release ships. An import of the package by a path into `src/` tests the
+  source twice.
 - What a message resolves to is the conformance set's to pin: a case the
   suite adds beyond it is either an implementation detail or a gap in the set
   (§ Architecture of `spec`'s AGENTS.md).

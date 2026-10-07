@@ -1,5 +1,5 @@
 import type { Adapter, ModifierInput } from '@curly-message/conformance';
-import { createParser, cst, Modifier, Parser, Report } from '../../src';
+import { createParser, cst, Modifier, Parser, Report } from '@curly-message/parser';
 
 /**
  * The adapter of SPEC.md section 14.3: what this implementation supplies so

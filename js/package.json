@@ -19,7 +19,7 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "pretest": "npm run build && npm run typecheck && npm run lint",
-    "test": "vitest run",
+    "test": "vitest run && vitest run --mode dist",
     "build": "tsup",
     "prepack": "npm run build",
     "lint": "eslint . --max-warnings=0",
