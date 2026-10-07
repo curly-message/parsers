@@ -1,0 +1,49 @@
+name: Benchmark label
+
+# Adding or removing the `bench-accepted` label re-runs the benchmark of the
+# PR's head, which reads the PR's labels when it runs. `pull_request_target`
+# gives this job a token that can re-run a workflow; it runs nothing of the PR.
+on:
+  pull_request_target:
+    types: [labeled, unlabeled]
+
+permissions:
+  actions: write
+  pull-requests: read
+
+jobs:
+  Rerun:
+    if: github.event.label.name == 'bench-accepted'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      # The head and its runs are read when the job runs rather than off the
+      # event, which names the head the label was changed on.
+      - name: Re-run the benchmark
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          # `bash -e` stops on a failed assignment but not inside `$(...)`, so
+          # a failed call is returned, and every use of `latest` assigns it.
+          latest() {
+            sha=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .head.sha) || return
+            gh api "repos/$GITHUB_REPOSITORY/actions/workflows/bench.yml/runs?head_sha=$sha&event=pull_request" --jq '.workflow_runs[0].id // empty'
+          }
+          id=$(latest)
+          if [ -z "$id" ]; then
+            echo "No benchmark ran on the PR's head: the PR touches nothing it measures."
+            exit 0
+          fi
+          # A run still going may have read the labels before the change.
+          gh run watch "$id" --repo "$GITHUB_REPOSITORY" > /dev/null || true
+          # A run started since, on a new head or on the same one against a
+          # moved base, reads the labels as they are now; re-running this one
+          # would cancel it and compare against the base this one read.
+          now=$(latest)
+          if [ "$now" != "$id" ]; then
+            echo "A newer benchmark run reads the labels itself."
+            exit 0
+          fi
+          gh api --method POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/rerun" > /dev/null
