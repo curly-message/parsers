@@ -7,8 +7,9 @@ const GREETING = 'Hi {{applicationName}}!';
 type Payload = { applicationName: string };
 
 // Resolution has no host to stand up, so these run for real. The negative
-// cases are compile-time only — `tsc --noEmit`, run by pretest, is what
-// makes them assertions.
+// cases are compile-time only — `tsc`, run by pretest against the source and
+// against the shipped declarations (tests/types), is what makes them
+// assertions.
 describe('payload typing', () => {
   it('accepts a named payload key when no payload type is declared', () => {
     const { resolve } = createParser();
