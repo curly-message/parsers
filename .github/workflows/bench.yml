@@ -1,0 +1,109 @@
+name: Benchmark
+
+# The benchmark of a PR against its base, posted on the PR and in the job's
+# summary. It fails where the benchmark does: a row of the branch that fails,
+# or, unless the PR carries the `bench-accepted` label, a count that grew, a
+# row gone missing or changing kind, or a row that fails on the base.
+# `bench-label.yml` re-runs it when that label changes.
+on:
+  pull_request:
+    paths:
+      - js/**
+      - '!js/**/*.md'
+      - '!js/tests/**'
+      - .github/workflows/bench.yml
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# A push supersedes the run of the one before it, so the comment shows the
+# head's table.
+concurrency:
+  group: bench-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  Benchmark:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        package: [js]
+
+    steps:
+      - name: Checkout the branch
+        uses: actions/checkout@v7
+        with:
+          path: change
+          persist-credentials: false
+
+      - name: Checkout the base
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Each side from its own lockfile, running no install script, since the
+      # job holds a token that writes to the PR. A base that does not build
+      # leaves rows that fail, which the label can accept.
+      - name: Install and build
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          (cd "base/$PACKAGE" && npm ci --ignore-scripts && npm run build) || echo "::warning::The base did not install or build."
+          (cd "change/$PACKAGE" && npm ci --ignore-scripts && npm run build)
+
+      # Read when the job runs rather than off the event, so a re-run sees a
+      # label added since.
+      - name: Read the labels
+        id: labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: echo "accepted=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq 'any(.[]; .name == "bench-accepted")')" >> "$GITHUB_OUTPUT"
+
+      - name: Benchmark
+        id: bench
+        working-directory: change/${{ matrix.package }}
+        env:
+          ACCEPTED: ${{ steps.labels.outputs.accepted }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          flags=()
+          if [ "$ACCEPTED" = true ]; then flags+=(--accepted); fi
+          status=0
+          node bench/harness.mjs --compare "../../base/$PACKAGE" "${flags[@]}" > "$RUNNER_TEMP/bench.md" || status=$?
+          cat "$RUNNER_TEMP/bench.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+
+      # One comment per package, the bot's own, edited by each run. A PR from a
+      # fork gets a token that cannot comment; its table is in the job's
+      # summary.
+      - name: Comment on the PR
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          marker="<!-- bench:$PACKAGE -->"
+          body="$marker"$'\n'"$(cat "$RUNNER_TEMP/bench.md")"$'\n\n'"Measured on $HEAD."
+          id=$(gh api --paginate "repos/$GITHUB_REPOSITORY/issues/$PR/comments" --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$marker\"))) | .id" | head -n 1)
+          if [ -n "$id" ]; then
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/issues/comments/$id" -f body="$body" > /dev/null
+          else
+            gh api --method POST "repos/$GITHUB_REPOSITORY/issues/$PR/comments" -f body="$body" > /dev/null
+          fi
+
+      - name: Fail where the benchmark failed
+        if: steps.bench.outputs.status != '0'
+        run: exit 1
