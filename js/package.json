@@ -23,6 +23,7 @@
     "test": "vitest run && vitest run --mode dist",
     "test:bun": "npm run build && bun --bun vitest run && bun --bun vitest run --mode dist",
     "test:deno": "npm run build && deno run -A npm:vitest run && deno run -A npm:vitest run --mode dist",
+    "bench": "npm run build && node bench/harness.mjs",
     "build": "tsup",
     "prepack": "npm run build",
     "lint": "eslint . --max-warnings=0",
