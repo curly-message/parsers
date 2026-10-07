@@ -31,6 +31,16 @@ tests and version line. Release tags are namespaced by directory
 (`js-v1.0.0`), so an implementation can leave for its own repository without
 that being a breaking change for the others.
 
+## Benchmarks
+
+`npm run bench` in an implementation directory measures what its build costs:
+counts, such as what checking a call costs a type checker, sizes, and times.
+A PR that touches the directory is benchmarked against its base by
+`bench.yml`, which posts the table on the PR (a PR from a fork finds it in the
+job's summary). A count that grew, a row gone missing or changing kind, or a
+row that fails on the base fails the check unless the PR carries the
+`bench-accepted` label; adding or removing the label runs it again.
+
 ## Releasing
 
 A release is cut from `main` by the **JavaScript parser publish** workflow
@@ -45,8 +55,9 @@ prerelease rather than the one that opened it, so `1.1.0-next.3` reaches
 `1.1.0-next.0`, then `.1` — under the `next` dist-tag and leaves the section
 open, because a prerelease has not released what the section names. The
 workflow runs the test matrix, bumps the version, cuts the section where the
-release closes it, commits, tags (`js-v1.0.0`), pushes, publishes to npm, and
-publishes a GitHub release carrying that changelog section.
+release closes it, writes the benchmark of the build into `BENCH.md`, commits,
+tags (`js-v1.0.0`), pushes, publishes to npm, and publishes a GitHub release
+carrying that changelog section.
 
 The commit, the tag and the release are made as a GitHub App, whose id and
 private key the repository holds as the `APP_ID` variable and the

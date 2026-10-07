@@ -49,7 +49,7 @@ Tech stack of `js/` — **ground truth, do not assume otherwise**:
 | Lint | ESLint flat config with `@stylistic`, run by a pre-commit hook |
 | Runtime dependencies | none |
 | Supported runtimes | Node 22+, Bun, Deno 2 |
-| CI | `tests-js.yml` (calls `tests.yml`), `publish-js.yml` (calls `publish.yml`) |
+| CI | `tests-js.yml` (calls `tests.yml`), `bench.yml` and `bench-label.yml`, `publish-js.yml` (calls `publish.yml`) |
 
 Commands, run from `js/`:
 
@@ -58,6 +58,8 @@ Commands, run from `js/`:
 | `npm ci` | install from the lockfile |
 | `npm test` | build, typecheck the source and the shipped declarations, lint, then the suite against the source and against the build — what CI runs |
 | `npm run test:bun`, `npm run test:deno` | build, then the suite on Bun or Deno — what the runtime legs of CI run |
+| `npm run bench` | build, then the benchmark (`bench/rows.mjs`) |
+| `npm run bench -- --compare <dir>` | the same, beside the package checked out and built at `<dir>` — what `bench.yml` runs on a PR |
 | `npm run lint:fix` | fix what the formatting contract reports |
 | `npm run dev` | rebuild on change |
 
@@ -73,6 +75,7 @@ Map of `js/`:
 | `src/types.ts` | the public types and their doc comments |
 | `tests/specs/` | the suite (see *Tests*) |
 | `tests/conformance/adapter.ts` | the adapter of the specification's section 14.3 |
+| `bench/rows.mjs` | the rows of the benchmark, each read off the build; `bench/harness.mjs` measures them and is the same file in every repository of the family |
 
 ## Architecture you must respect
 

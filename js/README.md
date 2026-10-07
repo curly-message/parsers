@@ -750,6 +750,8 @@ npm test          # builds, typechecks, lints, then runs vitest on the source an
 npm run test:bun  # builds, then runs the same suite on Bun
 npm run test:deno # builds, then runs the same suite on Deno
 npm run lint:fix  # applies what the lint step only reports
+npm run bench     # builds, then measures what the build costs
+npm run bench -- --compare ../other/js  # the same, beside another checkout's build
 ```
 
 Requires Node.js 22 or newer; the runtime scripts need Bun or Deno 2 as well.

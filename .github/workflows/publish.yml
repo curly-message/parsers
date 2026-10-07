@@ -112,6 +112,14 @@ jobs:
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
           echo "section=$section" >> "$GITHUB_OUTPUT"
 
+      # Each release records what its build costs, measured on the runner that
+      # publishes it; a row that fails stops the release here.
+      - name: Benchmark
+        run: |
+          npm run build
+          node bench/harness.mjs > BENCH.md
+          git add BENCH.md
+
       # The pre-commit hook lints the package; the tests job already did. One
       # atomic push carries the commit and the tag: either both land or neither,
       # and --follow-tags would have left a lightweight tag behind.
