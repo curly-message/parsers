@@ -18,7 +18,8 @@
   "scripts": {
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "pretest": "npm run build && npm run typecheck && npm run lint",
+    "typecheck:dist": "tsc -p tests/types/tsconfig.json",
+    "pretest": "npm run build && npm run typecheck && npm run typecheck:dist && npm run lint",
     "test": "vitest run && vitest run --mode dist",
     "test:bun": "npm run build && bun --bun vitest run && bun --bun vitest run --mode dist",
     "test:deno": "npm run build && deno run -A npm:vitest run && deno run -A npm:vitest run --mode dist",
