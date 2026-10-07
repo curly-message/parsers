@@ -59,12 +59,22 @@ release closes it, writes the benchmark of the build into `BENCH.md`, commits,
 tags (`js-v1.0.0`), pushes, publishes to npm, and publishes a GitHub release
 carrying that changelog section.
 
+After the tests, the release runs in three jobs, so that no code a dependency
+ships runs where the release's credentials are: one settles the version, one
+installs, builds and benchmarks with no credential that can push or publish,
+and the last takes that build as files. Of the three, only the second runs a
+dependency's code, and only the last holds the credentials, in the `release`
+environment.
+
 The commit, the tag and the release are made as a GitHub App, whose client
 ID and private key the repository holds as the `APP_CLIENT_ID` variable and
-the `APP_PRIVATE_KEY` secret. npm holds no token: the workflow is the package's
-[trusted publisher](https://docs.npmjs.com/trusted-publishers), registered
-in the package's settings on npmjs.com or with
-`npm trust github --file publish-js.yml --repository curly-message/parsers --allow-publish`
+the `APP_PRIVATE_KEY` secret; kept in the `release` environment alone, which
+only `main` can deploy to, the key is out of every other job's reach. npm
+holds no token: the workflow is the package's
+[trusted publisher](https://docs.npmjs.com/trusted-publishers), registered,
+with `release` as its environment, in the package's settings on npmjs.com or
+with
+`npm trust github --file publish-js.yml --repository curly-message/parsers --environment release --allow-publish`
 — the calling workflow's filename, which is the one the registry checks — and
 the registry attaches provenance itself. A trusted publisher can be
 registered only for a package that exists, so the first version,
