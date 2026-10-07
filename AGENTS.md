@@ -56,7 +56,7 @@ Commands, run from `js/`:
 | Command | What it does |
 |---------|--------------|
 | `npm ci` | install from the lockfile |
-| `npm test` | build, typecheck, lint, then the suite against the source and against the build — what CI runs |
+| `npm test` | build, typecheck the source and the shipped declarations, lint, then the suite against the source and against the build — what CI runs |
 | `npm run test:bun`, `npm run test:deno` | build, then the suite on Bun or Deno — what the runtime legs of CI run |
 | `npm run lint:fix` | fix what the formatting contract reports |
 | `npm run dev` | rebuild on change |
@@ -134,9 +134,14 @@ its `CHANGELOG.md` and the doc comments in `src/types.ts`.
 
 - `js/tests/specs/`: `index.spec.ts` for resolution, `extract.spec.ts` for
   the parameters a message names, `cst.spec.ts` for the tree a message is
-  described by, `types.spec.ts` for the type surface, and
-  `conformance.spec.ts` for the specification's conformance set, driven
-  through `tests/conformance/adapter.ts` — with fixtures in `tests/data/`.
+  described by, `types.spec.ts` for the type surface, `checker.spec.ts` for
+  what the types cost a consumer's checker, and `conformance.spec.ts` for the
+  specification's conformance set, driven through
+  `tests/conformance/adapter.ts` — with fixtures in `tests/data/`.
+- `js/tests/types/`: `types.spec.ts` compiled a second time, as a consumer
+  compiles it — against the shipped declarations, at `skipLibCheck: false` —
+  with `surface.ts` asserting those declarations are the source's.
+  `npm run typecheck:dist` runs it; `npm test` runs it before the suite.
 - Drive behavior through `createParser(options).resolve`, `createExtractor`
   and `cst`; pure helpers may be imported from `src/` when that yields a more
   deterministic test.

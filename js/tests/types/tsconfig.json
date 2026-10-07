@@ -1,0 +1,18 @@
+{
+  // The type tests compiled as a consumer compiles them: against the
+  // declarations the package ships, reached through its `exports`, with every
+  // declaration file checked.
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "target": "es2022",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "types": [],
+    "paths": {
+      "vitest": ["./vitest.d.ts"]
+    }
+  },
+  "files": ["../specs/types.spec.ts", "./surface.ts"]
+}
