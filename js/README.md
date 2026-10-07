@@ -746,7 +746,7 @@ every case the set ships against it, at every level and over the tree of
 
 ```bash
 npm install
-npm test         # builds, typechecks, lints, then runs vitest
+npm test         # builds, typechecks, lints, then runs vitest on the source and on the build
 npm run lint:fix # applies what the lint step only reports
 ```
 

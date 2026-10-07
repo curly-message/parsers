@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { createExtractor, createParser, cst } from '../../src';
-import type { Cst, Modifier, Parser, Report } from '../../src';
+import { createExtractor, createParser, cst } from '@curly-message/parser';
+import type { Cst, Modifier, Parser, Report } from '@curly-message/parser';
 
 const GREETING = 'Hi {{applicationName}}!';
 

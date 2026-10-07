@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createExtractor, Parser } from '../../src';
+import { createExtractor, Parser } from '@curly-message/parser';
 import { LINE_TERM } from '../../src/utils';
 
 const params = (message: any, options?: Parameters<Parser.ExtractorFactory>[0]) => createExtractor(options)(message);

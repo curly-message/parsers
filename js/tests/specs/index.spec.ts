@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createParser, Modifier, Parser, Report } from '../../src';
+import { createParser, Modifier, Parser, Report } from '@curly-message/parser';
 import { getDateInput, getModifierInput, isBlank, isBlankAt, LINE_TERM } from '../../src/utils';
 import { MESSAGES } from '../data';
 
