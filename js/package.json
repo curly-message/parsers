@@ -45,7 +45,7 @@
   "author": "Jarda Svoboda",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/curly-message/parsers/issues"
+    "url": "https://github.com/curly-message/spec/issues"
   },
   "homepage": "https://curlymessage.dev/",
   "devDependencies": {

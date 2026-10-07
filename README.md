@@ -67,6 +67,9 @@ The format is defined in [`curly-message/spec`](https://github.com/curly-message
 Its machine-readable identifier is `curly-message`; versioned references use
 `curly-message-3`, and so on.
 
+Issues for this repository are filed in the family's shared tracker,
+[`curly-message/spec`](https://github.com/curly-message/spec/issues).
+
 ## License
 
 [MIT](./LICENSE)
