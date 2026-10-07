@@ -746,11 +746,13 @@ every case the set ships against it, at every level and over the tree of
 
 ```bash
 npm install
-npm test         # builds, typechecks, lints, then runs vitest on the source and on the build
-npm run lint:fix # applies what the lint step only reports
+npm test          # builds, typechecks, lints, then runs vitest on the source and on the build
+npm run test:bun  # builds, then runs the same suite on Bun
+npm run test:deno # builds, then runs the same suite on Deno
+npm run lint:fix  # applies what the lint step only reports
 ```
 
-Requires Node.js 22 or newer.
+Requires Node.js 22 or newer; the runtime scripts need Bun or Deno 2 as well.
 
 ## License
 
