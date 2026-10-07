@@ -46,3 +46,40 @@ jobs:
 
       - name: Test
         run: npm run test
+
+  # The source touches no API one runtime has and another lacks; the suite on
+  # each runtime is what keeps that true. npm installs and builds, and the
+  # runtime under test runs vitest.
+  Runtimes:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runtime: [bun, deno]
+    defaults:
+      run:
+        working-directory: ${{ inputs.package }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Setup Bun
+        if: matrix.runtime == 'bun'
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup Deno
+        if: matrix.runtime == 'deno'
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test
+        run: npm run test:${{ matrix.runtime }}
