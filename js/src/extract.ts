@@ -90,40 +90,43 @@ export const createExtractor: Parser.ExtractorFactory = (options) => {
     // An option value is the message's own text, so a placeholder written in
     // one names a parameter like any other (SPEC.md section 12). The outer
     // placeholder is written first and is drafted first, which is the order
-    // the parameters come back in.
-    const walk = (from: number, to: number) => {
-      let at = from;
+    // the parameters come back in. The spans still to read wait on a stack
+    // rather than in a call per level: nesting is not otherwise limited
+    // (section 6, note 10), and a message nested deep enough must not take the
+    // host's call stack down with it.
+    const spans: [number, number][] = [[0, message.length]];
 
-      for (let match = scan.next(at, to); match; match = scan.next(at, to)) {
-        const [open, close] = match;
+    for (let span = spans.pop(); span; span = spans.pop()) {
+      const [from, to] = span;
+      const match = scan.next(from, to);
 
-        at = close;
+      if (!match) continue;
 
-        const { key, modifier, options, inlineDefault } = parsePlaceholder(message, open, close, scan.end);
+      const [open, close] = match;
+      const { key, modifier, options, inlineDefault } = parsePlaceholder(message, open, close, scan.end);
 
-        // A placeholder naming no key reads no payload entry, so it names no
-        // parameter itself — what it writes in its options it still names.
-        if (key !== undefined) {
-          const draft = drafts.get(key) ?? EMPTY;
+      // A placeholder naming no key reads no payload entry, so it names no
+      // parameter itself — what it writes in its options it still names.
+      if (key !== undefined) {
+        const draft = drafts.get(key) ?? EMPTY;
 
-          drafts.set(key, {
-            kinds: [...new Set([...draft.kinds, ...narrowed(modifier)])],
-            values: [...new Set([...draft.values, ...named(modifier, options)])],
-            optional: draft.optional || inlineDefault !== undefined,
-          });
-        }
-
-        // The spans the placeholder holds message text in, read in the order
-        // the message writes them: an option and the inline default are one
-        // sequence of segments, and a parameter a nested placeholder names
-        // comes back where the message names it.
-        const held = [...options.map(({ value }) => value), ...(inlineDefault ? [inlineDefault] : [])].sort(([a], [b]) => a - b);
-
-        for (const [start, stop] of held) walk(start, stop);
+        drafts.set(key, {
+          kinds: [...new Set([...draft.kinds, ...narrowed(modifier)])],
+          values: [...new Set([...draft.values, ...named(modifier, options)])],
+          optional: draft.optional || inlineDefault !== undefined,
+        });
       }
-    };
 
-    walk(0, message.length);
+      // The spans the placeholder holds message text in, read in the order
+      // the message writes them and before the rest of the span: an option
+      // and the inline default are one sequence of segments, and a parameter a
+      // nested placeholder names comes back where the message names it.
+      const held = [...options.map(({ value }) => value), ...(inlineDefault ? [inlineDefault] : [])].sort(([a], [b]) => a - b);
+
+      spans.push([close, to]);
+
+      for (let index = held.length - 1; index >= 0; index -= 1) spans.push(held[index]);
+    }
 
     return [...drafts].map(([name, draft]) => ({
       name,

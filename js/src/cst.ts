@@ -30,14 +30,20 @@ const spelled = (message: string, from: number, to: number): (Cst.Text | Cst.Esc
   return nodes;
 };
 
+// The option values described but not yet filled, each with the span it is
+// filled from. Nesting is not otherwise limited (section 6, note 10), so a
+// value is filled off this stack rather than by a call per level: a message
+// nested deep enough must not take the host's call stack down with it.
+type Pending = [(Cst.Text | Cst.Escape | Cst.Placeholder)[], number, number][];
+
 /**
  * What a span of the message itself holds: its text, its escape sequences and
  * the placeholders it writes. The message is one such span and so is each
  * option value, which is why a placeholder is described inside one and inside
- * nothing else (section 6, note 10).
+ * nothing else (section 6, note 10). A value a placeholder here holds is left
+ * on `pending` to be filled in turn.
  */
-const contents = (message: string, scan: Scanner, from: number, to: number): (Cst.Text | Cst.Escape | Cst.Placeholder)[] => {
-  const nodes: (Cst.Text | Cst.Escape | Cst.Placeholder)[] = [];
+const contents = (message: string, scan: Scanner, nodes: (Cst.Text | Cst.Escape | Cst.Placeholder)[], from: number, to: number, pending: Pending) => {
   // A span holds as many parts as it holds characters, which is more than a
   // call can be spread over: they are appended one at a time.
   const append = (added: readonly (Cst.Text | Cst.Escape)[]) => { for (const node of added) nodes.push(node); };
@@ -47,13 +53,11 @@ const contents = (message: string, scan: Scanner, from: number, to: number): (Cs
     const [open, close] = match;
 
     append(spelled(message, at, open));
-    nodes.push(placeholder(message, scan, open, close));
+    nodes.push(placeholder(message, scan, open, close, pending));
     at = close;
   }
 
   append(spelled(message, at, to));
-
-  return nodes;
 };
 
 // A name and the padding it is read without. The padding is nodes of its own
@@ -71,17 +75,20 @@ const named = (message: string, type: Cst.Name['type'], from: number, to: number
 
 // An option value and the padding it is read without. It answers to nobody, so
 // it carries the subtree the message spells and no name to compare.
-const valued = (message: string, scan: Scanner, from: number, to: number): (Cst.Space | Cst.OptionValue)[] => {
+const valued = (message: string, from: number, to: number, pending: Pending): (Cst.Space | Cst.OptionValue)[] => {
   const [start, end] = trimmed(message, from, to);
+  const nodes: Cst.OptionValue['nodes'] = [];
+
+  pending.push([nodes, start, end]);
 
   return [
     ...(start > from ? [{ type: 'space' as const, start: from, end: start }] : []),
-    { type: 'option-value' as const, start, end, nodes: contents(message, scan, start, end) },
+    { type: 'option-value' as const, start, end, nodes },
     ...(to > end ? [{ type: 'space' as const, start: end, end: to }] : []),
   ];
 };
 
-const placeholder = (message: string, scan: Scanner, open: number, close: number): Cst.Placeholder => {
+const placeholder = (message: string, scan: Scanner, open: number, close: number, pending: Pending): Cst.Placeholder => {
   const nodes: Cst.Placeholder['nodes'] = [{ type: 'open', start: open, end: open + 2 }];
   // A `;` a nested placeholder encloses divides that placeholder and not this
   // one (section 6, note 5), so the segments are cut around what each option
@@ -112,7 +119,7 @@ const placeholder = (message: string, scan: Scanner, open: number, close: number
     // there is no value to describe: the key is where the message writes it.
     if (value.length) {
       nodes.push({ type: 'separator', start: optionKey[1], end: optionKey[1] + 1 });
-      nodes.push(...valued(message, scan, optionKey[1] + 1, to));
+      nodes.push(...valued(message, optionKey[1] + 1, to, pending));
     }
   }
 
@@ -133,5 +140,11 @@ const placeholder = (message: string, scan: Scanner, open: number, close: number
 export const cst: Cst.Parse = (message) => {
   if (typeof message !== 'string') return { type: 'message', start: 0, end: 0, nodes: [] };
 
-  return { type: 'message', start: 0, end: message.length, nodes: contents(message, scanner(message), 0, message.length) };
+  const scan = scanner(message);
+  const nodes: Cst.Message['nodes'] = [];
+  const pending: Pending = [[nodes, 0, message.length]];
+
+  for (let work = pending.pop(); work; work = pending.pop()) contents(message, scan, work[0], work[1], work[2], pending);
+
+  return { type: 'message', start: 0, end: message.length, nodes };
 };

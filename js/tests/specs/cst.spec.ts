@@ -135,6 +135,31 @@ describe('the tree a message is described by', () => {
     expect(reads(400)).toBeLessThan(shallow * 5);
   });
 
+  it('describes a message nested deeper than a host lets a call recurse', () => {
+    const depth = 100000;
+    const message = `${'{{v; a:'.repeat(depth)}x${';}}'.repeat(depth)}`;
+    const shape = 'open key separator space option-key separator option-value separator option-key close';
+    // Walked a level at a time: a matcher handed the tree would recurse into
+    // it as deep as it goes.
+    let held: Cst.Node[] = cst(message).nodes;
+    let wrong: unknown[] = [];
+
+    for (let level = 0; level < depth && !wrong.length; level += 1) {
+      const [node] = held;
+
+      if (held.length !== 1 || node.type !== 'placeholder') {
+        wrong = [level, held.length, node?.type];
+      } else if (node.start !== 7 * level || node.end !== message.length - 3 * level || node.nodes.map(({ type }) => type).join(' ') !== shape) {
+        wrong = [level, node.start, node.end, node.nodes.map(({ type }) => type).join(' ')];
+      } else {
+        held = (node.nodes[6] as Cst.OptionValue).nodes;
+      }
+    }
+
+    expect(wrong).toEqual([]);
+    expect(held).toEqual([{ type: 'text', start: 7 * depth, end: 7 * depth + 1 }]);
+  });
+
   it('describes a message that is not text as one with nothing in it', () => {
     for (const message of [undefined, null, 42, {}, ['{{v}}']]) expect(cst(message)).toEqual({ type: 'message', start: 0, end: 0, nodes: [] });
   });

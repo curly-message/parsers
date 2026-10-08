@@ -11,6 +11,15 @@
   nothing between, so each level costs the same however deep it sits.
   `resolve` stopped descending at the nesting limit and stayed linear, but it
   too read the whole of each span it trimmed; it now reads only the ends.
+* **`cst` and `createExtractor` describe a message however deep it nests.**
+  Each called itself once per nesting level, so on Node 22 a message nested
+  about 1 300 levels deep could throw `RangeError: Maximum call stack size
+  exceeded` from `cst`, and one about 2 800 levels deep from the extractor —
+  fewer inside a caller already deep in its own stack, such as an ESLint
+  rule — where `resolve` renders the same message. Both now keep the spans
+  still to read on a stack of their own, as the scanner always did, and read
+  a message nested 100 000 levels deep. The tree and the parameters are the
+  ones they were.
 
 ## 3.1.1
 
