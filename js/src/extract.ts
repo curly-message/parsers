@@ -35,12 +35,13 @@ const NARROWED: Record<Modifier.DefaultKeys, readonly Parser.ParamKind[]> = {
 };
 
 // What the message has said about a key so far. A key several placeholders
-// name says what all of them say together.
-type Draft = { kinds: readonly Parser.ParamKind[], values: readonly string[], optional: boolean };
+// name says what all of them say together, each in the order it was first
+// said: a placeholder adds what it says to the draft rather than copying
+// everything said before it, which would cost the square of how often the
+// message names the key.
+type Draft = { kinds: Set<Parser.ParamKind>, values: Set<string>, optional: boolean };
 
-const EMPTY: Draft = { kinds: [], values: [], optional: false };
-
-const kind = ({ kinds }: Draft): Parser.ParamKind | readonly Parser.ParamKind[] => {
+const kind = (kinds: readonly Parser.ParamKind[]): Parser.ParamKind | readonly Parser.ParamKind[] => {
   if (!kinds.length) return 'unknown';
 
   return kinds.length === 1 ? kinds[0] : kinds;
@@ -108,13 +109,14 @@ export const createExtractor: Parser.ExtractorFactory = (options) => {
       // A placeholder naming no key reads no payload entry, so it names no
       // parameter itself — what it writes in its options it still names.
       if (key !== undefined) {
-        const draft = drafts.get(key) ?? EMPTY;
+        const draft = drafts.get(key) ?? { kinds: new Set(), values: new Set(), optional: false };
 
-        drafts.set(key, {
-          kinds: [...new Set([...draft.kinds, ...narrowed(modifier)])],
-          values: [...new Set([...draft.values, ...named(modifier, options)])],
-          optional: draft.optional || inlineDefault !== undefined,
-        });
+        for (const each of narrowed(modifier)) draft.kinds.add(each);
+
+        for (const each of named(modifier, options)) draft.values.add(each);
+
+        draft.optional ||= inlineDefault !== undefined;
+        drafts.set(key, draft);
       }
 
       // The spans the placeholder holds message text in, read in the order
@@ -130,8 +132,8 @@ export const createExtractor: Parser.ExtractorFactory = (options) => {
 
     return [...drafts].map(([name, draft]) => ({
       name,
-      kind: kind(draft),
-      ...(draft.values.length ? { values: draft.values } : {}),
+      kind: kind([...draft.kinds]),
+      ...(draft.values.size ? { values: [...draft.values] } : {}),
       optional: draft.optional,
     }));
   };

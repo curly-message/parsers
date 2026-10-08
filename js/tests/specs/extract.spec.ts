@@ -153,6 +153,18 @@ describe('the values a message names', () => {
   it('lists what every placeholder naming the key lists together', () => {
     expect(params('{{a; yes:Y}} {{a:eq; no:N; yes:Y}}')[0]?.values).toEqual(['yes', 'no']);
   });
+
+  it('lists them in time linear in how many placeholders name the key', () => {
+    const message = (count: number) => Array.from({ length: count }, (_, index) => `{{v; k${index}}}`).join('');
+    const added = (count: number) => calls([[Set.prototype, 'add']], () => params(message(count)));
+    const few = added(200);
+
+    // Each placeholder adds what it lists, which one carrying over every
+    // value listed before it multiplies sixteenfold when the count
+    // quadruples.
+    expect(few).toBeGreaterThanOrEqual(200);
+    expect(added(800)).toBeLessThan(few * 5);
+  });
 });
 
 describe('whether the message states a fallback', () => {
