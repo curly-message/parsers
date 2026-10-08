@@ -1,6 +1,6 @@
 # Changelog
 
-### 3.1.2 (Unreleased)
+## 3.1.2
 
 * **A nested message is read in time linear in its depth.** Dropping the
   padding around a span read the whole span to find where the padding at its
