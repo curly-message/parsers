@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createExtractor, Parser } from '@curly-message/parser';
 import { LINE_TERM } from '../../src/utils';
+import { calls, READS } from '../calls';
 
 const params = (message: any, options?: Parameters<Parser.ExtractorFactory>[0]) => createExtractor(options)(message);
 
@@ -57,6 +58,16 @@ describe('the parameters a message names', () => {
     // message names a key through, in the order the message writes them.
     expect(names('{{n:eq; 1:you have {{x}}}}')).toEqual(['n', 'x']);
     expect(names('{{n:eq; 1:{{a}}; default:{{b}};}} {{c}}')).toEqual(['n', 'a', 'b', 'c']);
+  });
+  it('reads a message in time linear in how deep it nests', () => {
+    const nested = (depth: number) => `${'{{v; a:'.repeat(depth)}x${'}}'.repeat(depth)}`;
+    const reads = (depth: number) => calls(READS, () => params(nested(depth)));
+    const shallow = reads(100);
+
+    // Each level reads its own padding, which a level reading every level
+    // below it multiplies sixteenfold when the depth quadruples.
+    expect(shallow).toBeGreaterThanOrEqual(100);
+    expect(reads(400)).toBeLessThan(shallow * 5);
   });
 });
 

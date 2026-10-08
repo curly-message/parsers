@@ -4,7 +4,8 @@ import type { Case, TreeCase } from '@curly-message/conformance';
 import { createExtractor, cst } from '@curly-message/parser';
 import type { Cst } from '@curly-message/parser';
 import { MESSAGES } from '../data';
-import { LINE_TERM, parsePlaceholder, scanner } from '../../src/utils';
+import { escapeEnd, isBlankAt, LINE_TERM, parsePlaceholder, scanner, trimmed } from '../../src/utils';
+import { calls, READS } from '../calls';
 
 const leaves = (node: Cst.Node): Cst.Node[] => ('nodes' in node && node.nodes.length ? node.nodes.flatMap(leaves) : [node]);
 
@@ -121,6 +122,17 @@ describe('the tree a message is described by', () => {
     const message = '\\a'.repeat(150000);
 
     expect(cst(message).nodes).toHaveLength(150000);
+  });
+
+  it('describes a message in time linear in how deep it nests', () => {
+    const nested = (depth: number) => `${'{{v; a:'.repeat(depth)}x${'}}'.repeat(depth)}`;
+    const reads = (depth: number) => calls(READS, () => cst(nested(depth)));
+    const shallow = reads(100);
+
+    // Each level reads its own padding, which a level reading every level
+    // below it multiplies sixteenfold when the depth quadruples.
+    expect(shallow).toBeGreaterThanOrEqual(100);
+    expect(reads(400)).toBeLessThan(shallow * 5);
   });
 
   it('describes a message that is not text as one with nothing in it', () => {
@@ -284,6 +296,51 @@ describe('the tree a message is described by', () => {
 
     for (const message of CORPUS) {
       expect([message, [...new Set(keys(cst(message)))]]).toEqual([message, extract(message).map(({ name }) => name)]);
+    }
+  });
+});
+
+describe('the padding a span is read without', () => {
+  // The span walked forward from its start, each escape sequence stepped over
+  // as it comes: what padding is, read at a cost that grows with the whole
+  // span rather than with its padding.
+  const walked = (value: string, from: number, to: number): [number, number] => {
+    let start = -1;
+    let end = from;
+
+    for (let index = from; index < to; index += 1) {
+      const escaped = value[index] === '\\' && index + 1 < to;
+
+      if (!escaped && isBlankAt(value, index)) continue;
+
+      if (start < 0) start = index;
+
+      index = escaped ? escapeEnd(value, index, to) - 1 : index;
+      end = index + 1;
+    }
+
+    return start < 0 ? [from, from] : [start, end];
+  };
+
+  it('drops the padding a forward walk drops, over every short span', () => {
+    // Blanks of either width, a backslash, text, and both halves of a pair
+    // apart, so a sequence claims a blank, a whole pair and half of one.
+    const units = [' ', '\u3000', '\\', 'x', '\ud83d', '\ude00'];
+    let values = [''];
+
+    for (let length = 1; length <= 6; length += 1) {
+      values = values.flatMap((value) => units.map((unit) => value + unit));
+
+      for (const value of values) {
+        for (let from = 0; from <= length; from += 1) {
+          for (let to = from; to <= length; to += 1) {
+            const [start, end] = trimmed(value, from, to);
+            const [expectedStart, expectedEnd] = walked(value, from, to);
+
+            if (start !== expectedStart || end !== expectedEnd) expect([value, from, to, start, end]).toEqual([value, from, to, expectedStart, expectedEnd]);
+          }
+        }
+      }
     }
   });
 });

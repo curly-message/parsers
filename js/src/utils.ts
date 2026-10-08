@@ -247,23 +247,34 @@ export const unesc = (value: any) => typeof value === 'string' ? value.replace(/
  * The span between `from` and `to` with its blank padding dropped, empty at
  * `from` where the span is padding throughout. Whitespace an escape sequence
  * claims is text, not padding around it.
+ *
+ * Only the padding is read, from either end: an option value is a span that
+ * holds every placeholder nested in it, so reading the whole span at each
+ * level would read a message nested n levels deep n times over.
  */
 export const trimmed = (value: string, from: number, to: number): [number, number] => {
-  let start = -1;
-  let end = from;
+  let start = from;
 
-  for (let index = from; index < to; index += 1) {
-    const escaped = value[index] === '\\' && index + 1 < to;
+  while (start < to && isBlankAt(value, start)) start += 1;
 
-    if (!escaped && isBlankAt(value, index)) continue;
+  if (start === to) return [from, from];
 
-    if (start < 0) start = index;
+  let end = to;
 
-    index = escaped ? escapeEnd(value, index, to) - 1 : index;
-    end = index + 1;
+  // A blank is text where a backslash consumes it, which is where an odd run
+  // of them inside the span precedes it. Every blank is one code unit, so it
+  // is never the second half of a pair a sequence claims.
+  while (end > start && isBlankAt(value, end - 1)) {
+    let run = 0;
+
+    while (end - 2 - run >= from && value[end - 2 - run] === '\\') run += 1;
+
+    if (run % 2) break;
+
+    end -= 1;
   }
 
-  return start < 0 ? [from, from] : [start, end];
+  return [start, end];
 };
 
 /**
