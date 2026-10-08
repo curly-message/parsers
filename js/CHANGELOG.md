@@ -20,6 +20,12 @@
   still to read on a stack of their own, as the scanner always did, and read
   a message nested 100 000 levels deep. The tree and the parameters are the
   ones they were.
+* **`createExtractor` lists a parameter's values in time linear in how often
+  the message names it.** Each placeholder naming a key copied every kind
+  and value listed for the key before it, so a message naming one key with
+  a new option 8 000 times took about two seconds, and each doubling of that
+  count four times as long. A placeholder now adds only what it says. The
+  parameters and the order of their values are the ones they were.
 
 ## 3.1.1
 
