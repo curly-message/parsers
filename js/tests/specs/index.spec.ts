@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createParser, Modifier, Parser, Report } from '@curly-message/parser';
 import { getDateInput, getModifierInput, isBlank, isBlankAt, LINE_TERM } from '../../src/utils';
+import { calls, READS as UNIT_READS } from '../calls';
 import { MESSAGES } from '../data';
 
 const defaultLocale = 'en';
@@ -3681,109 +3682,62 @@ describe('parser', () => {
 
     expect(warnings).toHaveLength(0);
   });
-  const timePerOp = (run: () => void) => {
-    run();
+  // What reading a message of a size costs, counted in the code units read,
+  // at the size and four times over: at least one read per eight units, so the
+  // count sees the work, and at most a quadrupled count, give or take, where a
+  // read that went back over what it had read would grow sixteenfold. What no
+  // count sees — a pattern backtracking inside one call, a read by index, a
+  // copy — the benchmark times instead.
+  const readLinearly = (spelled: (size: number) => string, size: number) => {
+    const reads = (at: number) => calls(UNIT_READS, () => defaultParser.resolve(spelled(at), { payload: { a: 'A' } }));
+    const few = reads(size);
 
-    return Math.min(...Array.from({ length: 3 }, () => {
-      const start = performance.now();
-      let iterations = 0;
-      let elapsed = 0;
-
-      do {
-        run();
-        iterations += 1;
-        elapsed = performance.now() - start;
-      } while (elapsed < 25);
-
-      return elapsed / iterations;
-    }));
+    expect(few).toBeGreaterThanOrEqual(size / 8);
+    expect(reads(size * 4)).toBeLessThan(few * 5);
   };
 
-  // Quadrupling the input puts the square root of the per-op ratio near 2 when
-  // cost is linear, 4 when quadratic and 8 when cubic; asserting < 3 passes a
-  // linear scan with headroom and fails any polynomial backtracking.
-  const growthWhenInputQuadruples = (runAt: (size: number) => () => void, size: number) => Math.sqrt(timePerOp(runAt(size * 4)) / timePerOp(runAt(size)));
-  it('interpolating a padded placeholder costs linear time', () => {
-    const resolve = resolverFor<{ value?: any }>(defaultLocale);
+  // An object whose every trap is counted, standing in for a payload entry.
+  const trapped = <T extends object>(target: T) => {
+    const counted = { traps: 0 };
+    const handler = Object.fromEntries((['get', 'has', 'getOwnPropertyDescriptor', 'ownKeys', 'getPrototypeOf'] as const).map((trap) => [trap, (...args: unknown[]) => {
+      counted.traps += 1;
 
-    const runAt = (size: number) => {
-      const payload = { value: `{{${' '.repeat(size)}}}` };
+      return (Reflect[trap] as (...args: unknown[]) => unknown)(...args);
+    }]));
 
-      return () => { resolve('common.placeholder', payload); };
+    return { proxy: new Proxy(target, handler), counted };
+  };
+  it('reading a padded placeholder costs linear time', () => {
+    readLinearly((size) => `{{${' '.repeat(size)}}}`, 1000);
+  });
+  it('reading a placeholder key padded with inner whitespace costs linear time', () => {
+    readLinearly((size) => `{{a${' '.repeat(size)}b}}`, 1000);
+  });
+  it('scanning placeholders that never close costs linear time', () => {
+    // Each nests in the value of the one before it, so each opening pair is
+    // asked about again by every scan that reaches it after the first.
+    readLinearly((size) => '{{a; c:'.repeat(size / 7), 1000);
+  });
+  it('merging a large wrapper `props` reads each entry a bounded number of times', () => {
+    // A copy per entry costs nothing a trap sees, so only the reads are
+    // counted here, and the benchmark times the merge.
+    const { resolve } = createParser<{ v: any }, { test?: object }>({ customModifiers: { test: ({ value }) => value } });
+    const traps = (size: number) => {
+      const { proxy, counted } = trapped(Object.fromEntries(Array.from({ length: size }, (_, index) => [`p${index}`, {}])));
+
+      expect(resolve('{{v:test}}', { payload: { v: { value: 'A', props: { test: proxy } } }, props: { test: { q: 1 } } })).toBe('A');
+
+      return counted.traps;
     };
+    const few = traps(1000);
 
-    expect(growthWhenInputQuadruples(runAt, 240)).toBeLessThan(3);
-  }, 30000);
-  it('interpolating a placeholder key padded with inner whitespace costs linear time', () => {
-    const resolve = resolverFor<{ value?: any }>(defaultLocale);
+    expect(few).toBeGreaterThanOrEqual(1000);
+    expect(traps(4000)).toBeLessThan(few * 5);
+  });
+  it('a default nobody reads is never read', () => {
+    const { proxy, counted } = trapped(Object.fromEntries(Array.from({ length: 100 }, (_, index) => [`k${index}`, index])));
 
-    const runAt = (size: number) => {
-      const payload = { value: `{{a${' '.repeat(size)}b}}` };
-
-      return () => { resolve('common.placeholder', payload); };
-    };
-
-    expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);
-  }, 30000);
-  it('scanning an unclosed trailing placeholder costs linear time', () => {
-    const resolve = resolverFor<{ value?: any, a?: string }>(defaultLocale);
-
-    const runAt = (size: number) => {
-      const payload = { value: `{{a}}{{${' '.repeat(size)}`, a: 'A' };
-
-      return () => { resolve('common.placeholder', payload); };
-    };
-
-    expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);
-  }, 60000);
-  it('collecting a long modifier options list costs linear time', () => {
-    const resolve = resolverFor<{ value?: any, a?: string }>(defaultLocale);
-
-    const runAt = (size: number) => {
-      const payload = { value: `{{${'a;'.repeat(size / 2)}}}`, a: 'A' };
-
-      return () => { resolve('common.placeholder', payload); };
-    };
-
-    expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);
-  }, 30000);
-  it('splitting a long modifier option costs linear time', () => {
-    const resolve = resolverFor<{ value?: any, a?: string }>(defaultLocale);
-
-    const runAt = (size: number) => {
-      const payload = { value: `{{a; ${'x'.repeat(size)}:v}}`, a: 'A' };
-
-      return () => { resolve('common.placeholder', payload); };
-    };
-
-    expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);
-  }, 30000);
-  it('merging a large wrapper `props` costs linear time', () => {
-    const { resolve } = defaultParser;
-
-    const runAt = (size: number) => {
-      const props = Object.fromEntries(Array.from({ length: size }, (_, index) => [`p${index}`, {}]));
-      const payload = { v: { value: 'A', props } };
-
-      return () => { resolve('{{v:test}}', { payload, props: {} }); };
-    };
-
-    expect(growthWhenInputQuadruples(runAt, 500)).toBeLessThan(3);
-  }, 30000);
-  it('a default nobody reads is never serialized', () => {
-    const { resolve } = defaultParser;
-
-    const runWith = (payloadDefault: unknown) => {
-      const payload = { v: 'A', default: payloadDefault };
-      const placeholders = '{{v}}'.repeat(200);
-
-      return () => { resolve(placeholders, { payload }); };
-    };
-
-    const large = Object.fromEntries(Array.from({ length: 20000 }, (_, index) => [`k${index}`, index]));
-
-    // Serializing that default once per placeholder puts the ratio in the
-    // hundreds; the budget is loose enough to absorb a slow CI leg.
-    expect(timePerOp(runWith(large)) / timePerOp(runWith('S'))).toBeLessThan(5);
-  }, 30000);
+    expect(defaultParser.resolve('{{v}}'.repeat(200), { payload: { v: 'A', default: proxy } })).toBe('A'.repeat(200));
+    expect(counted.traps).toBe(0);
+  });
 });
