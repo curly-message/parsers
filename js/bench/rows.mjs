@@ -17,6 +17,7 @@ const probe = fileURLToPath(new URL('../probe.ts', import.meta.url)).replaceAll(
 const bundle = () => readFileSync(new URL('../dist/index.js', import.meta.url));
 
 const { resolve } = createParser();
+const { resolve: resolveWrapped } = createParser({ customModifiers: { test: ({ value }) => value } });
 const extract = createExtractor();
 
 // Messages as a catalogue holds them: interpolation, a selection, a plural,
@@ -106,6 +107,36 @@ export default [
     const message = nested(10000);
 
     return () => resolve(message, { payload: { v: 'a' }, locale: 'en' });
+  } },
+  { name: 'resolve: a placeholder of 10 000 blanks', kind: 'time', run: () => {
+    const message = `{{${' '.repeat(10000)}}}`;
+
+    return () => resolve(message, { payload: {}, locale: 'en' });
+  } },
+  { name: 'resolve: a key with 10 000 blanks inside', kind: 'time', run: () => {
+    const message = `{{a${' '.repeat(10000)}b}}`;
+
+    return () => resolve(message, { payload: {}, locale: 'en' });
+  } },
+  { name: 'resolve: 1 000 placeholders that never close', kind: 'time', run: () => {
+    const message = '{{a; c:'.repeat(1000);
+
+    return () => resolve(message, { payload: {}, locale: 'en' });
+  } },
+  { name: 'resolve: 5 000 options', kind: 'time', run: () => {
+    const message = `{{a${'; a'.repeat(5000)}}}`;
+
+    return () => resolve(message, { payload: { a: 'a' }, locale: 'en' });
+  } },
+  { name: 'resolve: an option key of 50 000 characters', kind: 'time', run: () => {
+    const message = `{{a; ${'x'.repeat(50000)}:v}}`;
+
+    return () => resolve(message, { payload: { a: 'a' }, locale: 'en' });
+  } },
+  { name: 'resolve: wrapper props of 5 000 entries', kind: 'time', run: () => {
+    const payload = { v: { value: 'a', props: { test: Object.fromEntries(Array.from({ length: 5000 }, (_, index) => [`p${index}`, index])) } } };
+
+    return () => resolveWrapped('{{v:test}}', { payload, props: { test: { q: 1 } }, locale: 'en' });
   } },
   { name: 'cst: five catalogue messages', kind: 'time', run: () => () => {
     for (const message of MESSAGES) cst(message);
