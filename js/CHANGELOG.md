@@ -1,5 +1,17 @@
 # Changelog
 
+### 3.1.2 (Unreleased)
+
+* **A nested message is read in time linear in its depth.** Dropping the
+  padding around a span read the whole span to find where the padding at its
+  end began, and an option value is a span holding every placeholder nested
+  in it, so `cst` and `createExtractor` read a message nested n levels deep
+  n times over: 1 000 levels took tens of milliseconds, and each doubling of
+  the depth four times as long. The padding is now read from either end and
+  nothing between, so each level costs the same however deep it sits.
+  `resolve` stopped descending at the nesting limit and stayed linear, but it
+  too read the whole of each span it trimmed; it now reads only the ends.
+
 ## 3.1.1
 
 A resolution costs less. Nothing a message resolves to changes, save where
