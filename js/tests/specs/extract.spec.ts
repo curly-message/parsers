@@ -58,6 +58,7 @@ describe('the parameters a message names', () => {
     // message names a key through, in the order the message writes them.
     expect(names('{{n:eq; 1:you have {{x}}}}')).toEqual(['n', 'x']);
     expect(names('{{n:eq; 1:{{a}}; default:{{b}};}} {{c}}')).toEqual(['n', 'a', 'b', 'c']);
+    expect(names('{{n; default:{{b}}; 1:{{a}}}}')).toEqual(['n', 'b', 'a']);
   });
   it('reads a message in time linear in how deep it nests', () => {
     const nested = (depth: number) => `${'{{v; a:'.repeat(depth)}x${'}}'.repeat(depth)}`;
@@ -68,6 +69,14 @@ describe('the parameters a message names', () => {
     // below it multiplies sixteenfold when the depth quadruples.
     expect(shallow).toBeGreaterThanOrEqual(100);
     expect(reads(400)).toBeLessThan(shallow * 5);
+  });
+  it('reads a message nested deeper than a host lets a call recurse', () => {
+    const depth = 100000;
+    const keys = Array.from({ length: depth }, (_, level) => `k${level}`);
+    const named = names(`${keys.map((key) => `{{${key}; a:`).join('')}x${';}}'.repeat(depth)}`);
+
+    expect(named).toHaveLength(depth);
+    expect(named.findIndex((name, level) => name !== keys[level])).toBe(-1);
   });
 });
 
