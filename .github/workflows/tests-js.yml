@@ -1,13 +1,19 @@
 name: JavaScript parser tests
 
 on:
+  # A pull request from a fork pushes nothing here, so the tests run on the
+  # pull request, whatever its base, which tests a stacked one too. A rebase
+  # merge and a release commit land commits no pull request ran, so main is
+  # tested again on a push. A tag is left out: it names a tree the publish
+  # workflow has just tested. A branch with no pull request runs by hand.
   push:
-    # Branches only: a release tag names a tree the publish workflow has just tested.
-    branches: ['**']
-    paths:
+    branches: [main]
+    paths: &paths
       - js/**
       - .github/workflows/tests-js.yml
       - .github/workflows/tests.yml
+  pull_request:
+    paths: *paths
   workflow_dispatch:
 
 jobs:
