@@ -14,7 +14,12 @@
 // size that grew and a time beyond its spread are flagged for review.
 //
 // A time is per run of what the row measures, sampled base and change by turn
-// in this one process, so both sides see the same machine. The spread leaves
+// in this one process, so both sides see the same machine. What a time row
+// times may return a promise, which is awaited as part of the run; whether it
+// does is read from its first call, so a synchronous one is timed by a loop
+// that awaits nothing. A row that holds something open while it is measured,
+// a browser say, gives it back in its `close`, which is called once the row
+// is measured or has failed. The spread leaves
 // out the lowest and the highest quarter of the samples, rounded down, so a
 // busy neighbour neither hides nor flags a change.
 //
@@ -60,6 +65,7 @@ const load = async (dir) => {
       if (typeof row?.name !== 'string' || !row.name) throw new Error('a row has no name');
       if (!KINDS.includes(row.kind)) throw new Error(`the row \`${row.name}\` is of kind ${String(row.kind)}, not one of ${KINDS.join(', ')}`);
       if (typeof row.run !== 'function') throw new Error(`the row \`${row.name}\` has no run`);
+      if (row.close !== undefined && typeof row.close !== 'function') throw new Error(`the row \`${row.name}\` has a close that is not a function`);
       if (named.has(row.name)) throw new Error(`two rows are named \`${row.name}\``);
 
       named.set(row.name, row);
@@ -79,20 +85,30 @@ const runs = (op, count) => {
   return performance.now() - start;
 };
 
-// How many runs one sample takes to last at least SAMPLE_MS, after the
-// engine has had WARMUP_MS to optimize what it runs.
-const calibrate = (op) => {
+const awaitedRuns = async (op, count) => {
   const start = performance.now();
 
-  do {
-    op();
-  } while (performance.now() - start < WARMUP_MS);
+  for (let index = 0; index < count; index += 1) await op();
+
+  return performance.now() - start;
+};
+
+// How to time an op, and how many runs one sample takes to last at least
+// SAMPLE_MS, after the engine has had WARMUP_MS to optimize what it runs.
+const calibrate = async (op) => {
+  const start = performance.now();
+  const first = op();
+  const timed = typeof first?.then === 'function' ? awaitedRuns : runs;
+
+  await first;
+
+  while (performance.now() - start < WARMUP_MS) await timed(op, 1);
 
   let count = 1;
 
-  while (runs(op, count) < SAMPLE_MS) count *= 2;
+  while ((await timed(op, count)) < SAMPLE_MS) count *= 2;
 
-  return count;
+  return { timed, count };
 };
 
 const summary = (samples) => {
@@ -106,17 +122,18 @@ const summary = (samples) => {
 
 // Each side's time per run. The sides take turns sample by sample, the side
 // that goes first alternating, so a drift in the machine reaches both alike.
-const time = (ops) => {
+const time = async (ops) => {
   const results = ops.map(() => undefined);
-  const counts = ops.map((op, side) => {
+  const plans = [];
+
+  for (const [side, op] of ops.entries()) {
     try {
-      return calibrate(op);
+      plans[side] = await calibrate(op);
     } catch (error) {
       results[side] = failure(error);
-
-      return 0;
     }
-  });
+  }
+
   const samples = ops.map(() => []);
 
   for (let index = 0; index < SAMPLES; index += 1) {
@@ -126,7 +143,9 @@ const time = (ops) => {
       if (results[side]) continue;
 
       try {
-        samples[side].push(runs(ops[side], counts[side]) / counts[side]);
+        const { timed, count } = plans[side];
+
+        samples[side].push((await timed(ops[side], count)) / count);
       } catch (error) {
         results[side] = failure(error);
       }
@@ -164,10 +183,18 @@ const measureAll = async (change, base) => {
 
     const measured = await Promise.all(sides.map((row) => (row ? measure(row) : undefined)));
     const ops = measured.map((result) => (typeof result === 'function' ? result : undefined));
-    const timed = time(ops.filter(Boolean));
+    const timed = await time(ops.filter(Boolean));
 
     for (const side of [0, 1]) {
       if (ops[side]) measured[side] = timed.shift();
+    }
+
+    for (const [side, row] of sides.entries()) {
+      try {
+        await row?.close?.();
+      } catch (error) {
+        if (!measured[side].error) measured[side] = failure(error);
+      }
     }
 
     results.push({ name, kind, was, base: measured[0], change: measured[1] });
