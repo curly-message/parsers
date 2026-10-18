@@ -3707,6 +3707,15 @@ describe('parser', () => {
 
     return { proxy: new Proxy(target, handler), counted };
   };
+  it('text holding no backslash is not searched for escape sequences', () => {
+    // Every span of text, a key and an option value included, has its escape
+    // sequences removed by a pattern, and a span with no backslash holds none.
+    const replaces = (message: string) => calls([[String.prototype, 'replace']], () => defaultParser.resolve(message, { payload: { a: 'A' } }));
+
+    expect(replaces('Hello, {{a; A:{{a}} one; default:two}}!')).toBe(0);
+    expect(replaces('Hello, \\{{a}}!')).toBeGreaterThan(0);
+    expect(defaultParser.resolve('Hello, \\{{a}}!', { payload: { a: 'A' } })).toBe('Hello, {{a}}!');
+  });
   it('reading a padded placeholder costs linear time', () => {
     readLinearly((size) => `{{${' '.repeat(size)}}}`, 1000);
   });

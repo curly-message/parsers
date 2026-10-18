@@ -1,5 +1,16 @@
 # Changelog
 
+### 3.1.3 (Unreleased)
+
+* **Text holding no backslash is not searched for escape sequences.** Every
+  span of text a resolution renders, and every key, modifier name and option
+  key it reads, went through a regular expression that removes escape
+  sequences, whether or not the span held the backslash each of them opens
+  with. Such a span is now returned as it is, which takes a tenth to a fifth
+  off a resolution on Node 22. `cst` and `createExtractor` read names the same
+  way. Nothing a message resolves to, and nothing the tree or the extractor
+  describes, changes.
+
 ## 3.1.2
 
 * **A nested message is read in time linear in its depth.** Dropping the

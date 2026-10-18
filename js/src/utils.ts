@@ -240,8 +240,12 @@ const RESERVED = /[:;{}\\]/;
  */
 export const cancels = (character: string) => RESERVED.test(character) || isBlank(character);
 
-/** Text as the format reads it, with every escape sequence it claims resolved. */
-export const unesc = (value: any) => typeof value === 'string' ? value.replace(/\\([\s\S])/gu, (sequence, character) => cancels(character) ? character : sequence) : value;
+/**
+ * Text as the format reads it, with every escape sequence it claims resolved.
+ * Every sequence opens with a backslash, so text holding none is returned as
+ * it is rather than searched.
+ */
+export const unesc = (value: any) => typeof value === 'string' && value.includes('\\') ? value.replace(/\\([\s\S])/gu, (sequence, character) => cancels(character) ? character : sequence) : value;
 
 /**
  * The span between `from` and `to` with its blank padding dropped, empty at
