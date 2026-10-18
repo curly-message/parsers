@@ -75,7 +75,7 @@ Map of `js/`:
 | `src/types.ts` | the public types and their doc comments |
 | `tests/specs/` | the suite (see *Tests*) |
 | `tests/conformance/adapter.ts` | the adapter of the specification's section 14.3 |
-| `bench/rows.mjs` | the rows of the benchmark, each read off the build; `bench/harness.mjs` measures them and is the same file in every repository of the family |
+| `bench/rows.mjs` | the rows of the benchmark, each read off the build; `bench/harness.mjs` measures them, `bench/check/` holds the rows it is checked on, and both are the same in every repository of the family |
 
 ## Architecture you must respect
 

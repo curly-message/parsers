@@ -51,6 +51,13 @@ jobs:
         with:
           node-version: 24
 
+      # The harness on rows that fail wherever two measurements share a
+      # process, so a table below is one whose sides were measured apart.
+      - name: Check the harness
+        timeout-minutes: 5
+        working-directory: change/${{ matrix.package }}/bench/check
+        run: node ../harness.mjs --compare .
+
       # Each side from its own lockfile, running no install script, since the
       # job holds a token that writes to the PR. A base that does not build
       # leaves rows that fail, which the label can accept.
