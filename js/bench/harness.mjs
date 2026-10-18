@@ -13,33 +13,44 @@
 // `bench/rows.mjs` is missing or fails to load, or when a row of it fails. A
 // size that grew and a time beyond its spread are flagged for review.
 //
-// A time is per run of what the row measures, sampled base and change by turn
-// in this one process, so both sides see the same machine. What a time row
+// Each side of a row is measured in processes of its own, forked from this one
+// with `--side`, so neither side's code, nor a row measured before it, shapes
+// the engine the other is measured on; a row's `run` is called once in each.
+// A time is per run of what the row measures, from ROUNDS pairs of processes,
+// one pair after the other. The two of a pair warm up and then take turns
+// sample by sample, one waiting while the other runs, so both sides see the
+// same machine, and how one process happens to settle the engine widens the
+// spread rather than reading as a difference. What a time row
 // times may return a promise, which is awaited as part of the run; whether it
 // does is read from its first call, so a synchronous one is timed by a loop
 // that awaits nothing. A row that holds something open while it is measured,
-// a browser say, gives it back in its `close`, which is called once the row
-// is measured or has failed. The spread leaves
+// a browser say, gives it back in its `close`, which each process calls once
+// the row is measured or has failed there; a process that dies takes what it
+// held with it, and fails the row. The spread leaves
 // out the lowest and the highest quarter of the samples, rounded down, so a
 // busy neighbour neither hides nor flags a change.
 //
 // This file is the same in every repository of the family; change every copy
 // at once.
+import { fork } from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { arch, platform } from 'node:os';
 import { resolve } from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { parseArgs } from 'node:util';
 
 const KINDS = ['count', 'size', 'time'];
-const SAMPLES = 20;
+const ROUNDS = 4;
+const SAMPLES = ROUNDS * 5;
 const SAMPLE_MS = 10;
-const WARMUP_MS = 50;
+const WARMUP_MS = 250;
 
 const { values: args } = parseArgs({
   options: {
     compare: { type: 'string' },
     accepted: { type: 'boolean', default: false },
+    side: { type: 'string' },
+    row: { type: 'string' },
   },
 });
 
@@ -94,7 +105,8 @@ const awaitedRuns = async (op, count) => {
 };
 
 // How to time an op, and how many runs one sample takes to last at least
-// SAMPLE_MS, after the engine has had WARMUP_MS to optimize what it runs.
+// SAMPLE_MS, after the engine has had WARMUP_MS to optimize what it runs in a
+// process that has run nothing else.
 const calibrate = async (op) => {
   const start = performance.now();
   const first = op();
@@ -120,41 +132,6 @@ const summary = (samples) => {
   return { value: median, low: sorted[cut], high: sorted[sorted.length - 1 - cut] };
 };
 
-// Each side's time per run. The sides take turns sample by sample, the side
-// that goes first alternating, so a drift in the machine reaches both alike.
-const time = async (ops) => {
-  const results = ops.map(() => undefined);
-  const plans = [];
-
-  for (const [side, op] of ops.entries()) {
-    try {
-      plans[side] = await calibrate(op);
-    } catch (error) {
-      results[side] = failure(error);
-    }
-  }
-
-  const samples = ops.map(() => []);
-
-  for (let index = 0; index < SAMPLES; index += 1) {
-    const order = index % 2 ? [...ops.keys()].reverse() : [...ops.keys()];
-
-    for (const side of order) {
-      if (results[side]) continue;
-
-      try {
-        const { timed, count } = plans[side];
-
-        samples[side].push((await timed(ops[side], count)) / count);
-      } catch (error) {
-        results[side] = failure(error);
-      }
-    }
-  }
-
-  return results.map((result, side) => result ?? summary(samples[side]));
-};
-
 const measure = async (row) => {
   try {
     const value = await row.run();
@@ -167,34 +144,171 @@ const measure = async (row) => {
   }
 };
 
+// The messages that reach one end of a channel, in order, each read once. An
+// end that has gone away answers what is read after with why.
+const inbox = (channel) => {
+  const queued = [];
+  const waiting = [];
+  let gone;
+
+  channel.on('message', (message) => (waiting.length ? waiting.shift()(message) : queued.push(message)));
+
+  return {
+    next: () => (queued.length ? Promise.resolve(queued.shift()) : gone ? Promise.resolve(gone) : new Promise((settle) => waiting.push(settle))),
+    end: (reason) => {
+      gone = reason;
+      for (const settle of waiting.splice(0)) settle(reason);
+    },
+  };
+};
+
+// A side in a process of its own: the rows of the package at `dir` by name
+// and kind, or, given `row`, that row. Its first message is what the row's
+// `run` returned; a time row then answers `calibrate` and each `sample`, and
+// every row closes on `end`.
+const forkSide = (dir, row) => {
+  const child = fork(fileURLToPath(import.meta.url), [`--side=${dir}`, ...(row === undefined ? [] : [`--row=${row}`])]);
+  const { next, end } = inbox(child);
+  const exited = new Promise((settle) => {
+    const gone = (error) => {
+      end(failure(error));
+      settle();
+    };
+
+    child.once('exit', (code, signal) => gone(new Error(`its process exited with ${signal ?? `code ${code}`}`)));
+    child.once('error', gone);
+  });
+
+  return {
+    next,
+    ask: (message) => {
+      if (child.connected) child.send(message);
+
+      return next();
+    },
+    exited,
+  };
+};
+
+// What a process forked for a side does: answers the harness, then exits, so
+// what a row leaves running cannot keep it alive, and exits as well once the
+// harness has gone.
+const serve = async (dir, name) => {
+  process.on('disconnect', () => process.exit());
+  if (!process.connected) process.exit();
+
+  const { next } = inbox(process);
+  const reply = (message) => new Promise((settle) => process.send(message, settle));
+  const loaded = await load(dir);
+
+  if (name === undefined) {
+    await reply(loaded.rows ? { rows: [...loaded.rows.values()].map((row) => ({ name: row.name, kind: row.kind })) } : loaded);
+    process.exit();
+  }
+
+  const row = loaded.rows?.get(name);
+  const measured = row ? await measure(row) : failure(new Error(loaded.error ?? `no row is named \`${name}\``));
+
+  await reply(typeof measured === 'function' ? { timed: true } : measured);
+
+  for (let plan, request = await next(); !request.end; request = await next()) {
+    try {
+      if (request.calibrate) {
+        plan = await calibrate(measured);
+        await reply({});
+      } else {
+        // A run that is not recorded first, so the wait on the other side's
+        // sample is no part of this one.
+        await plan.timed(measured, plan.count);
+        await reply({ sample: (await plan.timed(measured, plan.count)) / plan.count });
+      }
+    } catch (error) {
+      await reply(failure(error));
+    }
+  }
+
+  try {
+    await row?.close?.();
+    await reply({});
+  } catch (error) {
+    await reply(failure(error));
+  }
+
+  process.exit();
+};
+
+// Each side's time per run, the sides given as the processes that ran the
+// row's `run` first. A pair after the first is forked afresh, and within a
+// pair the side that goes first alternates, sample by sample and round by
+// round, so a drift in the machine reaches both alike.
+const time = async (dirs, name, first) => {
+  const results = first.map(() => undefined);
+  const samples = first.map(() => []);
+
+  for (let round = 0; round < ROUNDS; round += 1) {
+    const live = [...first.keys()].filter((index) => !results[index]);
+    const pair = live.map((index) => (round ? forkSide(dirs[index], name) : first[index]));
+    // Whether a side's reply is no failure; the first failure is its result.
+    const holds = (turn, reply) => {
+      if (reply.error) results[live[turn]] ??= reply;
+
+      return !reply.error;
+    };
+    const order = round % 2 ? [...live.keys()].reverse() : [...live.keys()];
+
+    if (round) (await Promise.all(pair.map((side) => side.next()))).forEach((reply, turn) => holds(turn, reply));
+
+    for (const turn of order) {
+      if (!results[live[turn]]) holds(turn, await pair[turn].ask({ calibrate: true }));
+    }
+
+    for (let index = 0; index < SAMPLES / ROUNDS; index += 1) {
+      for (const turn of index % 2 ? [...order].reverse() : order) {
+        if (results[live[turn]]) continue;
+
+        const reply = await pair[turn].ask({ sample: true });
+
+        if (holds(turn, reply)) samples[live[turn]].push(reply.sample);
+      }
+    }
+
+    (await Promise.all(pair.map((side) => side.ask({ end: true })))).forEach((reply, turn) => holds(turn, reply));
+    await Promise.all(pair.map((side) => side.exited));
+  }
+
+  return results.map((result, index) => result ?? summary(samples[index]));
+};
+
 // Every row of either side: this package's in its order, then the ones only
 // the base has. A row whose kind differs between the sides is measured on this
 // package's side alone, since a count and a time do not compare.
-const measureAll = async (change, base) => {
+const measureAll = async (dirs, change, base) => {
   const names = [...change.keys(), ...[...(base?.keys() ?? [])].filter((name) => !change.has(name))];
   const results = [];
 
   for (const name of names) {
-    const sides = [base?.get(name), change.get(name)];
-    const kind = (sides[1] ?? sides[0]).kind;
-    const was = sides[0] && sides[1] && sides[0].kind !== kind ? sides[0].kind : undefined;
+    const rows = [base?.get(name), change.get(name)];
+    const kind = (rows[1] ?? rows[0]).kind;
+    const was = rows[0] && rows[1] && rows[0].kind !== kind ? rows[0].kind : undefined;
 
-    if (was) sides[0] = undefined;
+    if (was) rows[0] = undefined;
 
-    const measured = await Promise.all(sides.map((row) => (row ? measure(row) : undefined)));
-    const ops = measured.map((result) => (typeof result === 'function' ? result : undefined));
-    const timed = await time(ops.filter(Boolean));
+    const sides = rows.map((row, index) => (row ? forkSide(dirs[index], name) : undefined));
+    const measured = await Promise.all(sides.map((side) => side?.next()));
+    const timed = [0, 1].filter((index) => measured[index]?.timed);
+    const done = sides.map((side, index) => (timed.includes(index) ? undefined : side));
+    const closed = await Promise.all(done.map((side) => side?.ask({ end: true })));
 
-    for (const side of [0, 1]) {
-      if (ops[side]) measured[side] = timed.shift();
+    for (const [index, reply] of closed.entries()) {
+      if (reply?.error && !measured[index].error) measured[index] = reply;
     }
 
-    for (const [side, row] of sides.entries()) {
-      try {
-        await row?.close?.();
-      } catch (error) {
-        if (!measured[side].error) measured[side] = failure(error);
-      }
+    await Promise.all(done.map((side) => side?.exited));
+
+    if (timed.length) {
+      const times = await time(timed.map((index) => dirs[index]), name, timed.map((index) => sides[index]));
+
+      for (const index of timed) measured[index] = times.shift();
     }
 
     results.push({ name, kind, was, base: measured[0], change: measured[1] });
@@ -245,8 +359,20 @@ const verdict = ({ kind, was, base, change }, compared) => {
 
 const cell = (text) => text.replaceAll('|', '\\|').replaceAll('\n', ' ');
 
+// A side's rows by name and kind, or why there are none to read.
+const list = async (dir) => {
+  const listing = forkSide(dir);
+  const reply = await listing.next();
+
+  await listing.exited;
+
+  return reply.rows ? { rows: new Map(reply.rows.map((row) => [row.name, row])) } : reply;
+};
+
+if (args.side !== undefined) await serve(args.side, args.row);
+
 const here = manifest('.');
-const change = await load('.');
+const change = await list(resolve('.'));
 const lines = [`## Benchmark of ${here.name}`, ''];
 
 // Written where the table would be, so a PR's comment says why there is none.
@@ -258,7 +384,7 @@ if (!change.rows) {
 // A path is meant from where the command was given: npm runs a workspace's
 // script in the workspace and names that place in INIT_CWD.
 const against = args.compare === undefined ? undefined : resolve(process.env.INIT_CWD ?? '.', args.compare);
-const base = against === undefined ? undefined : await load(against);
+const base = against === undefined ? undefined : await list(against);
 const compared = Boolean(base?.rows);
 
 if (base?.error) {
@@ -267,7 +393,7 @@ if (base?.error) {
   lines.push(`The base at \`${args.compare}\` has no benchmark, so nothing is compared.`, '');
 }
 
-const results = await measureAll(change.rows, base?.rows);
+const results = await measureAll([against, resolve('.')], change.rows, base?.rows);
 const verdicts = results.map((result) => verdict(result, compared));
 
 lines.push(
