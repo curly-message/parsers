@@ -1,0 +1,40 @@
+[package]
+name = "curly-message-parser"
+version = "1.0.0-next.0"
+edition = "2024"
+rust-version = "1.88"
+description = "Rust implementation of the Curly Message Format."
+license = "MIT"
+repository = "https://github.com/curly-message/parsers"
+homepage = "https://curlymessage.dev/"
+readme = "README.md"
+keywords = ["curly-message", "i18n", "internationalization", "translation", "interpolation"]
+categories = ["internationalization", "localization", "template-engine"]
+include = ["src/**", "README.md", "CHANGELOG.md", "LICENSE", "Cargo.toml"]
+
+[features]
+default = []
+
+[lints]
+workspace = true
+
+[package.metadata.docs.rs]
+all-features = true
+
+[workspace]
+resolver = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+indexing_slicing = "deny"
+string_slice = "deny"
+arithmetic_side_effects = "deny"
+non_ascii_literal = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"
