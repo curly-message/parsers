@@ -35,6 +35,29 @@ assert!(payload.get("__proto__").is_none());
 
 A value nested a million levels deep is dropped without a call per level.
 
+## The tree
+
+`cst` describes a message as it is written: where its placeholders are, what
+each is made of and where every escape sequence falls, as the format's
+[concrete syntax tree](https://github.com/curly-message/spec/blob/main/CST.md)
+spells it.
+
+```rust
+use curly_message_parser::{NodeKind, cst};
+
+let message = "Hi {{name; default:you}}";
+let tree = cst(message);
+let placeholder = tree.root().children().nth(1).unwrap();
+
+assert_eq!(placeholder.kind(), NodeKind::Placeholder);
+assert_eq!(&message[placeholder.span()], "{{name; default:you}}");
+```
+
+Spans are in bytes of UTF-8, the unit a `str` is indexed by, so a span slices
+the message it came from and never falls inside a character. A message nested
+any depth is described, and its tree dropped, without a call per level; the
+scan reads a message in time linear in its length.
+
 ## License
 
 [MIT](LICENSE)
