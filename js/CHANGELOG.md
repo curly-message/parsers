@@ -19,6 +19,19 @@
   `Parser.T` and `Parser.Factory` are unchanged, so a parser or a factory a
   caller writes against them still compiles; one written against
   `typeof createParser` or its return type now needs a `compile` as well.
+* **`resolve` follows inline defaults however deeply they nest.** Past the
+  nesting limit a placeholder takes its fallback chain, and the chain's last
+  link is the inline default, whose own placeholders are refused in turn. The
+  walk called itself once per such level, so on Node 22 a message nesting
+  inline defaults about 1 400 levels deep — fewer inside a caller already deep
+  in its own stack — threw `RangeError: Maximum call stack size exceeded` out
+  of `resolve`, and on Bun one about 8 000 levels deep did. One just short of
+  that resolved but lost the report the stack ran out in, since what a raising
+  `onReport` throws is swallowed. The spans still to render are now kept on a
+  stack of the walk's own, so a message nested twenty thousand levels deep
+  resolves, in time linear in its length, and reports each level past the
+  limit once. The output, the reports and their order, and every read of the
+  payload are the ones a message the old walk could reach always had.
 * **Text holding no backslash is not searched for escape sequences.** Every
   span of text a resolution renders, and every key, modifier name and option
   key it reads, went through a regular expression that removes escape

@@ -165,6 +165,8 @@ export default [
   } },
   { name: 'resolve: 5 000 placeholders', kind: 'time', run: () => first(flat(5000), {}) },
   { name: 'resolve: nested 10 000 levels', kind: 'time', run: () => first(nested(10000), { v: 'a' }) },
+  { name: 'resolve: inline defaults nested 1 000 levels', kind: 'time', run: () => first(`${'{{v; default:'.repeat(1000)}x${'}}'.repeat(1000)}`, {}) },
+  { name: 'resolve: inline defaults nested 1 000 levels, each writing text', kind: 'time', run: () => first(`${'{{v; default:text of a level '.repeat(1000)}x${'}}'.repeat(1000)}`, {}) },
   { name: 'resolve: a placeholder of 10 000 blanks', kind: 'time', run: () => first(`{{${' '.repeat(10000)}}}`, {}) },
   { name: 'resolve: a key with 10 000 blanks inside', kind: 'time', run: () => first(`{{a${' '.repeat(10000)}b}}`, {}) },
   { name: 'resolve: 1 000 placeholders that never close', kind: 'time', run: () => first('{{a; c:'.repeat(1000), {}) },
