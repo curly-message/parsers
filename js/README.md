@@ -251,8 +251,12 @@ one pays — resolving to the empty string and reporting `read-limit`. The
 another: the outermost is level 1, and one deeper than **8** levels is not
 resolved at all, taking its fallback chain and reporting `nesting-limit`. It
 bounds resolution rather than derivation, so which substrings are placeholders
-is what it always was. A message's own text is the caller's and always reaches
-the output; what these bound is what the payload and the nesting add to it.
+is what it always was. The chain's last link is the inline default, whose own
+placeholders are refused in turn, and the walk follows such a chain on a stack
+of its own rather than the host's call stack, so however many levels it nests,
+each reports once and `resolve` answers in time linear in the message. A
+message's own text is the caller's and always reaches the output; what these
+bound is what the payload and the nesting add to it.
 
 A fourth bound holds the conversion that feeds them. Turning a value into JSON
 follows a shared reference again every time it meets one, so a value naming the

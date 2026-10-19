@@ -3126,6 +3126,159 @@ describe('parser', () => {
       text: '{{v; a:settled; default:fallback;}}',
     }]);
   });
+  it('a refused placeholder takes its inline default however deeply the defaults nest', () => {
+    // Every level names a key the payload lacks, so each takes its chain down
+    // to the next, and each level past the limit is refused and reported once.
+    const defaults = (levels: number) => `${'{{a; default:'.repeat(levels)}x${'}}'.repeat(levels)}`;
+    const resolved = (message: string, onReport?: () => void) => {
+      const codes: string[] = [];
+      const { resolve } = createParser({ onReport: ({ code }) => { codes.push(code); onReport?.(); } });
+
+      return { output: resolve(message, { payload: {} }), refused: codes.filter((code) => code === 'nesting-limit').length, codes: codes.length };
+    };
+
+    for (const levels of [1350, 1400, 5000, 20000]) expect(resolved(defaults(levels))).toEqual({ output: 'x', refused: levels - 8, codes: levels - 8 });
+
+    // A handler that raises loses nothing but its own report.
+    expect(resolved(defaults(20000), () => { throw new Error('LOGGER FAILURE'); })).toEqual({ output: 'x', refused: 19992, codes: 19992 });
+
+    // An option value is one level deeper than the placeholder holding it, so
+    // a chain written there is refused one level sooner.
+    const { resolve } = createParser({ onReport: () => {} });
+    const reports: Report[] = [];
+    const reporting = createParser({ onReport: (report) => { reports.push(report); } });
+
+    expect(reporting.resolve(`{{n:eq; 1:${defaults(20000)}; default:D}}`, { payload: { n: 1 } })).toBe('x');
+    expect(reports).toHaveLength(19993);
+
+    // A resolution begun while another reports walks its own message on its
+    // own: neither the depth of the other nor its budgets reach it.
+    const inner: string[] = [];
+    const reentrant = createParser({
+      onReport: () => {
+        if (!inner.length) inner.push(resolve(defaults(20000), { payload: {} }));
+      },
+    });
+
+    expect(reentrant.resolve(defaults(20000), { payload: {} })).toBe('x');
+    expect(inner).toEqual(['x']);
+  });
+  it('a span handed back past the limit renders as the same text within it does', () => {
+    // Each level names a key the payload lacks, so it renders its inline
+    // default, and from the ninth level on that default is handed back.
+    const chain = (levels: number, inner: string) => `${'{{a; default:'.repeat(levels)}${inner}${'}}'.repeat(levels)}`;
+    const { resolve } = createParser({ onReport: () => {} });
+
+    expect(resolve(chain(10, 'x\\{\\\\'), { payload: {} })).toBe('x{\\');
+    expect(resolve(chain(10, '\\{{{a; default:y}}'), { payload: {} })).toBe('{y');
+    expect(resolve(chain(9, '[{{w}}]'), { payload: { w: { value: undefined, default: 'W' } } })).toBe('[W]');
+    expect(resolve(chain(8, '[{{w; default:INLINE}}]'), { payload: { w: { value: undefined, default: '' } } })).toBe('[]');
+    expect(resolve(chain(8, '[{{b}}]'), { payload: {} })).toBe('[]');
+    expect(resolve(chain(10, '[{{b}}]'), { payload: {} })).toBe('[]');
+    // What a placeholder past the limit takes reaches the output through the
+    // placeholder around it, and is charged there alone.
+    expect(resolve(chain(9, '{{w}}'), { payload: { w: { value: undefined, default: 'W'.repeat(60000) } } })).toBe('W'.repeat(60000));
+    expect(resolve(`${'{{a; default:L'.repeat(10)}x${'R}}'.repeat(10)}`, { payload: {} })).toBe('LLLLLLLLLLxRRRRRRRRRR');
+  });
+  it('copies what a chain of inline defaults renders in time linear in its depth', () => {
+    // Each level writes text of its own, so a level joining everything nested
+    // in it would copy the levels below it once per level.
+    const joined = (levels: number) => {
+      const { resolve } = createParser({ onReport: () => {} });
+      const message = `${'{{a; default:y'.repeat(levels)}x${'}}'.repeat(levels)}`;
+      const descriptor = Object.getOwnPropertyDescriptor(Array.prototype, 'join')!;
+      const join = descriptor.value as (this: unknown[], separator?: string) => string;
+      let characters = 0;
+
+      Object.defineProperty(Array.prototype, 'join', {
+        ...descriptor,
+        value(this: unknown[], separator?: string) {
+          const text = join.call(this, separator);
+
+          characters += text.length;
+
+          return text;
+        },
+      });
+
+      try {
+        resolve(message, { payload: {} });
+      } finally {
+        Object.defineProperty(Array.prototype, 'join', descriptor);
+      }
+
+      return characters;
+    };
+
+    expect(joined(2000)).toBeGreaterThan(0);
+    expect(joined(4000)).toBeLessThanOrEqual(2.5 * joined(2000));
+  });
+  it('the walk past the nesting limit reads and reports in the order the levels are written', () => {
+    // Five kinds of level in turn: a key the payload lacks, a wrapper holding
+    // nothing, a value with an unknown modifier, a selection that selects
+    // nothing, and a value converted by its own `toString`. Each takes its
+    // chain down to the next, so the walk reaches every level.
+    const LEVELS = ['{{b; default:', '{{c; default:', '{{d:nope; default:', '{{e:eq; z:{{b}}; default:', '{{f:nope; default:'];
+    const nested = (levels: number) => `${Array.from({ length: levels }, (_, index) => LEVELS[index % LEVELS.length]).join('')}x${'}}'.repeat(levels)}`;
+    const traced = (name: string, target: object, events: string[]) => new Proxy(target, Object.fromEntries((['get', 'has', 'getOwnPropertyDescriptor', 'ownKeys', 'getPrototypeOf'] as const).map((trap) => [trap, (...args: unknown[]) => {
+      events.push(`${name} ${trap}${typeof args[1] === 'string' ? ` ${args[1]}` : ''}`);
+
+      return (Reflect[trap] as (...args: unknown[]) => unknown)(...args);
+    }])));
+    const walked = (levels: number) => {
+      const events: string[] = [];
+      const { resolve } = createParser({
+        onReport: ({ code, text }) => { events.push(`report ${code} ${text}`); },
+        onSuspectValue: ({ found, placeholder }) => { events.push(`suspect ${found.join()} ${placeholder}`); },
+      });
+      const payload = traced('payload', {
+        c: traced('wrapper', { value: undefined, default: undefined }, events),
+        d: '{{\\',
+        e: 'q',
+        f: new (class { toString() { events.push('f toString'); return 'F{{'; } })(),
+      }, events);
+
+      return { output: resolve(nested(levels), { payload }), events };
+    };
+    // What each level does, in the order the recursive walk did it: its
+    // reads, its report, then its chain, whose last link is the next level.
+    // A value is converted and a wrapper recognized once per resolution.
+    const expected = (levels: number) => {
+      const message = nested(levels);
+      const events: string[] = [];
+      let open = 0;
+
+      for (let index = 0; index < levels; index += 1) {
+        const kind = index % LEVELS.length;
+        const spelling = message.slice(open, message.length - 2 * index);
+        const text = spelling.length > 120 ? `${spelling.slice(0, 120)}...` : spelling;
+        const refused = index >= 8 ? [`report nesting-limit ${text}`] : [];
+        const failed = [`report ${index >= 8 ? 'nesting-limit' : 'unknown-modifier'} ${text}`];
+
+        events.push(...[
+          ['payload getOwnPropertyDescriptor b', ...refused],
+          ['payload getOwnPropertyDescriptor c', 'payload get c', 'wrapper getPrototypeOf', ...(index === 1 ? ['wrapper ownKeys', 'wrapper getOwnPropertyDescriptor value', 'wrapper getOwnPropertyDescriptor default'] : []), 'wrapper getOwnPropertyDescriptor value', 'wrapper get value', ...refused, 'wrapper getOwnPropertyDescriptor default', 'wrapper get default'],
+          ['payload getOwnPropertyDescriptor d', 'payload get d', `suspect placeholder,escape ${text}`, ...failed],
+          ['payload getOwnPropertyDescriptor e', 'payload get e', ...refused],
+          ['payload getOwnPropertyDescriptor f', 'payload get f', ...(index === 4 ? ['f toString'] : []), `suspect placeholder ${text}`, ...failed],
+        ][kind], 'payload getOwnPropertyDescriptor default');
+        open += LEVELS[kind].length;
+      }
+
+      return events;
+    };
+
+    for (const levels of [50, 5000]) expect(walked(levels)).toEqual({ output: 'x', events: expected(levels) });
+
+    // The read budget is tested where the walk meets a placeholder, so the one
+    // that spends it past the limit still takes its chain, and the next
+    // resolves to the empty string and descends no further.
+    const codes: string[] = [];
+    const { resolve } = createParser({ onReport: ({ code }) => { codes.push(code); } });
+
+    expect(resolve(`${'{{d:nope; default:'.repeat(20000)}x${'}}'.repeat(20000)}`, { payload: { d: 'x'.repeat(10000) } })).toBe('');
+    expect(codes).toEqual([...Array(8).fill('unknown-modifier'), ...Array(3).fill('nesting-limit'), 'read-limit']);
+  });
   it('a value whose serialization outgrows a resolvable output is read as missing', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });

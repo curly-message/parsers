@@ -317,7 +317,7 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
   let output = MAX_OUTPUT_LENGTH;
   let read = MAX_READ_LENGTH;
 
-  const resolvePlaceholder = ({ spelling, key, modifier: modifierKey, options: segments, inlineDefault }: Placeholder, depth: number): string => {
+  const resolvePlaceholder = ({ spelling, key, modifier: modifierKey, options: segments, inlineDefault }: Placeholder, depth: number): string | Span => {
     // A link that refuses to be read is not a link nobody passed. `ownValue`
     // answers nothing either way, because resolution must not throw; the
     // difference between the two is what a report is for.
@@ -389,9 +389,11 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     // not carry, and the message only for what neither of them says. Converting
     // one costs a full serialization, so a link waits for the one before it to
     // come back empty, and the chain waits for a reader.
+    const declaredDefault = () => [() => payloadText(ownValue(wrapper, 'default', raised)), payloadDefault]
+      .reduce<string | undefined>((chain, link) => chain ?? link(), undefined);
+
     const defaultText = () => {
-      resolvedDefault ??= [() => payloadText(ownValue(wrapper, 'default', raised)), payloadDefault]
-        .reduce<string | undefined>((chain, link) => chain ?? link(), undefined) ?? (inlineDefault && valueOf(inlineDefault)) ?? '';
+      resolvedDefault ??= declaredDefault() ?? (inlineDefault && valueOf(inlineDefault)) ?? '';
 
       return resolvedDefault;
     };
@@ -400,10 +402,16 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     // placeholder's span is settled before the walk starts, and what the limit
     // refuses is resolving this one. It is a defect of the message, so the
     // placeholder takes its fallback chain and the walk carries on.
+    //
+    // A refused placeholder calls no modifier, so the one span it can render
+    // is its inline default, and every placeholder in that is refused in turn.
+    // Nothing bounds how deeply a message nests those (section 12), so the
+    // span is handed back for the walk to render in this placeholder's place
+    // rather than rendered from here, a call deeper per level.
     if (depth > MAX_NESTING) {
       report('nesting-limit', spelling, messageId, onReport);
 
-      return defaultText();
+      return declaredDefault() ?? inlineDefault ?? '';
     }
 
     const hasModifier = !!modifierKey;
@@ -489,6 +497,49 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     }
   };
 
+  // The inline default a refused placeholder hands back, rendered one level
+  // deeper in the placeholder's place, onto the parts of the span it is nested
+  // in. Every placeholder in it is refused in turn, and nothing bounds how
+  // deeply a message nests those (section 12), so the spans are kept on a
+  // stack of the walk's own rather than the host's, the way the scan keeps its
+  // constructs: a message nesting them twenty thousand levels deep must not
+  // take the host's call stack down with it. Each is finished before the span
+  // around it carries on, so everything is read and reported in the order a
+  // call per level would have read and reported it, and what they write is
+  // joined once, with the span they are nested in, rather than once per level.
+  // A result past the limit is nested in another, so it is never charged to
+  // the output here: it reaches the output through the one around it.
+  const follow = (span: Span, depth: number, parts: string[]) => {
+    const spans = [{ ...partsOf(source, scanOf, span), next: 0 }];
+
+    parts.push(spans[0].texts[0]);
+
+    while (spans.length) {
+      const frame = spans[spans.length - 1];
+
+      if (frame.next === frame.placeholders.length) {
+        spans.pop();
+
+        const below = spans[spans.length - 1];
+
+        if (below) parts.push(below.texts[below.next]);
+        continue;
+      }
+
+      const resolved = resolvePlaceholder(frame.placeholders[frame.next], depth + spans.length - 1);
+
+      frame.next += 1;
+
+      if (typeof resolved === 'string') parts.push(resolved, frame.texts[frame.next]);
+      else {
+        const inner = partsOf(source, scanOf, resolved);
+
+        parts.push(inner.texts[0]);
+        spans.push({ ...inner, next: 0 });
+      }
+    }
+  };
+
   // A span of the message: the characters it wrote itself, with their escape
   // sequences removed, and the placeholders it wrote resolved. The whole
   // message is one such span, and so is each option value a modifier asks for.
@@ -506,7 +557,8 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
       // another reaches the output through the one around it, so the charge is
       // made where the walk meets the message itself and a result is counted
       // once. The message's own text is the caller's and always renders.
-      if (depth > 1) parts.push(resolved);
+      if (typeof resolved !== 'string') follow(resolved, depth + 1, parts);
+      else if (depth > 1) parts.push(resolved);
       else if (resolved.length <= output) {
         output -= resolved.length;
 
