@@ -376,6 +376,86 @@ export const parsePlaceholder = (message: string, open: number, close: number, e
 };
 
 /**
+ * A span of a message as resolution reads it: where it runs, and what it
+ * holds once a resolution has rendered it. An option value no resolution has
+ * asked for is never read at all.
+ */
+export type Span = { from: number, to: number, parts?: Parts };
+
+/**
+ * The text a span writes itself, its escape sequences removed, around the
+ * placeholders it holds: one text more than placeholders.
+ */
+type Parts = { texts: string[], placeholders: Placeholder[] };
+
+/** A placeholder as resolution reads it, its option values left as spans. */
+export type Placeholder = {
+  spelling: string,
+  key?: string,
+  modifier: string,
+  options: { key: string, value: Span }[],
+  inlineDefault?: Span,
+};
+
+/**
+ * What a message's text decides about its resolution, and nothing a payload,
+ * a locale or the options decide: every resolution of the text reads it, and
+ * none changes it but by reading more of it.
+ */
+export type Structure = { source: string, root: Span };
+
+const NO_PLACEHOLDERS: Placeholder[] = [];
+
+/**
+ * A message's structure, its spans read when a resolution first asks. A
+ * message holding no `{{` opens no placeholder, so its parts are known from
+ * the start: its text, with its escape sequences removed.
+ */
+export const structure = (source: string): Structure => ({
+  source,
+  root: source.includes('{{') ? { from: 0, to: source.length } : { from: 0, to: source.length, parts: { texts: [unesc(source)], placeholders: NO_PLACEHOLDERS } },
+});
+
+const spanOf = ([from, to]: [number, number]): Span => ({ from, to });
+
+const read = (source: string, scan: Scanner, { from, to }: Span): Parts => {
+  const texts: string[] = [];
+  const placeholders: Placeholder[] = [];
+  let at = from;
+
+  for (let match = scan.next(at, to); match; match = scan.next(at, to)) {
+    const [open, close] = match;
+    const { key, modifier, options, inlineDefault } = parsePlaceholder(source, open, close, scan.end);
+
+    texts.push(unesc(source.slice(at, open)));
+    placeholders.push({
+      spelling: source.slice(open, close),
+      key,
+      modifier,
+      options: options.map((option) => ({ key: option.key, value: spanOf(option.value) })),
+      inlineDefault: inlineDefault && spanOf(inlineDefault),
+    });
+    at = close;
+  }
+
+  const last = unesc(source.slice(at, to));
+
+  if (!placeholders.length) return { texts: [last], placeholders: NO_PLACEHOLDERS };
+
+  texts.push(last);
+
+  return { texts, placeholders };
+};
+
+/**
+ * What a span holds, read off the message the first time a resolution asks.
+ * The scanner is the resolution's own, asked for only then: a verdict is a
+ * function of the message alone, so two resolutions that read two spans of
+ * one message agree on every placeholder either derives.
+ */
+export const partsOf = (source: string, scan: () => Scanner, span: Span): Parts => span.parts ??= read(source, scan(), span);
+
+/**
  * A target's own enumerable entry under a key, or nothing. Section 4's value
  * conversion reads by enumerability already, so every read the parser makes
  * reads by it: an entry `Object.defineProperty` left hidden is not one the

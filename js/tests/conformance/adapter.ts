@@ -1,6 +1,34 @@
 import type { Adapter, ModifierInput } from '@curly-message/conformance';
 import { createParser, cst, Modifier, Parser, Report } from '@curly-message/parser';
 
+type Input = Parameters<Adapter['resolve']>[0];
+
+/**
+ * A parser configured as a case of the set asks, reporting into `reports`.
+ * A behaviour of the set's catalogue is a function of section 11's inputs;
+ * this parser's modifier signature carries the same inputs under its own
+ * names, with the default behind an accessor that walks the chain on the
+ * read, which is what the behaviour's `default` call is for.
+ */
+export const parserFor = ({ modifiers, defaults }: Pick<Input, 'modifiers' | 'defaults'>, reports: Report[]) => {
+  const wrap = (behaviour: (input: ModifierInput) => unknown): Modifier.T => (config) => behaviour({
+    value: config.value,
+    options: config.options,
+    props: config.props,
+    locale: config.locale,
+    default: () => config.defaultValue,
+  });
+
+  return createParser({
+    customModifiers: modifiers && Object.fromEntries(Object.entries(modifiers).map(([name, behaviour]) => [name, wrap(behaviour)])),
+    modifierDefaults: defaults as Modifier.Props | undefined,
+    onReport: (report) => { reports.push(report); },
+  });
+};
+
+/** The second argument of `resolve` a case of the set asks for. */
+export const contextOf = ({ payload, props, locale, id }: Input): Parser.Context => ({ payload: payload as Parser.Payload | undefined, props: props as Modifier.Props | undefined, locale, id: id as Parser.Id | undefined });
+
 /**
  * The adapter of SPEC.md section 14.3: what this implementation supplies so
  * the conformance set can drive it. The levels and the limits are the two
@@ -16,30 +44,10 @@ export const adapter: Adapter = {
   // its strings are indexed by, and asks it to say which: these are ECMAScript
   // string indices, so UTF-16 code units.
   cst: { unit: 'utf-16', parse: cst },
-  resolve: ({ message, payload, props, locale, id, modifiers, defaults }) => {
+  resolve: (input) => {
     const reports: Report[] = [];
+    const { resolve } = parserFor(input, reports);
 
-    // A behaviour of the set's catalogue is a function of section 11's inputs;
-    // this parser's modifier signature carries the same inputs under its own
-    // names, with the default behind an accessor that walks the chain on the
-    // read, which is what the behaviour's `default` call is for.
-    const wrap = (behaviour: (input: ModifierInput) => unknown): Modifier.T => (config) => behaviour({
-      value: config.value,
-      options: config.options,
-      props: config.props,
-      locale: config.locale,
-      default: () => config.defaultValue,
-    });
-
-    const { resolve } = createParser({
-      customModifiers: modifiers && Object.fromEntries(Object.entries(modifiers).map(([name, behaviour]) => [name, wrap(behaviour)])),
-      modifierDefaults: defaults as Modifier.Props | undefined,
-      onReport: (report) => { reports.push(report); },
-    });
-
-    return {
-      output: resolve(message, { payload: payload as Parser.Payload | undefined, props: props as Modifier.Props | undefined, locale, id: id as Parser.Id | undefined }),
-      reports,
-    };
+    return { output: resolve(input.message, contextOf(input)), reports };
   },
 };

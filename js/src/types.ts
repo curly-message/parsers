@@ -1,5 +1,5 @@
 import * as modifiers from './modifiers';
-import type { AGO_LADDER } from './utils';
+import type { AGO_LADDER, Structure } from './utils';
 
 /**
  * A locale as it reaches resolution — an opaque identifier the modifiers hand
@@ -52,7 +52,7 @@ export type Wrappers = Map<object, boolean | undefined>;
  * carries the host's props without reading one, so it names no props type of
  * its own.
  */
-type WalkProps = { value: any, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifierFor: (name: string) => Modifier.T<any, any> | undefined, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, onSuspectValue?: Parser.OnSuspectValue, recognizeWrappers: boolean, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
+type WalkProps = { value: Structure, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifierFor: (name: string) => Modifier.T<any, any> | undefined, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, onSuspectValue?: Parser.OnSuspectValue, recognizeWrappers: boolean, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
 
 /**
  * Resolves a message. One walk produces the whole output: what a placeholder
@@ -364,6 +364,9 @@ export module Parser {
   export type T<C extends Parser.Context = Parser.Context> = {
     /**
      * Interpolates the message against the given context and returns the result.
+     * What the parser read off a message's text is kept once it has resolved
+     * that text twice, within bounds the README states; nothing read from the
+     * context is.
      */
     resolve: Resolve<C>;
   };

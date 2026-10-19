@@ -1,6 +1,7 @@
 import * as defaultModifiers from './modifiers';
 import type { Cst, Parser, Modifier, Conversions, Interpolation, Locale, Report, Wrappers } from './types';
-import { EVERY_TERMINATOR, failureCode, mergeLayer, ownKeys, ownModifiers, ownValue, parsePlaceholder, scanner, unesc, unicodeEscape } from './utils';
+import type { Placeholder, Scanner, Span, Structure } from './utils';
+import { EVERY_TERMINATOR, failureCode, mergeLayer, ownKeys, ownModifiers, ownValue, partsOf, scanner, structure, unicodeEscape } from './utils';
 
 export type { Cst, Parser, Modifier, Locale, Report };
 
@@ -302,11 +303,12 @@ const suspect = (declaredText: string, placeholder: string, id: Parser.Id | unde
 // own text is syntax and is scanned for placeholders; what a placeholder
 // resolves to is data and is never scanned again, so nesting is what the
 // message spells rather than what a payload arranges (section 12).
-const interpolate: Interpolation = ({ value: message, props, payload, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id: messageId, conversions, wrappers }) => {
-  const source = `${message}`;
-  // One scanner for the walk: a verdict is final, so the span an opening brace
-  // derives is settled once however many times the walk asks for it.
-  const scan = scanner(source);
+const interpolate: Interpolation = ({ value: { source, root }, props, payload, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id: messageId, conversions, wrappers }) => {
+  // One scanner for the walk, made only if it reads a span no walk read
+  // before: a verdict is final, so the span an opening brace derives is
+  // settled once however many times the walk asks for it.
+  let scan: Scanner | undefined;
+  const scanOf = () => scan ??= scanner(source);
 
   // What the output carries and what the payload is read for are budgets of
   // the resolution rather than of a placeholder: each is spent by what reaches
@@ -315,8 +317,7 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
   let output = MAX_OUTPUT_LENGTH;
   let read = MAX_READ_LENGTH;
 
-  const resolvePlaceholder = (open: number, close: number, depth: number): string => {
-    const spelling = source.slice(open, close);
+  const resolvePlaceholder = ({ spelling, key, modifier: modifierKey, options: segments, inlineDefault }: Placeholder, depth: number): string => {
     // A link that refuses to be read is not a link nobody passed. `ownValue`
     // answers nothing either way, because resolution must not throw; the
     // difference between the two is what a report is for.
@@ -331,7 +332,6 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
       return '';
     }
 
-    const { key, modifier: modifierKey, options: segments, inlineDefault } = parsePlaceholder(source, open, close, scan.end);
     const entry = ownValue(payload, key, raised);
     // The payload's root `default` is the fallback itself, never configuration.
     // A caller that turned recognition off passes entries it did not write, so
@@ -360,13 +360,13 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
     // ask twice, so a value is rendered where it is first asked for and not
     // again — and an option the modifier passes over is never rendered at all,
     // so however deeply it nests it costs nothing and reaches no limit.
-    const rendered = new Map<[number, number], string>();
-    const valueOf = (span: [number, number]) => {
+    const rendered = new Map<Span, string>();
+    const valueOf = (span: Span) => {
       const known = rendered.get(span);
 
       if (known !== undefined) return known;
 
-      const resolved = render(span[0], span[1], depth + 1);
+      const resolved = render(span, depth + 1);
 
       rendered.set(span, resolved);
 
@@ -492,16 +492,15 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
   // A span of the message: the characters it wrote itself, with their escape
   // sequences removed, and the placeholders it wrote resolved. The whole
   // message is one such span, and so is each option value a modifier asks for.
-  const render = (from: number, to: number, depth: number): string => {
-    const parts: string[] = [];
-    let at = from;
+  const render = (span: Span, depth: number): string => {
+    const { texts, placeholders } = partsOf(source, scanOf, span);
 
-    for (let match = scan.next(at, to); match; match = scan.next(at, to)) {
-      const [open, close] = match;
+    if (!placeholders.length) return texts[0];
 
-      parts.push(unesc(source.slice(at, open)));
+    const parts: string[] = [texts[0]];
 
-      const resolved = resolvePlaceholder(open, close, depth);
+    for (let index = 0; index < placeholders.length; index += 1) {
+      const resolved = resolvePlaceholder(placeholders[index], depth);
 
       // Only what the output carries is counted, and a result nested in
       // another reaches the output through the one around it, so the charge is
@@ -512,21 +511,91 @@ const interpolate: Interpolation = ({ value: message, props, payload, parserOpti
         output -= resolved.length;
 
         parts.push(resolved);
-      } else report('output-limit', source.slice(open, close), messageId, onReport);
+      } else report('output-limit', placeholders[index].spelling, messageId, onReport);
 
-      at = close;
+      parts.push(texts[index + 1]);
     }
-
-    parts.push(unesc(source.slice(at, to)));
 
     return parts.join('');
   };
 
-  return render(0, source.length, 1);
+  return render(root, 1);
 };
 
-export const createParser: Parser.Factory = (parserOptions) => ({
-  resolve: (message, context) => {
+// What a parser keeps of the messages it resolved, so a message resolved
+// again is not read again. The bound is in characters as well as in messages,
+// because what a message keeps grows with its length; a message longer than
+// `KEPT_LENGTH` is read for each call and never looked up, so a long text that
+// changes between calls costs no lookup either, and neither does one holding
+// neither `{{` nor a backslash, which is its own text.
+const KEPT_MESSAGES = 1024;
+
+const KEPT_CHARACTERS = 1 << 17;
+
+const KEPT_LENGTH = 1 << 13;
+
+// A text the caller cut from a longer one can hold all of that one alive; the
+// copy kept holds its own characters alone. A joined array is laid out in one
+// piece on every engine the package runs on, where a joined template is not
+// on all of them, so what is cut from it is cut from the copy.
+const owned = (text: string) => [text, ' '].join('').slice(0, -1);
+
+export const createParser: Parser.Factory = (parserOptions) => {
+  // A message is kept the second time it is seen, so a stream of texts that
+  // never come back does not push out the ones that do. What was seen once is
+  // two generations, each half the bounds, the older dropped whole when the
+  // newer fills: a text met once costs an insertion and no deletion.
+  let seen = new Set<string>();
+  let seenBefore = new Set<string>();
+  let seenCharacters = 0;
+  // What is kept makes room by its oldest, and a hit changes nothing, so a
+  // lookup costs a lookup alone. The order is a ring of its own rather than
+  // the map's, whose iterator walks past every slot a deletion left behind,
+  // and an evicted slot is cleared, so what the ring holds the map holds.
+  const kept = new Map<string, Structure>();
+  const order: string[] = [];
+  let oldest = 0;
+  let keptCharacters = 0;
+
+  const structureOf = (source: string) => {
+    if (source.length > KEPT_LENGTH || (!source.includes('{{') && !source.includes('\\'))) return structure(source);
+
+    const known = kept.get(source);
+
+    if (known) return known;
+
+    if (!seen.has(source) && !seenBefore.has(source)) {
+      if (seen.size >= KEPT_MESSAGES / 2 || seenCharacters + source.length > KEPT_CHARACTERS / 2) {
+        seenBefore = seen;
+        seen = new Set();
+        seenCharacters = 0;
+      }
+
+      seen.add(owned(source));
+      seenCharacters += source.length;
+
+      return structure(source);
+    }
+
+    while (kept.size >= KEPT_MESSAGES || keptCharacters + source.length > KEPT_CHARACTERS) {
+      const evicted = order[oldest];
+
+      kept.delete(evicted);
+      keptCharacters -= evicted.length;
+      order[oldest] = '';
+      oldest = (oldest + 1) % KEPT_MESSAGES;
+    }
+
+    const fresh = structure(owned(source));
+
+    order[(oldest + kept.size) % KEPT_MESSAGES] = fresh.source;
+    kept.set(fresh.source, fresh);
+    keptCharacters += source.length;
+
+    return fresh;
+  };
+
+  return { resolve: (message, context) => {
     // The context is caller-supplied like the payload inside it, and is read
     // the same way: own entries only. A prototype somebody else wrote to is
     // not a context a caller passed, and a caller that passed `null` for one
@@ -579,6 +648,6 @@ export const createParser: Parser.Factory = (parserOptions) => ({
 
     if (value === undefined) return '';
 
-    return interpolate({ value, payload, props, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id, conversions, wrappers });
-  },
-});
+    return interpolate({ value: structureOf(value), payload, props, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id, conversions, wrappers });
+  } };
+};
