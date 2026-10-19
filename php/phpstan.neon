@@ -1,0 +1,16 @@
+includes:
+    - tools/qa/vendor/phpstan/phpstan-strict-rules/rules.neon
+    - tools/qa/vendor/phpstan/phpstan-phpunit/extension.neon
+    - tools/qa/vendor/phpstan/phpstan-phpunit/rules.neon
+
+parameters:
+    level: max
+    phpVersion: 80200
+    paths:
+        - src
+        - tests
+        - tools
+    excludePaths:
+        - tools/qa
+    bootstrapFiles:
+        - vendor/autoload.php

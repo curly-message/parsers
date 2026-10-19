@@ -1,0 +1,5 @@
+/vendor/
+/tools/qa/vendor/
+/conformance/.set/
+/.phpunit.cache/
+/.php-cs-fixer.cache
