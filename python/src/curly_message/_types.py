@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import enum
-from typing import Final
+from typing import Final, Literal, TypedDict
 
 
 class Undefined(enum.Enum):
@@ -39,3 +39,122 @@ MAX_CONVERSION_NODES: Final[int] = 100000
 
 MAX_NESTING: Final[int] = 8
 """The deepest level at which a placeholder resolves (section 13)."""
+
+MAX_REENTRY: Final[int] = 32
+"""The most resolutions in progress at once on one thread (section 13).
+
+A resolution host code asks for while another is in progress on its thread
+takes a place, and so does a read of an option's value or of a default by any
+code but the modifier it was handed to, while that modifier is being asked: a
+read of what a modifier kept or handed on, for as long as it renders.
+"""
+
+
+class ReentryLimitError(RecursionError):
+    """Raised by ``resolve`` asked for while ``MAX_REENTRY`` resolutions are in progress.
+
+    It is raised into the host code that asked, on the thread it asked on, and
+    the resolution it refuses reads nothing. Host code that lets it pass fails
+    as host code that raises does: a modifier's placeholder takes its fallback
+    chain. It is a ``RecursionError`` because the bound stands in for the
+    interpreter's own limit on a resolution that reaches itself.
+    """
+
+
+class CstText(TypedDict):
+    """Characters that carry no structural meaning where they stand.
+
+    Every span of the tree is ``[start, end)`` in code points of the message.
+    """
+
+    type: Literal["text"]
+    start: int
+    end: int
+
+
+class CstEscape(TypedDict):
+    """A backslash and the code point it consumes (section 7).
+
+    ``cancels`` says which reading the pair takes: a structural meaning
+    cancelled, so removing the sequence leaves the character alone, or a
+    backslash that denotes itself, so both characters stand.
+    """
+
+    type: Literal["escape"]
+    start: int
+    end: int
+    cancels: bool
+
+
+class CstSpace(TypedDict):
+    """Blank padding a name is read without (section 8)."""
+
+    type: Literal["space"]
+    start: int
+    end: int
+
+
+class CstPunctuation(TypedDict):
+    """A delimiter: the pair that opens or closes, or a ``:`` or ``;`` that divides."""
+
+    type: Literal["open", "close", "separator"]
+    start: int
+    end: int
+
+
+class CstName(TypedDict):
+    """A key, a modifier name or an option key: ``name`` is the span unescaped.
+
+    A name holds no placeholder, and an empty one still has a position: a
+    placeholder that names no key carries a ``key`` node of no width.
+    """
+
+    type: Literal["key", "modifier", "option-key"]
+    start: int
+    end: int
+    name: str
+    nodes: list[CstText | CstEscape]
+
+
+class CstOptionValue(TypedDict):
+    """An option's value: message text, so a placeholder written in it derives."""
+
+    type: Literal["option-value"]
+    start: int
+    end: int
+    nodes: list[CstText | CstEscape | CstPlaceholder]
+
+
+class CstPlaceholder(TypedDict):
+    """A construct section 6 derives as a placeholder, and what it is made of."""
+
+    type: Literal["placeholder"]
+    start: int
+    end: int
+    nodes: list[CstPunctuation | CstSpace | CstName | CstOptionValue]
+
+
+class CstMessage(TypedDict):
+    """A whole message: text and placeholders, and nothing else (section 9.1).
+
+    A ``{{ ... }}`` construct the grammar does not derive is text here, exactly
+    as it is to resolution. A message that is not text carries no parts.
+    """
+
+    type: Literal["message"]
+    start: int
+    end: int
+    nodes: list[CstText | CstEscape | CstPlaceholder]
+
+
+CstNode = (
+    CstMessage
+    | CstPlaceholder
+    | CstName
+    | CstOptionValue
+    | CstText
+    | CstEscape
+    | CstSpace
+    | CstPunctuation
+)
+"""Any node of the tree."""
