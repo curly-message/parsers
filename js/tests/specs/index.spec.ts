@@ -3682,14 +3682,15 @@ describe('parser', () => {
 
     expect(warnings).toHaveLength(0);
   });
-  // What reading a message of a size costs, counted in the code units read,
-  // at the size and four times over: at least one read per eight units, so the
-  // count sees the work, and at most a quadrupled count, give or take, where a
-  // read that went back over what it had read would grow sixteenfold. What no
+  // What reading a message of a size costs, counted in the code units a
+  // parser that has read no message yet reads, at the size and four times
+  // over: at least one read per eight units, so the count sees the work, and
+  // at most a quadrupled count, give or take, where a read that went back over
+  // what it had read would grow sixteenfold. What no
   // count sees — a pattern backtracking inside one call, a read by index, a
   // copy — the benchmark times instead.
   const readLinearly = (spelled: (size: number) => string, size: number) => {
-    const reads = (at: number) => calls(UNIT_READS, () => defaultParser.resolve(spelled(at), { payload: { a: 'A' } }));
+    const reads = (at: number) => calls(UNIT_READS, () => createParser().resolve(spelled(at), { payload: { a: 'A' } }));
     const few = reads(size);
 
     expect(few).toBeGreaterThanOrEqual(size / 8);
@@ -3710,7 +3711,7 @@ describe('parser', () => {
   it('text holding no backslash is not searched for escape sequences', () => {
     // Every span of text, a key and an option value included, has its escape
     // sequences removed by a pattern, and a span with no backslash holds none.
-    const replaces = (message: string) => calls([[String.prototype, 'replace']], () => defaultParser.resolve(message, { payload: { a: 'A' } }));
+    const replaces = (message: string) => calls([[String.prototype, 'replace']], () => createParser().resolve(message, { payload: { a: 'A' } }));
 
     expect(replaces('Hello, {{a; A:{{a}} one; default:two}}!')).toBe(0);
     expect(replaces('Hello, \\{{a}}!')).toBeGreaterThan(0);

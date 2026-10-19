@@ -10,6 +10,23 @@
   off a resolution on Node 22. `cst` and `createExtractor` read names the same
   way. Nothing a message resolves to, and nothing the tree or the extractor
   describes, changes.
+* **A parser stops reading a message it keeps resolving.** `resolve` read a
+  message's text afresh on every call, placeholder by placeholder, though
+  what that text says does not change between calls. A parser now keeps what
+  it read off a text once it has resolved the text twice: at most 1 024
+  messages and 131 072 characters of them, the oldest making room, and none
+  longer than 8 192 characters. A text holding neither `{{` nor a backslash
+  is its own text, so it is neither read nor kept. On Node 22 a catalogue
+  message resolved a third time or more takes about 40 to 50 percent less
+  time, and one holding an escape and no `{{`, which is kept like it, about
+  three quarters less; text holding neither takes about a third less at the
+  length of a catalogue message, and about four fifths less from a few
+  hundred characters, on every call. A message with a placeholder or an
+  escape costs more on the calls that do not pay off: one that never comes
+  back about half a microsecond more per call, which is about half of a short
+  one, and one resolved exactly twice about twice as long over its two calls.
+  The payload, the props, the locale and the options are read on every call,
+  and nothing a message resolves to, and no report, changes.
 
 ## 3.1.2
 

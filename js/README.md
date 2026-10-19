@@ -118,6 +118,20 @@ takes the four inputs resolution is defined over, plus the message's own id:
 | `locale` | The locale the locale-dependent modifiers format for. |
 | `id` | The message's identifier. No step of resolution reads it; a report names it, so that a report says which message went looking. |
 
+A parser keeps what it read off a message's text — where its placeholders are,
+and what each spells — once it has resolved that text twice, so a catalogue
+resolved over and over reads each message on its first two resolutions and not
+after. What it keeps depends on the text alone: every resolution reads the
+payload, the props, the locale and the options afresh, and reports as the
+first one did. Each parser keeps at most 1 024 messages and 131 072 characters
+of them, the oldest making room, and none longer than 8 192 characters, which
+are read on every call, and none holding neither `{{` nor a backslash, which is
+its own text and so is never read; the bounds count characters, and a kept
+message takes more memory the more placeholders it holds. A text seen once is
+only remembered, as many again and as long, so a stream of messages that never
+come back pushes out nothing a parser keeps. It keeps a copy of each text, so a
+message cut out of a longer string holds nothing of that string alive.
+
 A caller that supplies no message — `undefined`, or a message no conversion
 describes — has supplied nothing to resolve, and the resolution is the empty
 string. Nothing stands in for it: the payload's `default` is there for the
