@@ -30,10 +30,24 @@ const MESSAGES = [
   'Total: {{amount:number}}, due {{due:date}}.',
 ];
 
+// Messages a catalogue holds as plain text, with no placeholder to resolve.
+const PLAIN = [
+  'Save changes',
+  'Your changes have been saved.',
+  'Delete this folder? Everything in it is deleted too, and this cannot be undone.',
+  'Signed in',
+  'No results match your search. Try fewer or different words.',
+];
+
 const PAYLOAD = { name: 'Ada', count: 3, gender: 'female', thread: 'Plans', folder: 'docs', amount: 1234.5, due: new Date(Date.UTC(2026, 0, 31)) };
 
 const nested = (depth) => `${'{{v; a:'.repeat(depth)}x${'}}'.repeat(depth)}`;
 const flat = (count) => Array.from({ length: count }, (_, index) => `{{p${index}}}`).join(' ');
+
+// A first resolution, through a parser that has seen no message yet, so a
+// row of an input's shape times the reading of it and not what a parser may
+// keep of it from the call before.
+const first = (message, payload) => () => createParser().resolve(message, { payload, locale: 'en' });
 
 // What resolving the message set reads of its payload: every trap a read can
 // go through, counted.
@@ -98,41 +112,39 @@ export default [
   { name: 'resolve: five catalogue messages', kind: 'time', run: () => () => {
     for (const message of MESSAGES) resolve(message, { payload: PAYLOAD, locale: 'en' });
   } },
-  { name: 'resolve: 5 000 placeholders', kind: 'time', run: () => {
-    const message = flat(5000);
-
-    return () => resolve(message, { payload: {}, locale: 'en' });
+  { name: 'resolve: five catalogue messages of plain text', kind: 'time', run: () => () => {
+    for (const message of PLAIN) resolve(message, { payload: PAYLOAD, locale: 'en' });
   } },
-  { name: 'resolve: nested 10 000 levels', kind: 'time', run: () => {
-    const message = nested(10000);
+  { name: 'resolve: five catalogue messages, each new to the parser', kind: 'time', run: () => () => {
+    const parser = createParser();
 
-    return () => resolve(message, { payload: { v: 'a' }, locale: 'en' });
+    for (const message of MESSAGES) parser.resolve(message, { payload: PAYLOAD, locale: 'en' });
   } },
-  { name: 'resolve: a placeholder of 10 000 blanks', kind: 'time', run: () => {
-    const message = `{{${' '.repeat(10000)}}}`;
+  { name: 'resolve: a stream of short messages, none seen before', kind: 'time', run: () => {
+    const parser = createParser();
+    let index = 0;
 
-    return () => resolve(message, { payload: {}, locale: 'en' });
+    // Shorter than 13 characters, so V8 lays each out in one piece,
+    // and never the same twice, however many calls a sample takes.
+    return () => parser.resolve(`{{a}}${(index++).toString(36)}`, { payload: { a: 'Ada' }, locale: 'en' });
   } },
-  { name: 'resolve: a key with 10 000 blanks inside', kind: 'time', run: () => {
-    const message = `{{a${' '.repeat(10000)}b}}`;
+  { name: 'resolve: a message of 12 000 characters, a new string each call', kind: 'time', run: () => {
+    const parser = createParser();
+    const text = ` world${'.'.repeat(11980)}`;
+    let index = 0;
 
-    return () => resolve(message, { payload: {}, locale: 'en' });
+    // Joined anew each call, as a host that writes its text per call hands
+    // it over, and shorter than the 16 384 characters past which V8
+    // may hash a text by its length alone, so a lookup of it would show.
+    return () => parser.resolve(`{{name}}${index++}${text}`, { payload: PAYLOAD, locale: 'en' });
   } },
-  { name: 'resolve: 1 000 placeholders that never close', kind: 'time', run: () => {
-    const message = '{{a; c:'.repeat(1000);
-
-    return () => resolve(message, { payload: {}, locale: 'en' });
-  } },
-  { name: 'resolve: 5 000 options', kind: 'time', run: () => {
-    const message = `{{a${'; a'.repeat(5000)}}}`;
-
-    return () => resolve(message, { payload: { a: 'a' }, locale: 'en' });
-  } },
-  { name: 'resolve: an option key of 50 000 characters', kind: 'time', run: () => {
-    const message = `{{a; ${'x'.repeat(50000)}:v}}`;
-
-    return () => resolve(message, { payload: { a: 'a' }, locale: 'en' });
-  } },
+  { name: 'resolve: 5 000 placeholders', kind: 'time', run: () => first(flat(5000), {}) },
+  { name: 'resolve: nested 10 000 levels', kind: 'time', run: () => first(nested(10000), { v: 'a' }) },
+  { name: 'resolve: a placeholder of 10 000 blanks', kind: 'time', run: () => first(`{{${' '.repeat(10000)}}}`, {}) },
+  { name: 'resolve: a key with 10 000 blanks inside', kind: 'time', run: () => first(`{{a${' '.repeat(10000)}b}}`, {}) },
+  { name: 'resolve: 1 000 placeholders that never close', kind: 'time', run: () => first('{{a; c:'.repeat(1000), {}) },
+  { name: 'resolve: 5 000 options', kind: 'time', run: () => first(`{{a${'; a'.repeat(5000)}}}`, { a: 'a' }) },
+  { name: 'resolve: an option key of 50 000 characters', kind: 'time', run: () => first(`{{a; ${'x'.repeat(50000)}:v}}`, { a: 'a' }) },
   { name: 'resolve: wrapper props of 5 000 entries', kind: 'time', run: () => {
     const payload = { v: { value: 'a', props: { test: Object.fromEntries(Array.from({ length: 5000 }, (_, index) => [`p${index}`, index])) } } };
 
