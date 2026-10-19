@@ -4,8 +4,12 @@
 #![forbid(unsafe_code)]
 #![warn(missing_docs)]
 
+mod cst;
+mod scan;
+mod syntax;
 mod value;
 
+pub use cst::{Children, NodeKind, NodeRef, Tree, cst};
 pub use value::{Array, Object, Value};
 
 #[cfg(doctest)]
