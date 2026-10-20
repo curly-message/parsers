@@ -23,6 +23,9 @@
         <testsuite name="runner">
             <directory>tests/Runner</directory>
         </testsuite>
+        <testsuite name="conformance">
+            <directory>tests/Conformance</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
