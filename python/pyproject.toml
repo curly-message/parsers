@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "curly-message"
 version = "0.0.0"
 description = "Python implementation of the Curly Message Format."
+readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -51,7 +52,9 @@ include = [
     "/tests",
     "/bench",
     "/build-constraints.txt",
+    "/CHANGELOG.md",
     "/LICENSE",
+    "/README.md",
     "/package.json",
     "/pyproject.toml",
     "/tasks.py",
