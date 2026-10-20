@@ -15,5 +15,18 @@ parameters:
     # A property that exists to be held, and so is never read, says so.
     propertyAlwaysReadTags:
         - '@held'
+    ignoreErrors:
+        # PHP iterates an object's visible properties one at a time, which
+        # PHPStan does not model, and a walk that stops early copies none.
+        -
+            identifier: foreach.nonIterable
+            path: src/Internal/Resolution.php
+            count: 1
+        # Letting go of a value runs its `__destruct`, which may raise, and
+        # which PHPStan does not model.
+        -
+            identifier: catch.neverThrown
+            path: src/Internal/Contained.php
+            count: 1
     bootstrapFiles:
         - vendor/autoload.php
