@@ -20,6 +20,7 @@ VENV = ROOT / ".venv"
 WHEEL_VENV = ROOT / ".venv-dist"
 CORE_VENV = ROOT / ".venv-core"
 CORE_WHEEL_VENV = ROOT / ".venv-core-dist"
+BENCH_VENV = ROOT / ".bench-venv"
 LOWEST_BABEL = "babel==2.14.0"
 """The oldest Babel the ``intl`` extra accepts, which ``test-lowest`` runs."""
 
@@ -92,7 +93,7 @@ def typecheck() -> None:
     _tool("mypy")
 
 
-def _wheel_venv(venv: Path, *, intl: bool) -> None:
+def _wheel_venv(venv: Path, *, intl: bool, test: bool = True) -> None:
     shutil.rmtree(venv, ignore_errors=True)
     _run("uv", "venv", venv, env=_env())
     requirements = venv / "requirements.txt"
@@ -102,8 +103,7 @@ def _wheel_venv(venv: Path, *, intl: bool) -> None:
         "--locked",
         *_extras(intl),
         "--no-default-groups",
-        "--group",
-        "test",
+        *(("--group", "test") if test else ()),
         "--no-emit-project",
         "--output-file",
         requirements,
@@ -191,7 +191,19 @@ def test_lowest() -> None:
     _suite(VENV, WHEEL_VENV, intl=True, lowest=True)
 
 
+def bench_venv(*, no_build: bool = False) -> None:
+    """The wheel and the ``intl`` extra, installed into ``.bench-venv`` for ``bench/rows.mjs``.
+
+    The wheel is built first, unless ``no_build`` is given and ``dist/``
+    already holds one: the release measures the very wheel it publishes.
+    """
+    if not (no_build and list(DIST.glob("*.whl"))):
+        build()
+    _wheel_venv(BENCH_VENV, intl=True, test=False)
+
+
 TASKS: dict[str, Callable[[], None]] = {
+    "bench-venv": bench_venv,
     "build": build,
     "lint": lint,
     "lint-fix": lint_fix,
@@ -203,8 +215,11 @@ TASKS: dict[str, Callable[[], None]] = {
 
 
 def main(argv: list[str]) -> None:
+    if argv == ["bench-venv", "--no-build"]:
+        bench_venv(no_build=True)
+        return
     if len(argv) != 1 or argv[0] not in TASKS:
-        raise SystemExit(f"usage: tasks.py {{{','.join(TASKS)}}}")
+        raise SystemExit(f"usage: tasks.py {{{','.join(TASKS)}}} (bench-venv [--no-build])")
     TASKS[argv[0]]()
 
 
