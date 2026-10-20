@@ -16,9 +16,10 @@ assert_eq!(parser.resolve(greeting, &Context::new()), "Hello, Guest!");
 
 The parser claims the Core level of the format, the syntax, the resolution
 and the comparisons `eq`, `ne`, `lt`, `lte`, `gt` and `gte`, and the
-Extensions level: the modifiers a host registers. A placeholder naming a
-modifier nobody registered resolves to its fallback chain and reports
-`unknown-modifier`; it is never run as a comparison instead.
+Extensions level: the modifiers a host registers. It claims the Intl level
+too where it is handed a facility to format with (see [Intl](#intl)). A
+placeholder naming a modifier nobody registered resolves to its fallback chain
+and reports `unknown-modifier`; it is never run as a comparison instead.
 
 ## Resolving a message
 
@@ -96,6 +97,128 @@ panic are failures: the placeholder takes its fallback chain and reports
 `eq` included, replaces the comparison: it is called with whatever options
 the placeholder declares, none included.
 
+## Intl
+
+The formatting modifiers `number`, `currency`, `date` and `ago`, and the
+plural selections `plural` and `ordinal` (sections 11.2 and 11.5), delegate
+to a facility the parser is built with: an [`Intl`], handed a request in the
+vocabulary of ECMA-402, the facility, the options it is constructed with and
+the input. The crate's own is `IcuIntl`, over [ICU4X](https://github.com/unicode-org/icu4x),
+behind the `intl` feature:
+
+```sh
+cargo add curly-message-parser --features intl
+```
+
+```rust
+# #[cfg(feature = "intl")]
+# {
+use curly_message_parser::{Context, IcuIntl, Object, Parser};
+
+let parser = Parser::builder().intl(IcuIntl::new()).build();
+let payload = Object::new().with("n", 1234.5678).with("files", 3);
+let context = Context::new().payload(&payload).locale("en");
+
+assert_eq!(parser.resolve("{{n:number}}", &context), "1,234.57");
+assert_eq!(
+    parser.resolve("{{files:plural; one:# file; other:# files}}", &context),
+    "# files"
+);
+# }
+```
+
+The feature configures nothing. A parser claims the Intl level only where
+its builder is handed a facility, so one crate enabling `intl` never changes
+what another crate's parser resolves: without `.intl(..)`, each of the six
+names is a modifier nobody registered. A host may hand a facility of its own,
+with or without the feature, and a modifier a host registers under one of the
+names still replaces the format's. A facility that refuses a request, or
+panics, is a modifier that could not answer: the placeholder takes its
+fallback chain and reports `failed-modifier`. With no locale, or an empty
+one, a formatting modifier renders the empty string and reports
+`missing-locale`.
+
+`IcuIntl` judges a request as ECMA-402 does, and reads the options as
+ECMA-402 reads them, coercions included: a property ECMA-402 raises a
+`RangeError` or a `TypeError` for is a refusal, a `currency` style naming no
+well-formed `currency` among them. So is a locale ECMA-402 reads as no
+structurally valid language tag (`en_US`, `i-klingon`, `en-fonipa-fonipa`).
+A well-formed locale ICU4X holds no data for (`zz`) formats with the data its
+locale fallback finds, the root locale's at last, as ECMA-402 falls back to a
+locale it holds. `IcuIntl` reads a property as
+ECMAScript's ToNumber and ToString would, except that an array or an object
+reads as no number and as no text, where ECMAScript would read the text its
+`toString` gives. A facility a host hands judges its own requests: the parser
+hands it each one with the locale as the caller wrote it.
+
+* **Locale data** is ICU4X 2.3's, compiled into the binary: no file to ship,
+  and the linker drops what is not used. It adds about 7 MB to a stripped
+  release binary (x86_64 Linux: 0.5 MB without the feature, 7.4 MB with every
+  modifier used), most of it time zones and their names. ICU4X 2.3 is a
+  locked dependency: with `intl`, an application's graph must hold ICU4X
+  2.3.x. What ICU4X has to say about data it lacks goes to the
+  [`log`](https://docs.rs/log) facade, which the application routes.
+* **Dates** are read as a timestamp first, as section 11.2 orders it, and
+  otherwise by this grammar: `YYYY[-MM[-DD]]`, or `+YYYYYY[-MM[-DD]]` or
+  `-YYYYYY[-MM[-DD]]`; then optionally `T`, `t` or one space and
+  `HH:mm[:ss[.fraction]]`; then, after at most one space, `Z`, `z`, `UTC`,
+  or an offset of `+` or `-` and `HH:mm`, `HHmm` or `HH:mm:ss`; then any
+  number of bracketed annotations, read and ignored. That reads RFC 3339 but
+  for a leap second (`23:59:60`), which Node's `Date.parse` does not read
+  either, `Value::Date`'s own text, jiff's `Timestamp` and `Zoned`, chrono's
+  `DateTime` and `NaiveDateTime` and the `time` crate's `OffsetDateTime` as
+  their `Display` writes them. What names no offset is in UTC, and a day past
+  the month's last rolls into the next (`2024-02-30` is March 1), as
+  `Date.parse` rolls it. Text the grammar does not read, a phrase such as
+  `next monday` among it, is no date: the placeholder takes its fallback
+  chain and reports `failed-modifier`.
+* **Time zones.** A request naming no `timeZone` formats in UTC: there is no
+  host zone to read, and reading the system's would make a message's text
+  depend on the machine it is resolved on. `UTC`, `Etc/UTC`, `Etc/GMT` and
+  `GMT` are UTC; `+` or `-` and `HH`, `HHmm` or `HH:mm` is a fixed offset;
+  and an IANA name is read from
+  [jiff](https://github.com/BurntSushi/jiff)'s bundled time zone database at
+  the instant formatted. Past the last instant jiff represents (year 9999),
+  the offset is the one at the instant whole 400-year Gregorian cycles
+  earlier, on which a zone's yearly rule repeats; before the first, it is
+  the one there.
+* **What `IcuIntl` cannot express** is listed in `UNEXPRESSIBLE`. A request
+  naming such a property formats with what is expressed, as section 11.2 has
+  it, and never takes the chain on its account:
+
+  | Request | Properties | When |
+  | --- | --- | --- |
+  | `NumberFormat` | `notation`, `compactDisplay`, `unit`, `unitDisplay`, `localeMatcher` | always |
+  | `NumberFormat` | `minimumIntegerDigits`, `minimumFractionDigits`, `maximumFractionDigits`, `minimumSignificantDigits`, `maximumSignificantDigits`, `roundingIncrement`, `roundingMode`, `roundingPriority`, `trailingZeroDisplay`, `useGrouping` | `style` is `currency`: ICU4X formats an amount with the currency's own digits and the locale's grouping |
+  | `DateTimeFormat` | `weekday`, `era`, `year`, `month`, `day`, `dayPeriod`, `hour`, `minute`, `second`, `fractionalSecondDigits`, `timeZoneName`, `hour12`, `hourCycle`, `formatMatcher`, `localeMatcher` | always |
+  | `RelativeTimeFormat` | `localeMatcher` | always |
+  | `PluralRules` | `localeMatcher` | always |
+
+* **Text that differs from Node's.** Where both express a request, the text
+  is CLDR's through ICU4X's patterns, and a test holds it to Node 22's
+  answers. Those it knows to differ:
+  * a time writes CLDR's narrow no-break space before its day period
+    (`10:00\u{202f}AM`), where V8 writes a space;
+  * with no style, ICU4X pads day and month outside English: `05.03.2024`
+    (de), `05. 03. 2024` (cs), `2024/03/05` (ja), `05-03-2024` (nl),
+    `05.03.2024` (pl), where Node writes `5.3.2024`, `5. 3. 2024`,
+    `2024/3/5`, `5-3-2024`, `5.03.2024`;
+  * before year 1, ICU4X shows the era (`1/1/2 BC`), which Node omits;
+  * with `dateStyle: "short"`, a year outside 1950 to 2049 is written in full
+    (`6/15/2050`, `15.06.2050` in de), where Node writes two digits
+    (`6/15/50`, `15.06.50`);
+  * Czech `timeStyle: "full"` has no comma before the zone name;
+  * a locale ICU4X holds no data for formats with the root locale's
+    (`1970-01-01` at `zz`), where Node formats with its default locale's
+    (`1/1/1970`);
+  * English digits of the `arab` numbering system keep the Latin grouping
+    separator.
+
+The ICU4X crates are licensed under
+[Unicode-3.0](https://www.unicode.org/license.txt), and jiff and its time
+zone database under MIT or the Unlicense; enabling `intl` brings their terms
+into the binary.
+
 ## Reports
 
 What a resolution could not resolve leaves through the handler a parser is
@@ -124,8 +247,8 @@ contents of a JSON string, every line terminator included, so a message
 cannot forge a line wherever a report is written. Reports are emitted in walk
 order. A handler that panics is contained, and the resolution carries on.
 
-Containment catches a panic as it unwinds, a modifier's or a `Display`'s as
-much as a handler's, so it needs the default
+Containment catches a panic as it unwinds, a modifier's, a facility's or a
+`Display`'s as much as a handler's, so it needs the default
 `panic = "unwind"`; under `panic = "abort"` a panic ends the process wherever
 it happens, and so does the refusal of a resolution past `MAX_REENTRY`
 (below). The process's panic hook still runs for a contained panic, and
@@ -147,9 +270,9 @@ A placeholder nested past `MAX_NESTING` takes its fallback chain and reports
 message nested any depth resolves without a call per level, and so does a
 value nested any depth convert. What does reach the thread's stack is host
 code the parser calls: a modifier, and the option or default it asks for,
-each rendered by a call of its own and so at most `MAX_NESTING` deep; and a
-resolution a modifier, a report handler or a value's `Display` starts from
-inside another.
+each rendered by a call of its own and so at most `MAX_NESTING` deep; the
+[`Intl`] facility a parser formats with; and a resolution a modifier, the
+facility, a report handler or a value's `Display` starts from inside another.
 
 A thread that runs out of stack aborts the process, which nothing can
 contain, so `MAX_REENTRY` is the bound that stands in for the host's own
@@ -160,16 +283,16 @@ the ones around it. A resolution asked for while `MAX_REENTRY` are in
 progress on its thread is refused before anything is read: `resolve` unwinds
 with [`ReentryLimit`] into the host code that asked, without running the
 panic hook. That code may catch it, as it may any panic. One it lets pass is
-contained as a panic of host code is: a modifier's placeholder takes its
-fallback chain and reports `failed-modifier`, a value's `Display` describes
-nothing, and a handler's report goes undelivered. One asked for while the
-thread already unwinds, by a `Drop` that resolves, is refused without
-unwinding, since an unwind leaving a `Drop` there would abort the process:
-`resolve` answers the empty string to its caller, and the host code the
-parser called that asked for it counts as failed all the same, as one that
-lets the refusal pass does. A resolution asked for where none is in
-progress on its thread is never refused, the one a host hands to a thread of
-its own included, so a chain that goes on from thread to thread is the
+contained as a panic of host code is: a modifier's or a facility's
+placeholder takes its fallback chain and reports `failed-modifier`, a value's
+`Display` describes nothing, and a handler's report goes undelivered. One
+asked for while the thread already unwinds, by a `Drop` that resolves, is
+refused without unwinding, since an unwind leaving a `Drop` there would
+abort the process: `resolve` answers the empty string to its caller, and the
+host code the parser called that asked for it counts as failed all the same,
+as one that lets the refusal pass does. A resolution asked for where none is
+in progress on its thread is never refused, the one a host hands to a thread
+of its own included, so a chain that goes on from thread to thread is the
 host's to bound.
 
 What the crate keeps for this bound is the operating-system thread's, and
@@ -198,8 +321,24 @@ number of resolutions in progress on it.
 Tests start resolutions inside one another along each of these ways until
 one is refused, and the worst cases hold `MAX_REENTRY` resolutions at once,
 each as deep into its options as a placeholder resolves, on a thread of
-512 KiB, in a debug build. On x86-64 Linux the deepest takes about 305 KiB
-there, and about 95 KiB in a release build.
+512 KiB, in a debug build, among them one for each request of the facility
+whose options a resolution waits on. On x86-64 Linux with Rust 1.97 the
+deepest, each resolution waiting on a date request's `timeZone` in a zone
+jiff reads no rules for, such as `UTC`, and the innermost formatting the
+date, takes about 370 KiB there (about 355 KiB with Rust 1.88); in a release
+build the deepest takes about 130 KiB. A thread that formats dates in named
+zones through `IcuIntl` may need more: jiff reads a zone's rules the first
+time the process formats in a name of it, on whichever thread does so,
+and keeps them under that name. Each such first use costs a debug build
+about 230 KiB of stack on its own, whatever zones the process used before,
+and an alias is a name of its own: `US/Eastern` is read again after
+`America/New_York`. The worst case there, each resolution waiting on a date
+request's `timeZone` whose `Display` starts the next, and the innermost
+formatting in a zone name the process has not used yet, runs on a thread of
+1 MiB, the size a thread that may be the first of its process to format in a
+zone name needs. On x86-64 Linux with Rust 1.97 it takes about 600 KiB in a
+debug build (about 580 KiB with Rust 1.88), and about 120 KiB in a release
+build.
 
 ## Values
 
@@ -284,6 +423,7 @@ resolution resolves.
 
 [MIT](LICENSE)
 
+[`Intl`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/trait.Intl.html
 [`Value`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/enum.Value.html
 [`Object`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/struct.Object.html
 [`Props`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/struct.Props.html

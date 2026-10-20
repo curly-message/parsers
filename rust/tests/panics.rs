@@ -15,8 +15,8 @@ use std::panic::AssertUnwindSafe;
 use std::sync::{Arc, Mutex, Once};
 
 use curly_message_parser::{
-    Context, MAX_NESTING, MAX_REENTRY, ModifierError, ModifierInput, Object, Parser, ReentryLimit,
-    Report, Value,
+    Category, Context, Intl, MAX_NESTING, MAX_REENTRY, ModifierError, ModifierInput, Object,
+    Parser, ParserBuilder, ReentryLimit, Refusal, Report, Request, Value,
 };
 
 type Answer = Result<Option<Value>, ModifierError>;
@@ -529,6 +529,43 @@ fn a_modifier_that_panics_is_contained() {
     );
 }
 
+struct PanickingIntl;
+
+impl Intl for PanickingIntl {
+    fn format(&self, _: &str, _: &Request) -> Result<String, Refusal> {
+        panic!("a facility that panics as it formats")
+    }
+
+    fn select(&self, _: &str, _: &Request) -> Result<Category, Refusal> {
+        std::panic::panic_any(DropPanics)
+    }
+}
+
+#[test]
+fn a_facility_that_panics_is_contained() {
+    quiet();
+
+    let (reports, handler) = recording();
+    let parser = Parser::builder()
+        .intl(PanickingIntl)
+        .on_report(handler)
+        .build();
+    let payload = Object::new().with("v", 1);
+    let context = Context::new().payload(&payload).locale("en");
+
+    assert_eq!(
+        parser.resolve(
+            "{{v:number; default:a}}|{{v:plural; one:x; default:b}}|{{v:date}}",
+            &context
+        ),
+        "a|b|"
+    );
+    assert_eq!(
+        *reports.lock().unwrap(),
+        ["failed-modifier", "failed-modifier", "failed-modifier"]
+    );
+}
+
 // A resolution asked for past `MAX_REENTRY` unwinds into the host code that
 // asked, before anything is read. Each test runs on a thread of the size the
 // README says a thread needs for the worst case.
@@ -734,12 +771,31 @@ fn a_chain_handed_to_another_thread_is_not_counted_there() {
     });
 }
 
+// Where the crate is built with the format's own facility, the worst case
+// asks it for a plural category at the deepest a placeholder resolves, beside
+// the modifier whose option holds the one nested past it; each resolution
+// then shows the category's option once.
+#[cfg(feature = "intl")]
+fn deepest(builder: ParserBuilder) -> (ParserBuilder, &'static str, &'static str) {
+    (
+        builder.intl(curly_message_parser::IcuIntl::new()),
+        "{{n:plural; one:p; other:q}}",
+        "p",
+    )
+}
+
+#[cfg(not(feature = "intl"))]
+fn deepest(builder: ParserBuilder) -> (ParserBuilder, &'static str, &'static str) {
+    (builder, "", "")
+}
+
 // A message nesting a modifier that reads an option holding the next, as
 // deep as a placeholder resolves, around `innermost`, nested past it.
-fn reading_options(innermost: &str) -> String {
-    (1..MAX_NESTING).fold(format!("x{{{{v:deeper; a:{innermost}}}}}"), |inner, _| {
-        format!("{{{{v:deeper; a:{inner}}}}}")
-    })
+fn reading_options(leaf: &str, innermost: &str) -> String {
+    (1..MAX_NESTING).fold(
+        format!("{leaf}x{{{{v:deeper; a:{innermost}}}}}"),
+        |inner, _| format!("{{{{v:deeper; a:{inner}}}}}"),
+    )
 }
 
 // The worst case of section 13 for the thread's stack: `MAX_REENTRY`
@@ -751,20 +807,24 @@ fn a_resolution_reaching_itself_through_modifiers_stops_at_the_reentry_limit() {
     quiet();
 
     on_reentry_stack(|| {
-        let nested = reading_options("{{v:again}}");
+        let (builder, leaf, selected) = deepest(Parser::builder());
+        let nested = reading_options(leaf, "{{v:again}}");
         let (reports, record) = recording();
         let slot: Slot = Arc::default();
         let again = Arc::clone(&slot);
         let message = nested.clone();
-        let built = Parser::builder()
+        let built = builder
             .on_report(move |report| {
-                let payload = Object::new().with("v", "a");
+                let payload = Object::new().with("v", "a").with("n", 1);
 
                 record(report);
 
                 // The refusal of the one past the bound unwinds out of the
                 // handler, which leaves its report undelivered.
-                parser_in(&again).resolve(message.as_str(), &Context::new().payload(&payload));
+                parser_in(&again).resolve(
+                    message.as_str(),
+                    &Context::new().payload(&payload).locale("en"),
+                );
             })
             .modifier("deeper", |input: &ModifierInput<'_>| {
                 text(input.option_value(0).unwrap_or_default())
@@ -773,11 +833,11 @@ fn a_resolution_reaching_itself_through_modifiers_stops_at_the_reentry_limit() {
 
         *slot.lock().unwrap() = Some(built.clone());
 
-        let payload = Object::new().with("v", "a");
-        let context = Context::new().payload(&payload);
+        let payload = Object::new().with("v", "a").with("n", 1);
+        let context = Context::new().payload(&payload).locale("en");
         let text = built.resolve(nested.as_str(), &context);
 
-        assert_eq!(text, "x");
+        assert_eq!(text, format!("{selected}x"));
         assert_eq!(
             std::mem::take(&mut *reports.lock().unwrap()),
             vec!["nesting-limit"; MAX_REENTRY]
@@ -799,8 +859,10 @@ struct Restarts {
 impl fmt::Display for Restarts {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let payload = self.payload.lock().unwrap().clone().unwrap();
-        let text =
-            parser_in(&self.slot).resolve(self.message.as_str(), &Context::new().payload(&payload));
+        let text = parser_in(&self.slot).resolve(
+            self.message.as_str(),
+            &Context::new().payload(&payload).locale("en"),
+        );
 
         formatter.write_str(&text)
     }
@@ -814,12 +876,13 @@ impl fmt::Display for Restarts {
 #[test]
 fn a_resolution_begun_from_the_deepest_option_resolves_whole() {
     on_reentry_stack(|| {
-        let message = reading_options("{{x}}");
+        let (builder, leaf, selected) = deepest(Parser::builder());
+        let message = reading_options(leaf, "{{x}}");
         let slot: Slot = Arc::default();
         let calls: Arc<Mutex<usize>> = Arc::default();
         let counted = Arc::clone(&calls);
         let (reports, record) = recording();
-        let parser = Parser::builder()
+        let parser = builder
             .on_report(record)
             .modifier("deeper", move |input: &ModifierInput<'_>| {
                 *counted.lock().unwrap() += 1;
@@ -828,7 +891,7 @@ fn a_resolution_begun_from_the_deepest_option_resolves_whole() {
             })
             .build();
         let cell: Arc<Mutex<Option<Object>>> = Arc::default();
-        let payload = Object::new().with("v", "a").with(
+        let payload = Object::new().with("v", "a").with("n", 1).with(
             "default",
             Value::host(Restarts {
                 slot: Arc::clone(&slot),
@@ -840,12 +903,15 @@ fn a_resolution_begun_from_the_deepest_option_resolves_whole() {
         *slot.lock().unwrap() = Some(parser.clone());
         *cell.lock().unwrap() = Some(payload.clone());
 
-        let text = parser.resolve(message.as_str(), &Context::new().payload(&payload));
+        let text = parser.resolve(
+            message.as_str(),
+            &Context::new().payload(&payload).locale("en"),
+        );
 
         // The one past the bound is refused, so the `default` that asked
         // for it describes nothing, and the deepest resolution's chain ends
         // there.
-        assert_eq!(text, "x".repeat(MAX_REENTRY));
+        assert_eq!(text, format!("{selected}x").repeat(MAX_REENTRY));
         assert_eq!(*calls.lock().unwrap(), MAX_REENTRY * MAX_NESTING);
 
         let mut expected = vec!["nesting-limit"; MAX_REENTRY];

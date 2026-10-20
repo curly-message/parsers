@@ -82,7 +82,7 @@ fn a_registered_modifier_answers_for_its_placeholder() {
     );
     assert_eq!(
         format!("{parser:?}"),
-        "Parser { levels: [Core, Extensions], recognize_wrappers: true, on_report: false, modifiers: 2 }"
+        "Parser { levels: [Core, Extensions], recognize_wrappers: true, on_report: false, modifiers: 2, intl: false }"
     );
 }
 

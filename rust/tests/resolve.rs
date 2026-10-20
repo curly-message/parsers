@@ -536,6 +536,6 @@ fn a_parser_claims_the_core_and_extensions_levels() {
     assert_eq!(Level::Extensions.as_str(), "extensions");
     assert_eq!(
         format!("{:?}", Parser::default()),
-        "Parser { levels: [Core, Extensions], recognize_wrappers: true, on_report: false, modifiers: 0 }"
+        "Parser { levels: [Core, Extensions], recognize_wrappers: true, on_report: false, modifiers: 0, intl: false }"
     );
 }
