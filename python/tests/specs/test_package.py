@@ -1,12 +1,14 @@
-"""What the wheel a release ships carries.
+"""What the wheel a release ships carries, and what a release keeps in step with it.
 
 ``tasks.py test`` names the wheel it built in ``CURLY_MESSAGE_WHEEL``; run any
-other way, there is no wheel to read and these tests skip.
+other way, there is no wheel to read and the tests of the wheel skip.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import tomllib
 import zipfile
 from email.parser import Parser
 from pathlib import Path
@@ -55,3 +57,15 @@ def test_wheel_depends_on_nothing_but_the_intl_extra(wheel: zipfile.ZipFile) -> 
     ]
     assert metadata["Name"] == "curly-message"
     assert metadata["Requires-Python"] == ">=3.11"
+
+
+def test_the_benchmark_manifest_names_the_version_the_project_does() -> None:
+    # bench/harness.mjs heads its table with package.json's version, so the
+    # release writes the one version into both.
+    project = tomllib.loads(ROOT.joinpath("pyproject.toml").read_text(encoding="utf-8"))
+    manifest = json.loads(ROOT.joinpath("package.json").read_text(encoding="utf-8"))
+    assert manifest == {
+        "name": "curly-message-python",
+        "version": project["project"]["version"],
+        "private": True,
+    }
