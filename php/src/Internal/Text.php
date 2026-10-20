@@ -38,6 +38,9 @@ final class Text
     /** @var array<string, true>|null */
     private static ?array $blanks = null;
 
+    /** @var array{string, string, array<string, array<string, string>>, int}|null */
+    private static ?array $marks = null;
+
     /**
      * How many bytes the character at `$at` spans, reading no byte at or past
      * `$to`: a well-formed UTF-8 sequence (Unicode Table 3-7), or one byte.
@@ -82,6 +85,28 @@ final class Text
         }
 
         return $size;
+    }
+
+    /**
+     * The code point the character at `$at` encodes, or -1 for a byte that
+     * begins no well-formed sequence.
+     */
+    public static function codePoint(string $text, int $at): int
+    {
+        $size = self::charLength($text, $at, strlen($text));
+        $lead = ord($text[$at]);
+
+        if ($size === 1) {
+            return $lead < 0x80 ? $lead : -1;
+        }
+
+        $codePoint = $lead & (0xFF >> ($size + 1));
+
+        for ($index = 1; $index < $size; $index += 1) {
+            $codePoint = ($codePoint << 6) | (ord($text[$at + $index]) & 0x3F);
+        }
+
+        return $codePoint;
     }
 
     /**
@@ -189,6 +214,100 @@ final class Text
         }
 
         return $output;
+    }
+
+    /**
+     * Text with the whitespace class removed from both ends, every blank
+     * being padding: a value, which no escape sequence claims anything of.
+     */
+    public static function unpadded(string $text): string
+    {
+        self::$blanks ??= array_fill_keys(self::WHITESPACE, true);
+        $from = 0;
+        $to = strlen($text);
+
+        // A blank that begins on an ASCII byte is that byte, and one longer
+        // ends on a byte past ASCII, so text that begins and ends on an ASCII
+        // character outside the class has no padding.
+        if ($to > 0 && ord($text[0]) < 0x80 && ord($text[$to - 1]) < 0x80 && !isset(self::$blanks[$text[0]]) && !isset(self::$blanks[$text[$to - 1]])) {
+            return $text;
+        }
+
+        // Padding is marked a slice at a time from each end inward, so only it
+        // and one slice past it are read; a blank a slice's edge cuts is read
+        // again whole with the next.
+        $cut = self::marks()[3];
+
+        for ($size = 64; $from < $to; $size = min($size * 2, 65536)) {
+            $slice = min($size, $to - $from);
+            $end = $from + $slice;
+            $run = strspn(self::marked(substr($text, $from, $slice)), "\0");
+            $from += $run;
+
+            if ($run < $slice && ($end === $to || $run < $slice - $cut)) {
+                break;
+            }
+        }
+
+        for ($size = 64; $to > $from; $size = min($size * 2, 65536)) {
+            $slice = min($size, $to - $from);
+            $start = $to - $slice;
+            $run = strspn(strrev(self::marked(substr($text, $start, $slice))), "\0");
+            $to -= $run;
+
+            if ($run < $slice && ($start === $from || $run < $slice - $cut)) {
+                break;
+            }
+        }
+
+        return substr($text, $from, $to - $from);
+    }
+
+    /**
+     * What marking a slice reads: the single-byte blanks and their marks, the
+     * longer blanks and their marks by the byte they lead with, and the most
+     * bytes of a blank a slice's edge can cut off.
+     *
+     * @return array{string, string, array<string, array<string, string>>, int}
+     */
+    private static function marks(): array
+    {
+        if (self::$marks === null) {
+            $bytes = array_filter(self::WHITESPACE, static fn(string $blank): bool => strlen($blank) === 1);
+            $byLead = [];
+
+            foreach (array_diff(self::WHITESPACE, $bytes) as $blank) {
+                $byLead[$blank[0]][$blank] = str_repeat("\0", strlen($blank));
+            }
+
+            self::$marks = [
+                "\0" . implode('', $bytes),
+                "\1" . str_repeat("\0", count($bytes)),
+                $byLead,
+                max(array_map('strlen', self::WHITESPACE)) - 1,
+            ];
+        }
+
+        return self::$marks;
+    }
+
+    /**
+     * The slice with each blank turned into as many NUL bytes as it spans,
+     * and each NUL byte of its own into another byte. No member holds part
+     * of another, so the order they are replaced in changes nothing.
+     */
+    private static function marked(string $slice): string
+    {
+        [$bytes, $nuls, $byLead] = self::marks();
+        $slice = strtr($slice, $bytes, $nuls);
+
+        foreach ($byLead as $lead => $blanks) {
+            if (str_contains($slice, $lead)) {
+                $slice = strtr($slice, $blanks);
+            }
+        }
+
+        return $slice;
     }
 
     /**
