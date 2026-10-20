@@ -59,6 +59,13 @@ def test_wheel_depends_on_nothing_but_the_intl_extra(wheel: zipfile.ZipFile) -> 
     assert metadata["Requires-Python"] == ">=3.11"
 
 
+def test_wheel_describes_the_package_with_the_readme(wheel: zipfile.ZipFile) -> None:
+    # The registry's page for a release is the description its wheel carries.
+    metadata = Parser().parsestr(_metadata(wheel))
+    assert metadata["Description-Content-Type"] == "text/markdown"
+    assert metadata.get_payload() == ROOT.joinpath("README.md").read_text(encoding="utf-8")
+
+
 def test_the_benchmark_manifest_names_the_version_the_project_does() -> None:
     # bench/harness.mjs heads its table with package.json's version, so the
     # release writes the one version into both.
