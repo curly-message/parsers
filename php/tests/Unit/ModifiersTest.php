@@ -11,6 +11,7 @@ use CurlyMessage\Parser;
 use CurlyMessage\ReentryLimit;
 use CurlyMessage\Undefined;
 use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\Attributes\RequiresPhpExtension;
 use PHPUnit\Framework\TestCase;
 
 final class ModifiersTest extends TestCase
@@ -180,12 +181,6 @@ final class ModifiersTest extends TestCase
     /** @return iterable<string, array{\Closure(ModifierInput): mixed}> */
     public static function hanging(): iterable
     {
-        yield 'an answer hung on the props' => [static function (ModifierInput $in): Releasing {
-            $answer = new Releasing(static fn(): never => throw new \RuntimeException('released'));
-            $in->props['kept'] = $answer;
-
-            return $answer;
-        }];
         yield 'an answer hung on the options' => [static function (ModifierInput $in): Releasing {
             $answer = new Releasing(static fn(): never => throw new \RuntimeException('released'));
             // PHP holds the list to no type of element, so a host may.
@@ -560,17 +555,134 @@ final class ModifiersTest extends TestCase
         $seen = [];
         $parser = $this->parser(
             customModifiers: ['m' => static function (ModifierInput $in) use (&$seen): string {
-                $seen[] = $in->props;
-                $in->props['written'] = true;
+                $seen[] = $in->props->toArray();
 
                 return 'M';
             }],
             modifierDefaults: ['m' => ['a' => 1, 'b' => 1, 'c' => 1], 'eq' => ['other' => 1]],
         );
-        $payload = ['v' => ['value' => 'x', 'props' => ['m' => (object) ['c' => 3, 'd' => Undefined::Value]]], 'w' => 'y'];
+        $payload = [
+            'v' => ['value' => 'x', 'props' => ['m' => (object) ['c' => 3, 'd' => Undefined::Value]]],
+            'u' => ['value' => 'x', 'props' => ['m' => ['e' => 5, 'b' => Undefined::Value, 'a' => null]]],
+            'w' => 'y',
+        ];
 
-        self::assertSame('MM', $parser->resolve('{{v:m}}{{w:m}}', $payload, ['m' => ['b' => 2, 'c' => 2]]));
-        self::assertSame([['a' => 1, 'b' => 2, 'c' => 3], ['a' => 1, 'b' => 2, 'c' => 2]], $seen);
+        self::assertSame('MMM', $parser->resolve('{{v:m}}{{w:m}}{{u:m}}', $payload, ['m' => ['b' => 2, 'c' => 2]]));
+        self::assertSame([['a' => 1, 'b' => 2, 'c' => 3], ['a' => 1, 'b' => 2, 'c' => 2], ['a' => null, 'b' => 2, 'c' => 2, 'e' => 5]], $seen);
+    }
+
+    // The properties are read as an array is, a wrapper's own lying over
+    // those every placeholder shares, and a property a layer holds the
+    // host's undefined under is one it does not name.
+    public function testReadsThePropsAModifierIsHandedAsAnArrayIsRead(): void
+    {
+        $seen = [];
+        $parser = $this->parser(
+            customModifiers: ['m' => static function (ModifierInput $in) use (&$seen): string {
+                $props = $in->props;
+                $seen[] = [
+                    $props['a'], $props['c'], $props['missing'] ?? 'none', $props->get('missing', 'none'), $props->get('n', 'none'),
+                    isset($props['c']), isset($props['n']), isset($props['d']), $props->has('n'), $props->has('d'), $props->has(1.5),
+                    count($props), iterator_to_array($props), $props['1'], $props[1],
+                ];
+
+                return 'M';
+            }],
+            modifierDefaults: ['m' => ['a' => 1, 'c' => 1, 'n' => null, 1 => 'one']],
+        );
+        $payload = ['v' => ['value' => 'x', 'props' => ['m' => ['c' => 3, 'd' => Undefined::Value, 'a' => Undefined::Value]]], 'w' => 'y'];
+
+        self::assertSame('MM', $parser->resolve('{{v:m}}{{w:m}}', $payload));
+        self::assertSame([
+            [1, 3, 'none', 'none', null, true, false, false, true, false, false, 4, ['a' => 1, 'c' => 3, 'n' => null, 1 => 'one'], 'one', 'one'],
+            [1, 1, 'none', 'none', null, true, false, false, true, false, false, 4, ['a' => 1, 'c' => 1, 'n' => null, 1 => 'one'], 'one', 'one'],
+        ], $seen);
+    }
+
+    // A property a wrapper holds `Undefined::Value` under is one it does not
+    // name, where no layer beneath it names any either.
+    public function testNamesNoPropertyAWrapperAloneLeavesUndefined(): void
+    {
+        $seen = [];
+        $parser = $this->parser(customModifiers: ['m' => static function (ModifierInput $in) use (&$seen): string {
+            $seen[] = [count($in->props), $in->props->toArray(), iterator_to_array($in->props), $in->props->has('d'), $in->props['d'] ?? 'none'];
+
+            return 'M';
+        }]);
+        $payload = ['v' => ['value' => 'x', 'props' => ['m' => ['d' => Undefined::Value, 'c' => 3]]], 'w' => ['value' => 'y', 'props' => ['m' => ['d' => Undefined::Value]]]];
+
+        self::assertSame('MM', $parser->resolve('{{v:m}}{{w:m}}', $payload));
+        self::assertSame([[1, ['c' => 3], ['c' => 3], false, 'none'], [0, [], [], false, 'none']], $seen);
+    }
+
+    /** @return iterable<string, array{\Closure(ModifierInput): mixed, string, list<string>}> */
+    public static function propsWriters(): iterable
+    {
+        yield 'a property set' => [static function (ModifierInput $in): string {
+            $in->props['written'] = true;
+
+            return 'M';
+        }, 'DDD', ['failed-modifier', 'failed-modifier', 'failed-modifier']];
+        yield 'a property removed' => [static function (ModifierInput $in): string {
+            unset($in->props['a']);
+
+            return 'M';
+        }, 'DDD', ['failed-modifier', 'failed-modifier', 'failed-modifier']];
+        yield 'a property written by one placeholder alone' => [static function (ModifierInput $in): string {
+            if ($in->value === 'x') {
+                $in->props['a'] = 2;
+            }
+
+            return 'M' . json_encode($in->props['a']);
+        }, 'DM1M1', ['failed-modifier']];
+        // The near misses: an array of the modifier's own is its to write,
+        // and so is what it was handed in place of the properties.
+        yield 'a copy written' => [static function (ModifierInput $in): string {
+            $props = $in->props->toArray();
+            $props['a'] = 2;
+
+            return 'M' . $props['a'] . json_encode($in->props['a']);
+        }, 'M21M21M21', []];
+    }
+
+    // Every placeholder naming a modifier is handed the properties the
+    // shared layers hold under its name, the same ones, so nothing writes
+    // into them: a modifier that tries fails as one that raises does, and
+    // what the others read is what the layers hold.
+    /** @param list<string> $codes */
+    #[DataProvider('propsWriters')]
+    public function testFailsAModifierThatWritesIntoItsProps(\Closure $modifier, string $resolved, array $codes): void
+    {
+        $parser = $this->parser(customModifiers: ['m' => $modifier], modifierDefaults: ['m' => ['a' => 1]]);
+        $payload = ['v' => 'x', 'w' => 'y', 'u' => ['value' => 'z', 'props' => ['m' => ['b' => 1]]]];
+
+        self::assertSame($resolved, $parser->resolve('{{v:m; default:D}}{{w:m; default:D}}{{u:m; default:D}}', $payload));
+        self::assertSame($codes, $this->codes());
+    }
+
+    // What is composed is kept by what was composed, not by who asked: a
+    // host that registers its own `plural` while a resolution is in
+    // progress is handed what the layers hold under `plural`, without the
+    // digits of `number` that lie beneath the format's own.
+    #[RequiresPhpExtension('intl')]
+    public function testHandsAModifierRegisteredMeanwhileThePropsOfItsOwnName(): void
+    {
+        $registry = new \stdClass();
+        $seen = [];
+        $registry->reg = static function () use ($registry, &$seen): string {
+            $registry->plural = static function (ModifierInput $in) use (&$seen): string {
+                $seen[] = $in->props->toArray();
+
+                return 'P';
+            };
+
+            return 'R';
+        };
+        $parser = $this->parser(customModifiers: $registry, modifierDefaults: ['number' => ['minimumFractionDigits' => 2], 'plural' => ['a' => 1]]);
+        $payload = ['n' => 1, 'w' => ['value' => 1, 'props' => ['number' => ['minimumFractionDigits' => 3], 'plural' => ['b' => 2]]]];
+
+        self::assertSame('bbRPP', $parser->resolve('{{n:plural; one:a; other:b}}{{w:plural; one:a; other:b}}{{n:reg}}{{n:plural; one:a; other:b}}{{w:plural; one:a; other:b}}', $payload, null, 'en'));
+        self::assertSame([['a' => 1], ['a' => 1, 'b' => 2]], $seen);
     }
 
     public function testKeepsWhatAModifierReordersToItsOwnCall(): void
