@@ -16,7 +16,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
 DIST = ROOT / "dist"
+VENV = ROOT / ".venv"
 WHEEL_VENV = ROOT / ".venv-dist"
+CORE_VENV = ROOT / ".venv-core"
+CORE_WHEEL_VENV = ROOT / ".venv-core-dist"
+LOWEST_BABEL = "babel==2.14.0"
+"""The oldest Babel the ``intl`` extra accepts, which ``test-lowest`` runs."""
 
 
 def _run(*args: str | Path, env: dict[str, str] | None = None) -> None:
@@ -26,11 +31,15 @@ def _run(*args: str | Path, env: dict[str, str] | None = None) -> None:
         raise SystemExit(1)
 
 
-def _env(**extra: str) -> dict[str, str]:
+def _env(venv: Path = VENV, **extra: str) -> dict[str, str]:
     env = dict(os.environ)
-    env["UV_PROJECT_ENVIRONMENT"] = str(ROOT / ".venv")
+    env["UV_PROJECT_ENVIRONMENT"] = str(venv)
     env.update(extra)
     return env
+
+
+def _extras(intl: bool) -> tuple[str, ...]:
+    return ("--extra", "intl") if intl else ()
 
 
 def _tool(*args: str, env: dict[str, str] | None = None) -> None:
@@ -61,8 +70,8 @@ def build() -> None:
     )
 
 
-def sync() -> None:
-    _run("uv", "sync", "--locked", env=_env())
+def sync(venv: Path = VENV, *, intl: bool = True) -> None:
+    _run("uv", "sync", "--locked", *_extras(intl), env=_env(venv))
 
 
 def lint() -> None:
@@ -83,15 +92,17 @@ def typecheck() -> None:
     _tool("mypy")
 
 
-def _wheel_venv() -> None:
-    shutil.rmtree(WHEEL_VENV, ignore_errors=True)
-    _run("uv", "venv", WHEEL_VENV, env=_env())
-    requirements = WHEEL_VENV / "requirements.txt"
+def _wheel_venv(venv: Path, *, intl: bool) -> None:
+    shutil.rmtree(venv, ignore_errors=True)
+    _run("uv", "venv", venv, env=_env())
+    requirements = venv / "requirements.txt"
     _run(
         "uv",
         "export",
         "--locked",
-        "--only-group",
+        *_extras(intl),
+        "--no-default-groups",
+        "--group",
         "test",
         "--no-emit-project",
         "--output-file",
@@ -99,9 +110,32 @@ def _wheel_venv() -> None:
         "--quiet",
         env=_env(),
     )
-    python = _python(WHEEL_VENV)
+    python = _python(venv)
     _run("uv", "pip", "install", "--python", python, "--require-hashes", "-r", requirements)
     _run("uv", "pip", "install", "--python", python, "--no-deps", _wheel())
+
+
+def _suite(venv: Path, wheel_venv: Path, *, intl: bool, lowest: bool = False) -> None:
+    # Each leg states whether it expects Intl, so a supplier that failed to
+    # install cannot pass as a leg that never asked for one.
+    expect = {
+        "CURLY_MESSAGE_EXPECT_INTL": os.environ.get(
+            "CURLY_MESSAGE_EXPECT_INTL", "1" if intl else "0"
+        )
+    }
+    wheel = str(_wheel())
+    if lowest:
+        _run("uv", "pip", "install", "--python", _python(venv), LOWEST_BABEL)
+    _tool("pytest", env=_env(venv, CURLY_MESSAGE_WHEEL=wheel, **expect))
+    _wheel_venv(wheel_venv, intl=intl)
+    if lowest:
+        _run("uv", "pip", "install", "--python", _python(wheel_venv), LOWEST_BABEL)
+    _run(
+        _python(wheel_venv),
+        "-m",
+        "pytest",
+        env=_env(venv, CURLY_MESSAGE_DIST="1", CURLY_MESSAGE_WHEEL=wheel, **expect),
+    )
 
 
 def test() -> None:
@@ -109,15 +143,25 @@ def test() -> None:
     build()
     lint()
     typecheck()
-    wheel = str(_wheel())
-    _tool("pytest", env=_env(CURLY_MESSAGE_WHEEL=wheel))
-    _wheel_venv()
-    _run(
-        _python(WHEEL_VENV),
-        "-m",
-        "pytest",
-        env=_env(CURLY_MESSAGE_DIST="1", CURLY_MESSAGE_WHEEL=wheel),
-    )
+    _suite(VENV, WHEEL_VENV, intl=True)
+
+
+def test_core() -> None:
+    """The suite on the source and on the wheel, installed without the ``intl`` extra.
+
+    The lint and the typecheck read the source, which is the same either
+    way; they run in ``test``.
+    """
+    build()
+    sync(CORE_VENV, intl=False)
+    _suite(CORE_VENV, CORE_WHEEL_VENV, intl=False)
+
+
+def test_lowest() -> None:
+    """The suite on the source and on the wheel, over the oldest Babel the extra accepts."""
+    build()
+    sync()
+    _suite(VENV, WHEEL_VENV, intl=True, lowest=True)
 
 
 TASKS: dict[str, Callable[[], None]] = {
@@ -125,6 +169,8 @@ TASKS: dict[str, Callable[[], None]] = {
     "lint": lint,
     "lint-fix": lint_fix,
     "test": test,
+    "test-core": test_core,
+    "test-lowest": test_lowest,
     "typecheck": typecheck,
 }
 

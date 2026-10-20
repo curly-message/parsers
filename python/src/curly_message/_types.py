@@ -3,8 +3,11 @@
 from __future__ import annotations
 
 import enum
-from collections.abc import Callable
-from typing import Any, Final, Literal, Protocol, TypedDict, final
+from collections.abc import Callable, Mapping
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Final, Literal, Protocol, TypedDict, final
+
+from . import _reads
 
 
 class Undefined(enum.Enum):
@@ -41,7 +44,7 @@ MAX_CONVERSION_NODES: Final[int] = 100000
 MAX_NESTING: Final[int] = 8
 """The deepest level at which a placeholder resolves (section 13)."""
 
-MAX_REENTRY: Final[int] = 32
+MAX_REENTRY: Final[int] = _reads.MAX_REENTRY
 """The most resolutions in progress at once on one thread (section 13).
 
 A resolution host code asks for while another is in progress on its thread
@@ -52,6 +55,8 @@ modifier's own reads are free, except that one is counted as well while one
 of another placeholder's option values or its default, whose production
 began beneath that modifier's call, is in progress on its thread.
 """
+
+_NO_PROPS: Final[Mapping[str, Any]] = MappingProxyType({})
 
 
 class ReentryLimitError(RecursionError):
@@ -254,32 +259,54 @@ class Option:
     so an option the modifier passes over costs nothing. Kept past the
     resolution, it answers what it rendered there, and one first read after the
     resolution returned is the empty string and renders nothing.
+
+    Read during the resolution while the modifier it was handed to is not
+    current, the first read counts as a resolution in progress on its thread
+    while it renders. That modifier is current from its call until it
+    returns, through whatever code runs beneath it, a resolution that code
+    asks for included, but not while a modifier called beneath it runs, nor
+    while its placeholder's default or one of its option values renders, nor
+    while one of another placeholder's option values or its default, whose
+    production began beneath that modifier's call, is in progress on its
+    thread: the modifier's own reads are free, except that such a read is
+    counted as well. One
+    that would count past ``MAX_REENTRY`` is refused: it renders nothing and
+    is the empty string, which the code that made it goes on with, so it
+    fails nothing, and the next read renders afresh. So is a read of a value
+    its own thread is already rendering, whatever is in progress, since it
+    asks for what it is part of; one of a value another thread is rendering
+    waits for it and answers what that render gave. ``ModifierInput.default`` is read the same way.
+
+    A ``value`` given as a callable is asked on the first read; where it
+    answers ``None`` the value is the empty string and the next read asks
+    again.
     """
 
-    __slots__ = ("_key", "_render", "_value")
+    __slots__ = ("_busy", "_call", "_key", "_produce", "_text")
 
-    def __init__(self, key: str, value: str | Callable[[], str]) -> None:
+    def __init__(self, key: str, value: str | Callable[[], str | None]) -> None:
         self._key = key
-        self._value: str | None = None
-        self._render: Callable[[], str] | None = None
+        self._call: object = None
+        self._busy: object = None
         if isinstance(value, str):
-            self._value = value
+            self._text: str | None = value
+            self._produce: Callable[[], object] | None = None
         else:
-            self._render = value
+            self._text = None
+            self._produce = value
 
     @property
     def key(self) -> str:
         """The option key, unescaped."""
         return self._key
 
-    @property
-    def value(self) -> str:
-        """The option value, rendered where it is first read."""
-        if self._value is None:
-            render = self._render
-            self._value = render() if render is not None else ""
-            self._render = None
-        return self._value
+    if TYPE_CHECKING:
+
+        @property
+        def value(self) -> str:
+            """The option value, rendered where it is first read."""
+    else:
+        value = property(_reads.read, doc="The option value, rendered where it is first read.")
 
     def __repr__(self) -> str:
         return f"Option(key={self._key!r})"
@@ -293,7 +320,11 @@ class ModifierInput:
     order, duplicates kept and the inline default left out. ``props`` is what
     the layers configure under the modifier's own name, composed per property:
     the parser's ``modifier_defaults``, then the call's ``props``, then the
-    wrapper's own (section 11.3); it is a fresh ``dict`` for each call.
+    wrapper's own (section 11.3). It is read-only, and one mapping answers
+    every placeholder of a resolution that names the modifier over the same
+    layers: a modifier that writes to it raises, and so fails. A resolution
+    reads each layer once for each modifier name and wrapper, so a layer
+    changed while it runs is read as it was.
     ``locale`` is exactly what the caller passed, ``None`` where it passed
     none. ``default`` walks the fallback chain (section 10) where it is first
     read, so a modifier that answers without it leaves the chain unread. An
@@ -302,11 +333,21 @@ class ModifierInput:
     it resolves, reports and runs nothing.
     """
 
-    __slots__ = ("_default", "_fallback", "locale", "options", "props", "value")
+    __slots__ = (
+        "_busy",
+        "_call",
+        "_prepared",
+        "_produce",
+        "_text",
+        "locale",
+        "options",
+        "props",
+        "value",
+    )
 
     value: str
     options: tuple[Option, ...]
-    props: dict[str, Any]
+    props: Mapping[str, Any]
     locale: object
 
     def __init__(
@@ -314,29 +355,36 @@ class ModifierInput:
         *,
         value: str,
         options: tuple[Option, ...] = (),
-        props: dict[str, Any] | None = None,
+        props: Mapping[str, Any] | None = None,
         locale: object = None,
-        default: str | Callable[[], str] = "",
+        default: str | Callable[[], str | None] = "",
     ) -> None:
         self.value = value
         self.options = options
-        self.props = {} if props is None else props
+        self.props = _NO_PROPS if props is None else props
         self.locale = locale
-        self._default: str | None = None
-        self._fallback: Callable[[], str] | None = None
+        self._call: object = None
+        self._busy: object = None
+        # What the format's modifiers read off ``props``, kept with the walk's
+        # composition of them (``_Walk.props_for``).
+        self._prepared: dict[object, object] | None = None
         if isinstance(default, str):
-            self._default = default
+            self._text: str | None = default
+            self._produce: Callable[[], object] | None = None
         else:
-            self._fallback = default
+            self._text = None
+            self._produce = default
 
-    @property
-    def default(self) -> str:
-        """The placeholder's default: the first link of its fallback chain that yields text."""
-        if self._default is None:
-            fallback = self._fallback
-            self._default = fallback() if fallback is not None else ""
-            self._fallback = None
-        return self._default
+    if TYPE_CHECKING:
+
+        @property
+        def default(self) -> str:
+            """The placeholder's default: the first link of its fallback chain that yields text."""
+    else:
+        default = property(
+            _reads.read,
+            doc="The placeholder's default: the first link of its fallback chain that yields text.",
+        )
 
 
 Modifier = Callable[[ModifierInput], object]
