@@ -1,0 +1,28 @@
+{
+  "format": "curly-message-3",
+  "level": "intl",
+  "section": "11.2",
+  "cases": [
+    {
+      "id": "intl/number",
+      "description": "A number formatted with a maximum of fraction digits.",
+      "message": "{{n:number}}",
+      "payload": { "n": 1.5 },
+      "props": { "number": { "maximumFractionDigits": 2 } },
+      "locale": "en",
+      "expected": { "format": { "api": "NumberFormat", "options": { "maximumFractionDigits": 2 }, "input": 1.5 } }
+    },
+    {
+      "id": "intl/plural",
+      "description": "A selection holds the output to its category.",
+      "section": "11.5",
+      "message": "{{n:plural; one:single; other:many}}",
+      "payload": { "n": 1 },
+      "locale": "en",
+      "expected": {
+        "format": { "api": "PluralRules", "options": { "type": "cardinal" }, "input": 1 },
+        "categories": { "zero": "many", "one": "single", "two": "many", "few": "many", "many": "many", "other": "many" }
+      }
+    }
+  ]
+}
