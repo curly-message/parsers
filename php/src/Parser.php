@@ -7,6 +7,7 @@ namespace CurlyMessage;
 use CurlyMessage\Internal\Contained;
 use CurlyMessage\Internal\Conversion;
 use CurlyMessage\Internal\Guard;
+use CurlyMessage\Internal\Intl\Available;
 use CurlyMessage\Internal\Resolution;
 
 /**
@@ -63,14 +64,39 @@ final class Parser
      * @param array<array-key, mixed>|\stdClass $customModifiers the modifiers the host defines, by name, each a `\Closure` or an object with `__invoke`; an entry of any other kind registers nothing and shadows nothing
      * @param array<array-key, mixed>|\stdClass $modifierDefaults the props each modifier is configured with, by its name
      * @param (\Closure(Report): mixed)|null $onReport called with each report, in walk order
+     * @param (\Closure(FormatRequest): mixed)|null $onRequest called with each request an Intl modifier makes of its facility, once the facility answered or refused it, in walk order
      * @param bool $recognizeWrappers whether an entry holding only `value`, `default` and `props` configures its value (section 4.1)
      */
     public function __construct(
         private readonly array|\stdClass $customModifiers = [],
         private readonly array|\stdClass $modifierDefaults = [],
         private readonly ?\Closure $onReport = null,
+        private readonly ?\Closure $onRequest = null,
         private readonly bool $recognizeWrappers = true,
     ) {}
+
+    /**
+     * The levels this build satisfies on this host (SPEC.md section 2):
+     * Intl where ext-intl and the ICU data it is performed on are there.
+     *
+     * @return list<'core'|'intl'|'extensions'>
+     */
+    public static function levels(): array
+    {
+        return Available::satisfied() ? ['core', 'intl', 'extensions'] : ['core', 'extensions'];
+    }
+
+    /**
+     * What the Intl facilities here cannot express (SPEC.md section 11.2):
+     * by facility, the properties no value of which is performed. None where
+     * the host does not satisfy the Intl level.
+     *
+     * @return array<string, list<string>>
+     */
+    public static function unexpressible(): array
+    {
+        return Available::unexpressible();
+    }
 
     /**
      * The text a message resolves to. It never throws, but for `ReentryLimit`
@@ -135,6 +161,7 @@ final class Parser
                 $this->customModifiers,
                 $this->modifierDefaults,
                 $this->onReport,
+                $this->onRequest,
                 $this->recognizeWrappers,
                 $conversion,
             );

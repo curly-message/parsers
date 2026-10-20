@@ -35,10 +35,11 @@ final class Comparisons
     /**
      * The number a text is, by PHP's numeric strings: `is_numeric`, then the
      * number it reads as. A text that is none compares false, never as zero.
+     * The unary plus keeps the sign of `-0.0`, which adding to zero drops.
      */
     public static function number(string $text): int|float|null
     {
-        return is_numeric($text) ? 0 + $text : null;
+        return is_numeric($text) ? +$text : null;
     }
 
     private static function selected(?Option $option, ModifierInput $input): string

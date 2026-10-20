@@ -106,18 +106,34 @@ final class Layers
      * layer overrides only what it names, and a property it holds
      * `Undefined::Value` under it does not name. What leaves is a fresh array,
      * so a modifier writing into it reaches neither the next placeholder nor
-     * the caller.
+     * the caller. Where `$only` names the properties, those alone are read,
+     * name by name, so nothing else a layer holds under `$name` is read.
      *
      * @param list<mixed> $layers
+     * @param list<string>|null $only
      *
      * @return array<array-key, mixed>
      */
-    public function compose(array $layers, string $name): array
+    public function compose(array $layers, string $name, ?array $only = null): array
     {
         $composed = [];
 
         foreach ($layers as $layer) {
-            foreach (self::entries($this->own($layer, $name)) as $property => $value) {
+            $slice = $this->own($layer, $name);
+
+            if ($only !== null) {
+                foreach ($only as $property) {
+                    $value = $this->own($slice, $property);
+
+                    if ($value !== Undefined::Value) {
+                        $composed[$property] = $value;
+                    }
+                }
+
+                continue;
+            }
+
+            foreach (self::entries($slice) as $property => $value) {
                 if ($value !== Undefined::Value) {
                     $composed[$property] = $value;
                 }
