@@ -1,0 +1,405 @@
+name: PHP parser publish
+
+# Packagist reads a package from the root of a repository and its versions
+# from tags its version parser accepts, which `php/` and `php-vX.Y.Z` are
+# not. So a release commits and tags `php-vX.Y.Z` here, as every package of
+# the family is tagged, and pushes the history of `php/` alone, split off
+# with `git subtree split`, to the read-only repository curly-message/
+# parser-php, tagged `vX.Y.Z`, where Packagist's hook reads it. No registry
+# credential exists: what Packagist serves is what the App pushed.
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'next cuts a release candidate (X.Y.Z-RC.N); patch, minor and major cut a release'
+        required: true
+        default: next
+        type: choice
+        options:
+          - next
+          - patch
+          - minor
+          - major
+      mirror:
+        description: 'Recovery only: an existing tag (php-vX.Y.Z) to push to parser-php, where a release landed here and not there'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  MIRROR: curly-message/parser-php
+  PACKAGE: curly-message/parser
+
+# Three jobs after the tests, so that no code a dependency ships runs where
+# the release's credentials are: `version` settles what is released, `build`
+# installs and benchmarks with no credential that can push, and `release`
+# holds the App's key and takes the build as files. Of the three, only
+# `build` runs a dependency's code.
+jobs:
+  tests:
+    if: inputs.mirror == ''
+    uses: ./.github/workflows/tests-php.yml
+
+  version:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: php
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      patch: ${{ steps.bump.outputs.patch }}
+      changes: ${{ steps.bump.outputs.changes }}
+
+    steps:
+      - name: Refuse anything but main
+        working-directory: .
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::A release is cut from main only, not from $GITHUB_REF_NAME."; exit 1; }
+
+      # No credential stays in a checkout for what runs after it to read.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # Packagist knows a package once its repository is submitted, which is
+      # done by hand, once (see the README).
+      - name: Check the package is on Packagist
+        run: |
+          curl -fsS -o /dev/null "https://packagist.org/packages/$PACKAGE.json" || { echo "::error::$PACKAGE is not on Packagist. Submit $MIRROR there with its GitHub hook, then run again."; exit 1; }
+
+      # The changelog's pending section names the version it will be released
+      # as. `patch`, `minor` and `major` cut that section and must arrive at
+      # the version it names. `next` cuts a release candidate of it (X.Y.Z-RC.0,
+      # then .1), Composer's spelling of a prerelease, and leaves the section
+      # open. package.json holds the version for the benchmark's table and
+      # for `npm version` to bump.
+      - name: Bump the version
+        id: version
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          case "$RELEASE" in
+            next|patch|minor|major) ;;
+            *) echo "::error::Unknown release type '$RELEASE'; expected next, patch, minor or major."; exit 1 ;;
+          esac
+          heading='### ([0-9]+\.[0-9]+\.[0-9]+) \(Unreleased\)'
+          sections=$(grep -cE "^$heading$" CHANGELOG.md) || sections=0
+          [ "$sections" = 1 ] || { echo "::error::CHANGELOG.md holds $sections sections headed '### <major.minor.patch> (Unreleased)'; a release reads exactly one."; exit 1; }
+          declared=$(sed -nE "s/^$heading$/\1/p" CHANGELOG.md)
+          before=$(node -p "require('./package.json').version")
+          if [ "$RELEASE" = next ]; then
+            case "$before" in
+              "$declared"-RC.*) npm version prerelease --preid=RC --no-git-tag-version ;;
+              *) npm version "$declared-RC.0" --no-git-tag-version ;;
+            esac
+          else
+            npm version "$RELEASE" --no-git-tag-version
+          fi
+          version=$(node -p "require('./package.json').version")
+          if [ "$RELEASE" != next ]; then
+            [ "$version" = "$declared" ] || { echo "::error::$RELEASE over $before is $version, and CHANGELOG.md's pending section names $declared. Release what the section names, or rewrite its heading."; exit 1; }
+            sed -i -E "s/^$heading$/## \1/" CHANGELOG.md
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      # The other jobs check out the same commit and apply the bump as this
+      # patch, held to the files it changed here.
+      - name: Record the bump
+        id: bump
+        working-directory: .
+        run: |
+          {
+            echo "patch=$(git diff --binary | base64 -w0)"
+            echo "changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)"
+          } >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: php
+    outputs:
+      tree: ${{ steps.tree.outputs.tree }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Apply the bump
+        working-directory: .
+        env:
+          PATCH: ${{ needs.version.outputs.patch }}
+          CHANGES: ${{ needs.version.outputs.changes }}
+        run: |
+          base64 -d <<< "$PATCH" | git apply
+          changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)
+          [ "$changes" = "$CHANGES" ] || { echo "::error::The bump changes '$changes' here and changed '$CHANGES' where it was made."; exit 1; }
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version-file: php/.php-version
+          extensions: intl, opcache
+          coverage: none
+
+      # The package's own autoloader, and no script of any dependency.
+      - name: Install
+        run: sh bench/prepare.sh
+
+      # Each release records what it costs, measured on the runner that
+      # releases it; a row that fails stops the release here.
+      - name: Benchmark
+        run: node bench/harness.mjs > BENCH.md
+
+      # What the release commit will hold under php/, by the id of its tree,
+      # for the release job to hold its own to.
+      - name: Record the tree
+        id: tree
+        run: |
+          git add --all .
+          echo "tree=$(git write-tree --prefix=php/)" >> "$GITHUB_OUTPUT"
+
+      - name: Pack the benchmark
+        run: tar -cf "$RUNNER_TEMP/build.tar" BENCH.md
+
+      - name: Upload the benchmark
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/build.tar
+          archive: false
+          if-no-files-found: error
+
+  # Nothing is pushed until everything is checked: the release commit and
+  # both tags are made locally, the split is held to the tree the build
+  # recorded, both remotes are checked for what is already there, and both
+  # pushes are tried dry. Parsers is pushed first, so that a version Packagist
+  # serves is on main here; where the second push fails after the first
+  # landed, `mirror` pushes the tag that landed (see the README).
+  release:
+    needs: [version, build]
+    if: ${{ !cancelled() && (inputs.mirror != '' || needs.build.result == 'success') }}
+    runs-on: ubuntu-latest
+    environment: release
+    concurrency: publish-php
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: php
+
+    steps:
+      - name: Refuse anything but main
+        working-directory: .
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::A release is cut from main only, not from $GITHUB_REF_NAME."; exit 1; }
+
+      # The whole history, which the split is made from: over a shallow one it
+      # makes a commit with no parent each time, so no release's split would
+      # descend from the one before it.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Apply the bump
+        if: inputs.mirror == ''
+        working-directory: .
+        env:
+          PATCH: ${{ needs.version.outputs.patch }}
+          CHANGES: ${{ needs.version.outputs.changes }}
+        run: |
+          base64 -d <<< "$PATCH" | git apply
+          changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)
+          [ "$changes" = "$CHANGES" ] || { echo "::error::The bump changes '$changes' here and changed '$CHANGES' where it was made."; exit 1; }
+
+      # In a directory of its own, unpacked by nothing but the tar below.
+      - name: Download the benchmark
+        if: inputs.mirror == ''
+        uses: actions/download-artifact@v8
+        with:
+          name: build.tar
+          path: ${{ runner.temp }}/artifact
+          skip-decompress: true
+
+      # Only BENCH.md is taken from it, and only as a file.
+      - name: Take the benchmark
+        if: inputs.mirror == ''
+        env:
+          TREE: ${{ needs.build.outputs.tree }}
+        run: |
+          mkdir "$RUNNER_TEMP/build"
+          tar -xf "$RUNNER_TEMP/artifact/build.tar" -C "$RUNNER_TEMP/build"
+          others=$(find "$RUNNER_TEMP/build" -mindepth 1 ! -path "$RUNNER_TEMP/build/BENCH.md")
+          [ -f "$RUNNER_TEMP/build/BENCH.md" ] && [ ! -L "$RUNNER_TEMP/build/BENCH.md" ] && [ -z "$others" ] || { echo "::error::The build is to hold a BENCH.md file and nothing else."; exit 1; }
+          cp "$RUNNER_TEMP/build/BENCH.md" .
+          git add --all .
+          tree=$(git write-tree --prefix=php/)
+          [ "$tree" = "$TREE" ] || { echo "::error::php/ is the tree $tree here and was $TREE where it was built."; exit 1; }
+
+      # The release commit, its tags and the GitHub release are the App's: its
+      # token passes the rules on main, and unlike the workflow's own token, it
+      # can push to the other repository.
+      - name: Mint the release token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          repositories: |
+            parsers
+            parser-php
+          permission-contents: write
+
+      # The commit and the tag of a release, or the tag `mirror` names, which
+      # must be one main holds.
+      - name: Settle the tag
+        id: tag
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP: ${{ steps.app.outputs.app-slug }}
+          VERSION: ${{ needs.version.outputs.version }}
+          RECOVER: ${{ inputs.mirror }}
+        run: |
+          if [ -z "$RECOVER" ]; then
+            id=$(gh api "/users/${APP}[bot]" --jq .id)
+            git config user.name "${APP}[bot]"
+            git config user.email "$id+${APP}[bot]@users.noreply.github.com"
+            git commit --all --message "chore(php): release $PACKAGE@$VERSION"
+            git tag --annotate --message "$PACKAGE@$VERSION" "php-v$VERSION"
+            tag="php-v$VERSION"
+          else
+            [[ "$RECOVER" =~ ^php-v[0-9]+\.[0-9]+\.[0-9]+(-RC\.[0-9]+)?$ ]] || { echo "::error::'$RECOVER' is not a tag of the PHP parser (php-vX.Y.Z or php-vX.Y.Z-RC.N)."; exit 1; }
+            git rev-parse --verify --quiet "refs/tags/$RECOVER" > /dev/null || { echo "::error::No tag $RECOVER is here to mirror."; exit 1; }
+            git merge-base --is-ancestor "$RECOVER^{commit}" origin/main || { echo "::error::$RECOVER is not on main."; exit 1; }
+            tag="$RECOVER"
+            VERSION="${RECOVER#php-v}"
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # The history of php/ alone, as its own repository holds it. Over the
+      # whole history the split is the same each time, and main is linear, so
+      # each release's split descends from the one before it.
+      - name: Split
+        id: split
+        working-directory: .
+        env:
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          split=$(git subtree split --prefix=php "$TAG^{commit}")
+          [ "$(git rev-parse "$split^{tree}")" = "$(git rev-parse "$TAG^{commit}:php")" ] || { echo "::error::The split of $TAG does not hold what php/ holds there."; exit 1; }
+          git tag --annotate --message "$PACKAGE@$VERSION" "v$VERSION" "$split"
+          echo "split=$split" >> "$GITHUB_OUTPUT"
+
+      # The token reaches git through the environment of each step that
+      # pushes, and of no other.
+      - name: Check both remotes
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          SPLIT: ${{ steps.split.outputs.split }}
+          RECOVER: ${{ inputs.mirror }}
+        run: |
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_VALUE_0
+          mirror="https://github.com/$MIRROR.git"
+          if [ -z "$RECOVER" ]; then
+            [ -z "$(git ls-remote --tags origin "refs/tags/$TAG")" ] || { echo "::error::$TAG is on parsers already."; exit 1; }
+          fi
+          [ -z "$(git ls-remote --tags "$mirror" "refs/tags/v$VERSION")" ] || { echo "::error::v$VERSION is on $MIRROR already."; exit 1; }
+          # An empty repository has no main, and any split descends from none.
+          if [ -n "$(git ls-remote --heads "$mirror" refs/heads/main)" ]; then
+            git fetch --quiet "$mirror" refs/heads/main
+            git merge-base --is-ancestor FETCH_HEAD "$SPLIT" || { echo "::error::$MIRROR's main is not an ancestor of the split of $TAG, so the push would not be a fast-forward."; exit 1; }
+          fi
+          if [ -z "$RECOVER" ]; then
+            git push --dry-run --atomic origin main "$TAG"
+          fi
+          git push --dry-run --atomic "$mirror" "$SPLIT:refs/heads/main" "v$VERSION"
+
+      # Each push atomic: a branch and its tag land together or not at all.
+      # Neither is forced.
+      - name: Push
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          SPLIT: ${{ steps.split.outputs.split }}
+          RECOVER: ${{ inputs.mirror }}
+        run: |
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_VALUE_0
+          if [ -z "$RECOVER" ]; then
+            git push --atomic origin main "$TAG"
+          fi
+          git push --atomic "https://github.com/$MIRROR.git" "$SPLIT:refs/heads/main" "v$VERSION" || { echo "::error::$TAG is on parsers and not on $MIRROR. Run this workflow again with mirror: $TAG."; exit 1; }
+
+      # The release notes are the changelog section the release names, read at
+      # its tag: the one just cut, or, for a release candidate, the pending one
+      # it leaves open.
+      - name: Publish the GitHub release
+        working-directory: .
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          if gh release view "$TAG" > /dev/null 2>&1; then
+            echo "The release $TAG is published already."
+            exit 0
+          fi
+          case "$VERSION" in
+            *-RC.*) section="### ${VERSION%-RC.*} (Unreleased)"; prerelease=--prerelease ;;
+            *) section="## $VERSION"; prerelease= ;;
+          esac
+          git show "$TAG^{commit}:php/CHANGELOG.md" | awk -v heading="$section" '$0 == heading { on = 1; next } /^## |^### [0-9]/ { on = 0 } on' > "$RUNNER_TEMP/notes.md"
+          gh release create "$TAG" --verify-tag --title "$PACKAGE@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" ${prerelease:+"$prerelease"}
+
+      # Close the loop: Packagist's hook on the mirror reads the tag, and the
+      # release is done once the registry lists it.
+      - name: Wait for Packagist
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          for _ in $(seq 1 40); do
+            if curl -fsS "https://repo.packagist.org/p2/$PACKAGE.json" | node -e "
+              const versions = (JSON.parse(require('fs').readFileSync(0, 'utf8')).packages?.[process.env.PACKAGE] ?? []).map((entry) => entry.version);
+              process.exit(versions.includes('v' + process.env.VERSION) || versions.includes(process.env.VERSION) ? 0 : 1);
+            "; then
+              echo "Packagist lists $PACKAGE $VERSION."
+              exit 0
+            fi
+            sleep 30
+          done
+          echo "::error::Packagist does not list $PACKAGE $VERSION after 20 minutes. Check the GitHub hook of $MIRROR on Packagist and update the package there by hand."
+          exit 1
