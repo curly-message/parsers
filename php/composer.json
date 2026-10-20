@@ -49,6 +49,7 @@
             "@php tools/check-source.php"
         ],
         "lint:fix": "tools/qa/vendor/bin/php-cs-fixer fix",
+        "unicode": "@php tools/unicode.php",
         "analyse": "tools/qa/vendor/bin/phpstan analyse --no-progress --memory-limit=1G",
         "test": [
             "@lint",
