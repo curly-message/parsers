@@ -1,0 +1,450 @@
+// The benchmark: what a build costs, row by row. A row is a count, a size or a
+// time, and `bench/rows.mjs` of the package the command runs in lists them.
+//
+//   node bench/harness.mjs [--compare <dir>] [--accepted]
+//
+// With `--compare`, the rows of the package checked out and built at `<dir>`
+// measure that build, and each is set beside the row of the same name here.
+// Each side's rows read its own build, so a row survives a change to the API
+// it calls. A count is deterministic and gates: one that grew fails the run,
+// as do a row gone missing, a row whose kind changed, a base whose rows fail
+// to load and a row of the base that fails, unless `--accepted` says the
+// change means them. A base that does not hold the package, the base of the
+// change that adds it, compares nothing and gates nothing. This package fails
+// the run regardless when its `bench/rows.mjs` is missing or fails to load, or
+// when a row of it fails. A size that grew and a time beyond its spread are
+// flagged for review.
+//
+// Each side of a row is measured in processes of its own, forked from this one
+// with `--side`, so neither side's code, nor a row measured before it, shapes
+// the engine the other is measured on; a row's `run` is called once in each.
+// A time is per run of what the row measures, from ROUNDS pairs of processes,
+// one pair after the other. The two of a pair warm up and then take turns
+// sample by sample, one waiting while the other runs, so both sides see the
+// same machine, and how one process happens to settle the engine widens the
+// spread rather than reading as a difference. What a time row
+// times may return a promise, which is awaited as part of the run; whether it
+// does is read from its first call, so a synchronous one is timed by a loop
+// that awaits nothing. A row that holds something open while it is measured,
+// a browser say, gives it back in its `close`, which each process calls once
+// the row is measured or has failed there; a process that dies takes what it
+// held with it, and fails the row. The spread leaves
+// out the lowest and the highest quarter of the samples, rounded down, so a
+// busy neighbour neither hides nor flags a change.
+//
+// A package's name and version are read from its `package.json`, or, where it
+// has none, from the `name` and `version` its `bench/rows.mjs` exports, so a
+// package that npm does not manage is measured like one it does; the table is
+// headed by the directory's name where neither gives one.
+//
+// This file is the same in every repository of the family; change every copy
+// at once.
+import { fork } from 'node:child_process';
+import { existsSync, readFileSync } from 'node:fs';
+import { arch, platform } from 'node:os';
+import { basename, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { parseArgs } from 'node:util';
+
+const KINDS = ['count', 'size', 'time'];
+const ROUNDS = 4;
+const SAMPLES = ROUNDS * 5;
+const SAMPLE_MS = 10;
+const WARMUP_MS = 250;
+
+const { values: args } = parseArgs({
+  options: {
+    compare: { type: 'string' },
+    accepted: { type: 'boolean', default: false },
+    side: { type: 'string' },
+    row: { type: 'string' },
+  },
+});
+
+const failure = (error) => ({ error: error instanceof Error ? error.message : String(error) });
+
+const readManifest = (file) => {
+  try {
+    return JSON.parse(readFileSync(file, 'utf8'));
+  } catch (error) {
+    throw new Error(`its package.json could not be read: ${failure(error).error}`, { cause: error });
+  }
+};
+
+// A side's name, version and rows by name, or why there are no rows to read. A
+// base checked out before the package was added, or before it had a benchmark,
+// has none, and is no failure; a directory that holds neither a manifest nor
+// rows is.
+const load = async (dir) => {
+  if (!existsSync(dir)) return { missing: true };
+
+  const manifest = resolve(dir, 'package.json');
+  const file = resolve(dir, 'bench/rows.mjs');
+
+  if (!existsSync(manifest) && !existsSync(file)) return { error: 'neither a package.json nor a bench/rows.mjs is there' };
+
+  let read;
+
+  try {
+    read = existsSync(manifest) ? readManifest(manifest) : undefined;
+
+    if (!existsSync(file)) return { name: read?.name, version: read?.version, absent: true };
+
+    const { default: rows, ...exported } = await import(pathToFileURL(file).href);
+    const { name, version } = read ?? exported;
+    const named = new Map();
+
+    for (const row of rows) {
+      if (typeof row?.name !== 'string' || !row.name) throw new Error('a row has no name');
+      if (!KINDS.includes(row.kind)) throw new Error(`the row \`${row.name}\` is of kind ${String(row.kind)}, not one of ${KINDS.join(', ')}`);
+      if (typeof row.run !== 'function') throw new Error(`the row \`${row.name}\` has no run`);
+      if (row.close !== undefined && typeof row.close !== 'function') throw new Error(`the row \`${row.name}\` has a close that is not a function`);
+      if (named.has(row.name)) throw new Error(`two rows are named \`${row.name}\``);
+
+      named.set(row.name, row);
+    }
+
+    return { name, version, rows: named };
+  } catch (error) {
+    return { name: read?.name, version: read?.version, ...failure(error) };
+  }
+};
+
+const runs = (op, count) => {
+  const start = performance.now();
+
+  for (let index = 0; index < count; index += 1) op();
+
+  return performance.now() - start;
+};
+
+const awaitedRuns = async (op, count) => {
+  const start = performance.now();
+
+  for (let index = 0; index < count; index += 1) await op();
+
+  return performance.now() - start;
+};
+
+// How to time an op, and how many runs one sample takes to last at least
+// SAMPLE_MS, after the engine has had WARMUP_MS to optimize what it runs in a
+// process that has run nothing else.
+const calibrate = async (op) => {
+  const start = performance.now();
+  const first = op();
+  const timed = typeof first?.then === 'function' ? awaitedRuns : runs;
+
+  await first;
+
+  while (performance.now() - start < WARMUP_MS) await timed(op, 1);
+
+  let count = 1;
+
+  while ((await timed(op, count)) < SAMPLE_MS) count *= 2;
+
+  return { timed, count };
+};
+
+const summary = (samples) => {
+  const sorted = [...samples].sort((a, b) => a - b);
+  const cut = Math.floor(sorted.length / 4);
+  const middle = sorted.length / 2;
+  const median = sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
+
+  return { value: median, low: sorted[cut], high: sorted[sorted.length - 1 - cut] };
+};
+
+const measure = async (row) => {
+  try {
+    const value = await row.run();
+
+    if (row.kind === 'time') return typeof value === 'function' ? value : failure(new Error('a time row returns the function it times'));
+
+    return Number.isFinite(value) ? { value } : failure(new Error(`a ${row.kind} row returns a number, not ${String(value)}`));
+  } catch (error) {
+    return failure(error);
+  }
+};
+
+// The messages that reach one end of a channel, in order, each read once. An
+// end that has gone away answers what is read after with why.
+const inbox = (channel) => {
+  const queued = [];
+  const waiting = [];
+  let gone;
+
+  channel.on('message', (message) => (waiting.length ? waiting.shift()(message) : queued.push(message)));
+
+  return {
+    next: () => (queued.length ? Promise.resolve(queued.shift()) : gone ? Promise.resolve(gone) : new Promise((settle) => waiting.push(settle))),
+    end: (reason) => {
+      gone = reason;
+      for (const settle of waiting.splice(0)) settle(reason);
+    },
+  };
+};
+
+// A side in a process of its own: the rows of the package at `dir` by name
+// and kind, or, given `row`, that row. Its first message is what the row's
+// `run` returned; a time row then answers `calibrate` and each `sample`, and
+// every row closes on `end`.
+const forkSide = (dir, row) => {
+  const child = fork(fileURLToPath(import.meta.url), [`--side=${dir}`, ...(row === undefined ? [] : [`--row=${row}`])]);
+  const { next, end } = inbox(child);
+  const exited = new Promise((settle) => {
+    const gone = (error) => {
+      end(failure(error));
+      settle();
+    };
+
+    child.once('exit', (code, signal) => gone(new Error(`its process exited with ${signal ?? `code ${code}`}`)));
+    child.once('error', gone);
+  });
+
+  return {
+    next,
+    ask: (message) => {
+      if (child.connected) child.send(message);
+
+      return next();
+    },
+    exited,
+  };
+};
+
+// What a process forked for a side does: answers the harness, then exits, so
+// what a row leaves running cannot keep it alive, and exits as well once the
+// harness has gone.
+const serve = async (dir, name) => {
+  process.on('disconnect', () => process.exit());
+  if (!process.connected) process.exit();
+
+  const { next } = inbox(process);
+  const reply = (message) => new Promise((settle) => process.send(message, settle));
+  const loaded = await load(dir);
+
+  if (name === undefined) {
+    await reply(loaded.rows ? { ...loaded, rows: [...loaded.rows.values()].map((row) => ({ name: row.name, kind: row.kind })) } : loaded);
+    process.exit();
+  }
+
+  const row = loaded.rows?.get(name);
+  const measured = row ? await measure(row) : failure(new Error(loaded.error ?? `no row is named \`${name}\``));
+
+  await reply(typeof measured === 'function' ? { timed: true } : measured);
+
+  for (let plan, request = await next(); !request.end; request = await next()) {
+    try {
+      if (request.calibrate) {
+        plan = await calibrate(measured);
+        await reply({});
+      } else {
+        // A run that is not recorded first, so the wait on the other side's
+        // sample is no part of this one.
+        await plan.timed(measured, plan.count);
+        await reply({ sample: (await plan.timed(measured, plan.count)) / plan.count });
+      }
+    } catch (error) {
+      await reply(failure(error));
+    }
+  }
+
+  try {
+    await row?.close?.();
+    await reply({});
+  } catch (error) {
+    await reply(failure(error));
+  }
+
+  process.exit();
+};
+
+// Each side's time per run, the sides given as the processes that ran the
+// row's `run` first. A pair after the first is forked afresh, and within a
+// pair the side that goes first alternates, sample by sample and round by
+// round, so a drift in the machine reaches both alike.
+const time = async (dirs, name, first) => {
+  const results = first.map(() => undefined);
+  const samples = first.map(() => []);
+
+  for (let round = 0; round < ROUNDS; round += 1) {
+    const live = [...first.keys()].filter((index) => !results[index]);
+    const pair = live.map((index) => (round ? forkSide(dirs[index], name) : first[index]));
+    // Whether a side's reply is no failure; the first failure is its result.
+    const holds = (turn, reply) => {
+      if (reply.error) results[live[turn]] ??= reply;
+
+      return !reply.error;
+    };
+    const order = round % 2 ? [...live.keys()].reverse() : [...live.keys()];
+
+    if (round) (await Promise.all(pair.map((side) => side.next()))).forEach((reply, turn) => holds(turn, reply));
+
+    for (const turn of order) {
+      if (!results[live[turn]]) holds(turn, await pair[turn].ask({ calibrate: true }));
+    }
+
+    for (let index = 0; index < SAMPLES / ROUNDS; index += 1) {
+      for (const turn of index % 2 ? [...order].reverse() : order) {
+        if (results[live[turn]]) continue;
+
+        const reply = await pair[turn].ask({ sample: true });
+
+        if (holds(turn, reply)) samples[live[turn]].push(reply.sample);
+      }
+    }
+
+    (await Promise.all(pair.map((side) => side.ask({ end: true })))).forEach((reply, turn) => holds(turn, reply));
+    await Promise.all(pair.map((side) => side.exited));
+  }
+
+  return results.map((result, index) => result ?? summary(samples[index]));
+};
+
+// Every row of either side: this package's in its order, then the ones only
+// the base has. A row whose kind differs between the sides is measured on this
+// package's side alone, since a count and a time do not compare.
+const measureAll = async (dirs, change, base) => {
+  const names = [...change.keys(), ...[...(base?.keys() ?? [])].filter((name) => !change.has(name))];
+  const results = [];
+
+  for (const name of names) {
+    const rows = [base?.get(name), change.get(name)];
+    const kind = (rows[1] ?? rows[0]).kind;
+    const was = rows[0] && rows[1] && rows[0].kind !== kind ? rows[0].kind : undefined;
+
+    if (was) rows[0] = undefined;
+
+    const sides = rows.map((row, index) => (row ? forkSide(dirs[index], name) : undefined));
+    const measured = await Promise.all(sides.map((side) => side?.next()));
+    const timed = [0, 1].filter((index) => measured[index]?.timed);
+    const done = sides.map((side, index) => (timed.includes(index) ? undefined : side));
+    const closed = await Promise.all(done.map((side) => side?.ask({ end: true })));
+
+    for (const [index, reply] of closed.entries()) {
+      if (reply?.error && !measured[index].error) measured[index] = reply;
+    }
+
+    await Promise.all(done.map((side) => side?.exited));
+
+    if (timed.length) {
+      const times = await time(timed.map((index) => dirs[index]), name, timed.map((index) => sides[index]));
+
+      for (const index of timed) measured[index] = times.shift();
+    }
+
+    results.push({ name, kind, was, base: measured[0], change: measured[1] });
+  }
+
+  return results;
+};
+
+const UNITS = [['s', 1e3], ['ms', 1], ['\u00b5s', 1e-3], ['ns', 1e-6]];
+
+const duration = (ms) => {
+  const [unit, size] = UNITS.find(([, size]) => ms >= size) ?? UNITS[UNITS.length - 1];
+
+  return `${Number((ms / size).toPrecision(3))} ${unit}`;
+};
+
+const formatted = (kind, result) => {
+  if (!result) return '\u2014';
+  if (result.error) return 'failed';
+  if (kind === 'time') return `${duration(result.value)} (${duration(result.low)}\u2013${duration(result.high)})`;
+
+  return `${result.value.toLocaleString('en-US')}${kind === 'size' ? ' B' : ''}`;
+};
+
+// What a row's comparison says, and whether it fails the run.
+const verdict = ({ kind, was, base, change }, compared) => {
+  if (change?.error) return { note: `failed: ${change.error}`, fatal: true };
+  if (!compared) return { note: '' };
+  if (!change) return { note: 'missing', gated: true };
+  if (was) return { note: `was a ${was}`, gated: true };
+  if (base?.error) return { note: `base failed: ${base.error}`, gated: true };
+  if (!base) return { note: 'new' };
+
+  const delta = base.value === 0 ? 'from 0' : `${change.value >= base.value ? '+' : ''}${(((change.value - base.value) / base.value) * 100).toFixed(1)}%`;
+
+  if (kind === 'time') {
+    if (change.low > base.high) return { note: `slower, ${delta}` };
+    if (change.high < base.low) return { note: `faster, ${delta}` };
+
+    return { note: '' };
+  }
+
+  if (change.value > base.value) return { note: `grew, ${delta}`, gated: kind === 'count' };
+  if (change.value < base.value) return { note: `fell, ${delta}` };
+
+  return { note: '' };
+};
+
+const cell = (text) => text.replaceAll('|', '\\|').replaceAll('\n', ' ');
+
+// A side's name, version and rows by name and kind, or why there are no rows
+// to read.
+const list = async (dir) => {
+  const listing = forkSide(dir);
+  const reply = await listing.next();
+
+  await listing.exited;
+
+  return reply.rows ? { ...reply, rows: new Map(reply.rows.map((row) => [row.name, row])) } : reply;
+};
+
+// A column's heading, with the version of the side it holds where there is one.
+const heading = (...words) => words.filter(Boolean).join(' ');
+
+if (args.side !== undefined) await serve(args.side, args.row);
+
+const change = await list(resolve('.'));
+const lines = [`## Benchmark of ${change.name || basename(resolve('.'))}`, ''];
+
+// Written where the table would be, so a PR's comment says why there is none.
+if (!change.rows) {
+  console.log([...lines, `Failed: ${change.error ? `this package's rows failed to load: ${change.error}` : 'this package has no bench/rows.mjs'}.`].join('\n'));
+  process.exit(1);
+}
+
+// A path is meant from where the command was given: npm runs a workspace's
+// script in the workspace and names that place in INIT_CWD.
+const against = args.compare === undefined ? undefined : resolve(process.env.INIT_CWD ?? '.', args.compare);
+const base = against === undefined ? undefined : await list(against);
+const compared = Boolean(base?.rows);
+
+if (base?.error) {
+  lines.push(`The base at \`${args.compare}\` failed to load its rows: ${base.error}`, '');
+} else if (base?.missing) {
+  lines.push(`The base at \`${args.compare}\` does not hold this package, so nothing is compared.`, '');
+} else if (base?.absent) {
+  lines.push(`The base at \`${args.compare}\` has no benchmark, so nothing is compared.`, '');
+}
+
+const results = await measureAll([against, resolve('.')], change.rows, base?.rows);
+const verdicts = results.map((result) => verdict(result, compared));
+
+lines.push(
+  `Node ${process.version}, ${platform()} ${arch()}. A time is per run: the median of ${SAMPLES} samples, and the range of the samples without their fastest and slowest quarter.`,
+  '',
+);
+
+if (compared) {
+  lines.push(`| Row | Kind | ${heading('Base', base.version)} | ${heading('Change', change.version)} | |`, '|---|---|--:|--:|---|');
+  results.forEach((result, index) => lines.push(`| ${cell(result.name)} | ${result.kind} | ${formatted(result.kind, result.base)} | ${formatted(result.kind, result.change)} | ${cell(verdicts[index].note)} |`));
+} else {
+  lines.push(`| Row | Kind | ${change.version || 'Value'} | |`, '|---|---|--:|---|');
+  results.forEach((result, index) => lines.push(`| ${cell(result.name)} | ${result.kind} | ${formatted(result.kind, result.change)} | ${cell(verdicts[index].note)} |`));
+}
+
+const fatal = verdicts.filter(({ fatal }) => fatal).length;
+const gated = verdicts.filter(({ gated }) => gated).length + (base?.error ? 1 : 0);
+
+lines.push('');
+
+if (fatal) lines.push(`Failed: ${fatal} row${fatal > 1 ? 's' : ''} of this package failed.`);
+else if (gated && !args.accepted) lines.push(`Failed: ${gated} row${gated > 1 ? 's' : ''} grew, went missing, changed kind or failed on the base. A change that means it is accepted with \`--accepted\` (the \`bench-accepted\` label on a PR).`);
+else if (gated) lines.push(`Passed: ${gated} row${gated > 1 ? 's' : ''} grew, went missing, changed kind or failed on the base, accepted.`);
+else lines.push('Passed.');
+
+console.log(lines.join('\n'));
+process.exitCode = fatal || (gated && !args.accepted) ? 1 : 0;
