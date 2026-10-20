@@ -9,9 +9,11 @@
 // it calls. A count is deterministic and gates: one that grew fails the run,
 // as do a row gone missing, a row whose kind changed, a base whose rows fail
 // to load and a row of the base that fails, unless `--accepted` says the
-// change means them. This package fails the run regardless when its
-// `bench/rows.mjs` is missing or fails to load, or when a row of it fails. A
-// size that grew and a time beyond its spread are flagged for review.
+// change means them. A base that does not hold the package, the base of the
+// change that adds it, compares nothing and gates nothing. This package fails
+// the run regardless when its `bench/rows.mjs` is missing or fails to load, or
+// when a row of it fails. A size that grew and a time beyond its spread are
+// flagged for review.
 //
 // Each side of a row is measured in processes of its own, forked from this one
 // with `--side`, so neither side's code, nor a row measured before it, shapes
@@ -70,9 +72,12 @@ const readManifest = (file) => {
 };
 
 // A side's name, version and rows by name, or why there are no rows to read. A
-// base checked out before the package had a benchmark has none, and is no
-// failure; a directory that holds neither a manifest nor rows is.
+// base checked out before the package was added, or before it had a benchmark,
+// has none, and is no failure; a directory that holds neither a manifest nor
+// rows is.
 const load = async (dir) => {
+  if (!existsSync(dir)) return { missing: true };
+
   const manifest = resolve(dir, 'package.json');
   const file = resolve(dir, 'bench/rows.mjs');
 
@@ -409,6 +414,8 @@ const compared = Boolean(base?.rows);
 
 if (base?.error) {
   lines.push(`The base at \`${args.compare}\` failed to load its rows: ${base.error}`, '');
+} else if (base?.missing) {
+  lines.push(`The base at \`${args.compare}\` does not hold this package, so nothing is compared.`, '');
 } else if (base?.absent) {
   lines.push(`The base at \`${args.compare}\` has no benchmark, so nothing is compared.`, '');
 }
