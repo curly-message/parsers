@@ -22,7 +22,7 @@ namespace CurlyMessage\Internal {
 namespace {
     use CurlyMessage\Parser;
 
-    require dirname(__DIR__, 2) . '/vendor/autoload.php';
+    require dirname(__DIR__) . '/autoload.php';
 
     final class Counted
     {

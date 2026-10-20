@@ -11,7 +11,7 @@ declare(strict_types=1);
 use CurlyMessage\Parser;
 use CurlyMessage\Report;
 
-require dirname(__DIR__, 2) . '/vendor/autoload.php';
+require dirname(__DIR__) . '/autoload.php';
 
 $reports = [];
 $parser = new Parser(onReport: static function (Report $report) use (&$reports): void {
