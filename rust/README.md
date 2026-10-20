@@ -452,6 +452,29 @@ wrapped around the adapter, must fail a case: with `intl` all 26 do, on both
 readings; without it, 24 do, and the two that concern formatting requests
 (an extra request, a property declared unexpressible) reach no case.
 
+## Benchmark
+
+The benchmark measures the release build. From `rust/`, `sh bench/prepare.sh`
+builds it into `bench/dist/`, and `node bench/harness.mjs` measures the rows
+of `bench/rows.mjs` on it; `--compare <dir>` sets each row beside the same row
+of the crate checked out and prepared at `<dir>`. The harness is the family's,
+the same file in every package, and runs on Node; the rows read the build
+through `curly-message-bench`, a program of this workspace that runs a row's
+workload a fixed number of times per request, named in the row.
+
+* **Sizes:** the `.crate` a release ships, and a stripped program resolving
+  one message, without `intl` and with every Intl modifier and `timeStyle`
+  used.
+* **Counts**, which a change must not grow: the allocations of resolving and
+  describing catalogue messages, the `Display` calls of a value many
+  placeholders read, and the crates in the parser's dependency tree, without
+  features (the parser alone) and with `intl`. No public type computes over
+  what a caller passes, so nothing costs a consumer's compiler more as their
+  code grows; the dependency tree is what the crate adds to their build.
+* **Times**, per batch, of the workloads every implementation of the family
+  is measured on: catalogue messages, thousands of placeholders and options,
+  long blanks and keys, deep nesting.
+
 ## License
 
 [MIT](LICENSE)
