@@ -77,5 +77,6 @@ mypy_path = "src"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py", "surface.py"]
 addopts = ["-ra", "--strict-markers"]
 xfail_strict = true
