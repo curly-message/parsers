@@ -3,9 +3,10 @@
 //
 // New returns a Parser, and Parser.Resolve resolves a message against a
 // payload at the Core level of the format: substitution, the fallback chain,
-// value wrappers and the comparison modifiers. A payload value becomes text
-// by its own type: a plain object or array as JSON, a number as ECMAScript
-// writes it, anything else as fmt prints it.
+// value wrappers and the comparison modifiers, and at the Extensions level:
+// the modifiers a host registers through Options.CustomModifiers. A payload
+// value becomes text by its own type: a plain object or array as JSON, a
+// number as ECMAScript writes it, anything else as fmt prints it.
 //
 // CST describes a message as it is written: its placeholders, what each is
 // made of, and where every escape sequence falls, as the concrete syntax tree

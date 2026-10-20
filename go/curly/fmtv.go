@@ -188,6 +188,10 @@ func (c *conversion) methods(arg any) (handled, ok bool) {
 	c.buf = append(c.buf, text...)
 
 	if !completed {
+		if c.w.closed {
+			return true, false
+		}
+
 		if v := reflect.ValueOf(arg); v.Kind() != reflect.Pointer || !v.IsNil() {
 			return true, false
 		}
