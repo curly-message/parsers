@@ -3774,6 +3774,17 @@ describe('parser', () => {
     // that held it.
     expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(['output-limit/{{v; q:zzz;}}']);
   });
+  it('a result nested in another is counted against the output once', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
+    const payload = { n: 1, v: 'x'.repeat(60000) };
+
+    // Each result is more than half the budget, so counting it where it is
+    // nested as well as where it reaches the output would refuse it.
+    expect(resolve('{{n; 1:{{v}}; default:D}}', { payload })).toBe(payload.v);
+    expect(resolve('{{a; default:{{v}}}}', { payload })).toBe(payload.v);
+    expect(reports).toHaveLength(0);
+  });
   it('what a resolution carries beyond its own message is bounded by the budget', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
