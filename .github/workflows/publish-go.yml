@@ -1,0 +1,354 @@
+name: Go parser release
+
+on:
+  workflow_dispatch:
+    inputs:
+      module:
+        description: 'The module directory to release'
+        required: true
+        default: go
+        type: choice
+        options:
+          - go
+      release:
+        description: 'next cuts a prerelease of the pending version; patch, minor and major cut a release'
+        required: true
+        default: next
+        type: choice
+        options:
+          - next
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: read
+
+env:
+  GOTOOLCHAIN: local
+  GOWORK: 'off'
+
+# A Go module has no registry to publish to: its version is the tag
+# `<directory>/vX.Y.Z`, which the module proxy and the checksum database
+# record, with the hash of what the tag holds, the first time anyone asks for
+# it, and never forget. So the release is the tag, and the hash is settled
+# before the push: `build` computes it from a local commit of the release,
+# and `release` pushes only a commit whose tree is that commit's. As in
+# publish.yml, only `build` runs a dependency's code and only `release`
+# holds a credential.
+jobs:
+  tests:
+    uses: ./.github/workflows/tests-go.yml
+
+  version:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.module }}
+    outputs:
+      name: ${{ steps.version.outputs.name }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      channel: ${{ steps.version.outputs.channel }}
+      section: ${{ steps.version.outputs.section }}
+      patch: ${{ steps.bump.outputs.patch }}
+      changes: ${{ steps.bump.outputs.changes }}
+
+    steps:
+      - name: Refuse anything but main
+        working-directory: .
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::A release is cut from main only, not from $GITHUB_REF_NAME."; exit 1; }
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # package.json holds the version line, which the tag cannot hold before
+      # the release exists, and the name the benchmark's table is headed by.
+      - name: Check the module path
+        run: |
+          name=$(node -p "require('./package.json').name")
+          path=$(sed -n 's/^module[[:space:]]\{1,\}//p' go.mod)
+          [ "$name" = "$path" ] || { echo "::error::package.json names $name and go.mod declares $path; the two name one module."; exit 1; }
+
+      # The changelog's pending section names the version it will be released
+      # as, read exactly as publish.yml reads it: `patch`, `minor` and `major`
+      # must arrive at that version and cut the section; `next` releases a
+      # prerelease of it (1.1.0-next.0, then .1) and leaves the section open.
+      - name: Bump the version
+        id: version
+        env:
+          RELEASE: ${{ inputs.release }}
+          MODULE: ${{ inputs.module }}
+        run: |
+          case "$RELEASE" in
+            next) channel=next ;;
+            patch|minor|major) channel=latest ;;
+            *) echo "::error::Unknown release type '$RELEASE'; expected next, patch, minor or major."; exit 1 ;;
+          esac
+          heading='### ([0-9]+\.[0-9]+\.[0-9]+) \(Unreleased\)'
+          sections=$(grep -cE "^$heading$" CHANGELOG.md) || sections=0
+          [ "$sections" = 1 ] || { echo "::error::CHANGELOG.md holds $sections sections headed '### <major.minor.patch> (Unreleased)'; a release reads exactly one."; exit 1; }
+          declared=$(sed -nE "s/^$heading$/\1/p" CHANGELOG.md)
+          before=$(node -p "require('./package.json').version")
+          if [ "$channel" = next ]; then
+            case "$before" in
+              "$declared"-next.*) npm version prerelease --preid=next --no-git-tag-version ;;
+              *) npm version "$declared-next.0" --no-git-tag-version ;;
+            esac
+          else
+            npm version "$RELEASE" --no-git-tag-version
+          fi
+          version=$(node -p "require('./package.json').version")
+          section="### $declared (Unreleased)"
+          if [ "$channel" = latest ]; then
+            [ "$version" = "$declared" ] || { echo "::error::$RELEASE over $before is $version, and CHANGELOG.md's pending section names $declared. Release what the section names, or rewrite its heading."; exit 1; }
+            sed -i -E "s/^$heading$/## \1/" CHANGELOG.md
+            section="## $version"
+          fi
+          name=$(node -p "require('./package.json').name")
+          # From major version 2 on, the go command finds a version only
+          # under a module path ending in its major version.
+          major=${version%%.*}
+          if [ "$major" -ge 2 ] && [ "${name##*/}" != "v$major" ]; then
+            echo "::error::$version is a major version the go command looks up under $name/v$major; move the module path to it first."
+            exit 1
+          fi
+          {
+            echo "name=$name"
+            echo "version=$version"
+            echo "tag=$MODULE/v$version"
+            echo "channel=$channel"
+            echo "section=$section"
+          } >> "$GITHUB_OUTPUT"
+
+      # A version the repository has tagged is released, whatever became of
+      # the tag since: the proxy keeps what it first read under it.
+      - name: Refuse a version already tagged
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$TAG" > /dev/null || status=$?
+          case "$status" in
+            0) echo "::error::$TAG is tagged already."; exit 1 ;;
+            2) ;;
+            *) echo "::error::The repository's tags could not be read (git ls-remote exited $status)."; exit 1 ;;
+          esac
+
+      - name: Record the bump
+        id: bump
+        working-directory: .
+        run: |
+          echo "patch=$(git diff --binary | base64 -w0)" >> "$GITHUB_OUTPUT"
+          echo "changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.module }}
+    outputs:
+      tree: ${{ steps.commit.outputs.tree }}
+      sum: ${{ steps.pack.outputs.sum }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Apply the bump
+        working-directory: .
+        env:
+          PATCH: ${{ needs.version.outputs.patch }}
+          CHANGES: ${{ needs.version.outputs.changes }}
+        run: |
+          base64 -d <<< "$PATCH" | git apply
+          changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)
+          [ "$changes" = "$CHANGES" ] || { echo "::error::The bump changes '$changes' here and changed '$CHANGES' where it was made."; exit 1; }
+
+      - name: Benchmark
+        run: |
+          sh bench/prepare.sh
+          node bench/harness.mjs > BENCH.md
+
+      # The release commit as the release job will make it, never pushed:
+      # its tree is what the tag will hold, build output left out by the
+      # root .gitignore.
+      - name: Commit the release locally
+        id: commit
+        run: |
+          git add BENCH.md
+          git -c user.name=build -c user.email=build@localhost commit --quiet --all --message release
+          echo "tree=$(git rev-parse 'HEAD^{tree}')" >> "$GITHUB_OUTPUT"
+
+      # The hash the proxy and the checksum database will record for the
+      # version, computed from that commit as the proxy zips it.
+      - name: Hash the module
+        id: pack
+        working-directory: go/dev
+        env:
+          MODULE: ${{ inputs.module }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          sum=$(go run ./pack -repo ../.. -module "$MODULE" -version "v$VERSION" -hash)
+          echo "sum=$sum" >> "$GITHUB_OUTPUT"
+
+      - name: Pack the benchmark
+        run: tar -cf "$RUNNER_TEMP/build.tar" BENCH.md
+
+      - name: Upload the benchmark
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/build.tar
+          archive: false
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    environment: release
+    concurrency: publish-${{ inputs.module }}
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: ${{ inputs.module }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Apply the bump
+        working-directory: .
+        env:
+          PATCH: ${{ needs.version.outputs.patch }}
+          CHANGES: ${{ needs.version.outputs.changes }}
+        run: |
+          base64 -d <<< "$PATCH" | git apply
+          changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)
+          [ "$changes" = "$CHANGES" ] || { echo "::error::The bump changes '$changes' here and changed '$CHANGES' where it was made."; exit 1; }
+
+      # Into a directory of its own, unpacked by nothing but the tar below.
+      - name: Download the benchmark
+        uses: actions/download-artifact@v8
+        with:
+          name: build.tar
+          path: ${{ runner.temp }}/artifact
+          skip-decompress: true
+
+      - name: Take the benchmark
+        run: |
+          mkdir "$RUNNER_TEMP/build"
+          tar -xf "$RUNNER_TEMP/artifact/build.tar" -C "$RUNNER_TEMP/build"
+          others=$(find "$RUNNER_TEMP/build" -mindepth 1 ! -path "$RUNNER_TEMP/build/BENCH.md")
+          [ -f "$RUNNER_TEMP/build/BENCH.md" ] && [ ! -L "$RUNNER_TEMP/build/BENCH.md" ] && [ -z "$others" ] || { echo "::error::The build is to hold a BENCH.md file and nothing else."; exit 1; }
+          cp "$RUNNER_TEMP/build/BENCH.md" .
+
+      - name: Mint the release token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      # The tree is compared before anything is pushed: the hash depends on
+      # the files alone, so this commit hashes as the build's did exactly
+      # when the two trees are one. Once pushed, the version is the proxy's.
+      - name: Commit, tag and push
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP: ${{ steps.app.outputs.app-slug }}
+          MODULE: ${{ inputs.module }}
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+          TREE: ${{ needs.build.outputs.tree }}
+        run: |
+          bot="${APP}[bot]"
+          id=$(gh api "/users/$bot" --jq .id)
+          git config user.name "$bot"
+          git config user.email "$id+$bot@users.noreply.github.com"
+          git add BENCH.md
+          git commit --all --message "chore($MODULE): release $NAME@v$VERSION"
+          tree=$(git rev-parse 'HEAD^{tree}')
+          [ "$tree" = "$TREE" ] || { echo "::error::The release commit holds tree $tree and the build hashed tree $TREE."; exit 1; }
+          git tag --annotate --message "$NAME@v$VERSION" "$TAG"
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_VALUE_0
+          git push --atomic origin main "$TAG"
+
+      # Asking the proxy for the version records it, and the checksum
+      # database with it, and shows it on pkg.go.dev. By now it cannot be
+      # taken back, so a hash other than the build's fails the run to say
+      # so, and the remedy is a later version that retracts it.
+      - name: Confirm the version on the module proxy
+        working-directory: ${{ runner.temp }}
+        env:
+          GOPROXY: https://proxy.golang.org
+          GOFLAGS: -modcacherw
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
+          SUM: ${{ needs.build.outputs.sum }}
+        run: |
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            if found=$(go mod download -json "$NAME@v$VERSION"); then
+              sum=$(jq -r .Sum <<< "$found")
+              [ "$sum" = "$SUM" ] || { echo "::error::The proxy records $NAME@v$VERSION as $sum, and the build hashed it as $SUM."; exit 1; }
+              echo "$NAME@v$VERSION is on the module proxy as $sum."
+              exit 0
+            fi
+            echo "Attempt $attempt: $(jq -r '.Error // empty' <<< "$found")"
+            sleep 30
+          done
+          echo "::error::The module proxy did not serve $NAME@v$VERSION."
+          exit 1
+
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+          CHANNEL: ${{ needs.version.outputs.channel }}
+          SECTION: ${{ needs.version.outputs.section }}
+        run: |
+          awk -v heading="$SECTION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          prerelease=()
+          [ "$CHANNEL" = next ] && prerelease=(--prerelease)
+          gh release create "$TAG" --verify-tag --title "$NAME@v$VERSION" --notes-file "$RUNNER_TEMP/notes.md" "${prerelease[@]}"
