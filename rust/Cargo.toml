@@ -44,6 +44,14 @@ icu_time = { version = "2.3", optional = true }
 jiff = { version = "0.2", optional = true, default-features = false, features = ["std", "tzdb-bundle-always"] }
 writeable = { version = "0.6", optional = true }
 
+[dev-dependencies]
+curly-message-conformance = { path = "conformance" }
+libtest-mimic = "0.8.2"
+
+[[test]]
+name = "conformance"
+harness = false
+
 [lints]
 workspace = true
 

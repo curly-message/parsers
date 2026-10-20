@@ -340,6 +340,39 @@ scan reads a message in time linear in its length. The tree and the resolution
 share that scan, so the placeholders the tree describes are the ones a
 resolution resolves.
 
+## Conformance
+
+The specification is normative: where this implementation and the
+specification disagree, this implementation is wrong. The specification's
+conformance set holds it to that. Release 4.1.0 of the set is vendored in the
+repository, checked against its digest before it is read, and
+`cargo test -p curly-message-parser` runs every case it ships through the
+adapter of section 14.3 (`tests/conformance/adapter.rs`), one test per case on each reading below:
+
+| Level | Cases | Without `intl` | With `intl` |
+| --- | --- | --- | --- |
+| Core | 459, 8 of them built from the limits | 459 passed | 459 passed |
+| Extensions | 53 | 53 passed | 53 passed |
+| Intl | 215 | left out: the parser claims no Intl level | 215 passed |
+| The tree of `CST.md` | 44 | 44 passed | 44 passed |
+
+A case that states a formatting request rather than its text is read two
+ways with `intl`, and passes on both. On the first, the parser exposes the
+requests it made and each is compared with the one the case states: the
+facility, the properties and the input. On the second, the output is held to
+the text Node 22.22.0 (ICU 77.1, CLDR 47.0) made of the case's request,
+recorded in `conformance/set/golden-4.1.0.json` by `conformance/golden.mjs`.
+One of the set's requests is spelled otherwise by ICU4X than by V8: in
+`intl/date-layers-compose`, CLDR writes a narrow no-break space before `AM`,
+which V8 writes as a space. That case is measured on its request on both
+readings, and a test holds that list to exactly the requests whose text
+differs.
+
+The runner is audited too. Each of the 26 defects of the set's catalogue,
+wrapped around the adapter, must fail a case: with `intl` all 26 do, on both
+readings; without it, 24 do, and the two that concern formatting requests
+(an extra request, a property declared unexpressible) reach no case.
+
 ## License
 
 [MIT](LICENSE)
