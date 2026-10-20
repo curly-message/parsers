@@ -29,7 +29,9 @@ placeholder it is in, and `Options.OnReport` is told about it.
 The parser implements the Core level of the format: substitution, the
 fallback chain, value wrappers (`Options.IgnoreWrappers` turns their
 recognition off) and the comparisons `eq`, `ne`, `lt`, `gt`, `lte` and `gte`;
-and the Extensions level: the modifiers a host registers. Every other
+the Extensions level: the modifiers a host registers; and, where
+`Options.Intl` supplies the facility it delegates to, the Intl level:
+`number`, `currency`, `date`, `ago`, `plural` and `ordinal`. Every other
 modifier name is unknown.
 
 ### Values
@@ -145,6 +147,62 @@ calls `runtime.Goexit` or panics on a goroutine of its own, and one that,
 through state it keeps, reads an option or default of a placeholder while
 that option or default is being rendered, or a value from inside a method of
 that value the parser called, which waits for itself forever.
+
+### The Intl level
+
+The formatting modifiers and the plural selections depend on locale data,
+which this package does not carry. `Options.Intl` takes the host's facility
+as an `Intl`, four requests in the vocabulary of ECMAScript's `Intl`:
+`NumberFormat`, `DateTimeFormat`, `RelativeTimeFormat` and `PluralRules`.
+Without one, those six names are unknown.
+
+```go
+p := curly.New(curly.Options{Intl: supplier}) // the host's curly.Intl
+
+en := "en"
+
+p.Resolve("{{n:plural; one:one file; other:{{n:number}} files}}", curly.Context{
+	Payload: map[string]any{"n": 1234.5678},
+	Locale:  &en,
+}) // "1,234.57 files", where the supplier formats as Intl does in "en"
+```
+
+The parser decides everything the format decides and asks the supplier only
+for the text or the category. A locale is tested first: where
+`Context.Locale` is nil or empty, the placeholder resolves to the empty
+string and reports `missing-locale`. The value must then be a finite number
+by the conversion the comparisons use, so blank text, `12px` and `Infinity`
+take the fallback chain and report `failed-modifier`. The properties are
+composed as a host modifier's are, and each request carries a map of its
+own:
+
+| Modifier | Request |
+|----------|---------|
+| `number` | `NumberFormat` of the value, with `maximumFractionDigits` 2 where no layer names it, widened to a larger `minimumFractionDigits` a layer names |
+| `currency` | `NumberFormat` of the value times the `ratio` property, which the request leaves out, with `style` `currency` over every layer |
+| `date` | `DateTimeFormat` of the value read as milliseconds since the epoch, and failing that as text in one of the layouts below |
+| `ago` | `RelativeTimeFormat` of the count and unit the value, a signed delta in milliseconds, climbs to, with `numeric` `auto` where no layer names it; the `format` property names the unit, and the request leaves it out |
+| `plural` | an option whose key is a number equal to the value; failing that, `PluralRules` with the digit properties composed under `number`, its own over them, `number`'s default maximum and `type` `cardinal` |
+| `ordinal` | the same for an integer, with its own properties alone and `type` `ordinal` |
+
+A property is read with ECMAScript's `ToNumber` where the parser computes
+with it, `minimumFractionDigits` and `ratio`: a Go number as itself, a
+`bool` as 1 or 0, `nil` as 0, blank text as 0 and other text by the numeric
+conversion, and anything else as NaN.
+
+`date` reads text, Go having no layout-free reading of a date, in these
+layouts: the one `time.Time`'s `String` method writes, read as it writes
+it, so a `time.Time` in the payload stays a date in any zone, and the same
+instant whatever zone the host runs in: its monotonic clock reading dropped,
+a year of four to nine digits, signed where it is negative, and whatever
+name the zone has after the offset, which decides the instant to the minute
+`String` writes it in; RFC 3339, with a fraction of a second or without; and
+`time.DateTime` and `time.DateOnly`, in UTC. A `time.Duration` prints as
+`1h0m0s` and is no number.
+
+A request that returns an error or panics, and a category that is none of
+the six, take the fallback chain and report `failed-modifier`. The supplier's
+text is the placeholder's result, emitted as it stands.
 
 ### Limits and reports
 

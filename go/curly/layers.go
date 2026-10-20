@@ -10,23 +10,53 @@ import "reflect"
 func (w *walk) composed(name string, wrapper any) map[string]any {
 	out := make(map[string]any, len(w.p.defaults[name]))
 
-	for k, v := range w.p.defaults[name] {
-		out[k] = v
-	}
-
-	if entry, ok := w.props[name]; ok {
+	for _, entry := range w.entries(name, wrapper) {
 		mergeLayer(out, entry)
 	}
 
-	if wrapper != nil {
-		if props, _, ok := member(wrapper, "props"); ok {
-			if entry, ok := layerEntry(props, name); ok {
-				mergeLayer(out, entry)
+	return out
+}
+
+// shownDigits is the properties deciding which digits a number is shown
+// with, composed from the layers under number and read name by name, so
+// nothing else number is configured with is read on plural's account
+// (section 11.5).
+func (w *walk) shownDigits(wrapper any) map[string]any {
+	out := map[string]any{}
+
+	for _, entry := range w.entries("number", wrapper) {
+		for _, name := range [...]string{
+			"minimumIntegerDigits", "minimumFractionDigits", "maximumFractionDigits",
+			"minimumSignificantDigits", "maximumSignificantDigits", "roundingIncrement",
+			"roundingMode", "roundingPriority", "trailingZeroDisplay",
+		} {
+			if v, ok := layerEntry(entry, name); ok && !isUndefinedValue(v) {
+				out[name] = v
 			}
 		}
 	}
 
 	return out
+}
+
+// entries is what each layer holds under name, the lowest first; a layer
+// holding nothing there holds nil.
+func (w *walk) entries(name string, wrapper any) [3]any {
+	var layers [3]any
+
+	if defaults, ok := w.p.defaults[name]; ok {
+		layers[0] = defaults
+	}
+
+	layers[1], _ = layerEntry(w.props, name)
+
+	if wrapper != nil {
+		if props, _, ok := member(wrapper, "props"); ok {
+			layers[2], _ = layerEntry(props, name)
+		}
+	}
+
+	return layers
 }
 
 // layerOf is v as a layer: anything carrying entries by name, which in Go

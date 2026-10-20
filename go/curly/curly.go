@@ -72,6 +72,11 @@ type Options struct {
 	// IgnoreWrappers turns off the recognition of value wrappers (section
 	// 4.1): every payload entry is a value, whatever its shape.
 	IgnoreWrappers bool
+	// Intl is the facility the modifiers of the Intl level delegate to:
+	// number, currency, date, ago, plural and ordinal. Nil leaves the level
+	// unclaimed, and each of those names is unknown unless the host
+	// registers a modifier under it.
+	Intl Intl
 }
 
 // Context is what one resolution reads besides the message.
@@ -95,6 +100,7 @@ type Parser struct {
 	defaults       map[string]map[string]any
 	onReport       func(Report)
 	ignoreWrappers bool
+	intl           Intl
 }
 
 // New returns a Parser configured by options.
@@ -102,6 +108,7 @@ func New(options Options) *Parser {
 	p := &Parser{
 		onReport:       options.OnReport,
 		ignoreWrappers: options.IgnoreWrappers,
+		intl:           options.Intl,
 	}
 
 	for name, m := range options.CustomModifiers {

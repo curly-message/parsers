@@ -12,3 +12,7 @@
   fallback chain rendered on demand, the composed properties of
   `Options.ModifierDefaults`, `Context.Props` and a wrapper's `props`, and
   `Context.Locale`.
+- The Intl level, delegated to the host's facility through `Options.Intl`:
+  `number`, `currency`, `date`, `ago`, `plural` and `ordinal`, with every
+  rule of the format decided in the parser and only the text and the plural
+  category asked of the supplier.
