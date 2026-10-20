@@ -16,10 +16,16 @@ import (
 	"unicode/utf8"
 )
 
-func convertOne(v any) (string, bool) {
+// lockedWalk is a walk as Resolve holds it: parser code runs under its lock.
+func lockedWalk() *walk {
 	w := &walk{p: New(Options{})}
+	w.mu.Lock()
 
-	return w.convert(v, noSite)
+	return w
+}
+
+func convertOne(v any) (string, bool) {
+	return lockedWalk().convert(v, noSite)
 }
 
 // Section 3.3 of the design takes ECMAScript's Number::toString as the
@@ -324,7 +330,7 @@ func TestConversionStopsAtItsBudget(t *testing.T) {
 		"fmt":     func(c *conversion) bool { c.limit = printLimit; return c.print(named) },
 		"prewalk": func(c *conversion) bool { return c.json(reflect.ValueOf([]any{holder{named}})) },
 	} {
-		c := &conversion{w: &walk{p: New(Options{})}, limit: MaxConversionNodes}
+		c := &conversion{w: lockedWalk(), limit: MaxConversionNodes}
 
 		if run(c) || c.nodes > c.limit+1 || len(c.buf) > MaxSerializedLength+len("leaf") {
 			t.Errorf("%s: visited %d nodes, wrote %d bytes", what, c.nodes, len(c.buf))
@@ -356,7 +362,7 @@ func TestHostTextIsMeasuredFirst(t *testing.T) {
 
 	var codes []Code
 
-	p := New(Options{OnReport: func(r Report) { codes = append(codes, r.Code) }})
+	p := New(Options{OnReport: func(r Report, _ Resolver) { codes = append(codes, r.Code) }})
 
 	for what, shape := range shapes {
 		var allocated [2]uint64
@@ -667,7 +673,7 @@ func FuzzResolve(f *testing.F) {
 
 		_ = json.Unmarshal([]byte(data), &payload)
 
-		p := New(Options{OnReport: func(Report) {}})
+		p := New(Options{OnReport: func(Report, Resolver) {}})
 		context := Context{Payload: payload}
 		whole := p.Resolve(message, context)
 
@@ -713,7 +719,7 @@ func TestMapKeysCountWithinTheBudget(t *testing.T) {
 			refs[i] = m
 		}
 
-		c := &conversion{w: &walk{p: New(Options{})}, limit: printLimit}
+		c := &conversion{w: lockedWalk(), limit: printLimit}
 		ok := c.print(refs)
 
 		if ok && string(c.buf) != fmt.Sprint(refs) {
@@ -757,7 +763,7 @@ func TestMapSortReadsWithinTheCount(t *testing.T) {
 			m[zeroKey[[1000]struct{}]{I: i}] = i
 		}
 
-		c := &conversion{w: &walk{p: New(Options{})}, limit: printLimit}
+		c := &conversion{w: lockedWalk(), limit: printLimit}
 		count := 1003 * n
 
 		if n == 1 {
@@ -782,13 +788,13 @@ func TestMapKeysCountStopsAtTheBudget(t *testing.T) {
 
 	type past = zeroKey[[printLimit/2 - 2]struct{}]
 
-	c := &conversion{w: &walk{p: New(Options{})}, limit: printLimit}
+	c := &conversion{w: lockedWalk(), limit: printLimit}
 
 	if !c.print(map[edge]int{{I: 0}: 0, {I: 1}: 1}) || string(c.buf) != "map[:0 :1]" || c.keys.nodes != printLimit {
 		t.Errorf("at the budget: %q after %d nodes", c.buf, c.keys.nodes)
 	}
 
-	c = &conversion{w: &walk{p: New(Options{})}, limit: printLimit}
+	c = &conversion{w: lockedWalk(), limit: printLimit}
 
 	if c.print(map[past]int{{I: 0}: 0, {I: 1}: 1}) || c.keys.nodes != printLimit+1 || c.keys.reads != 0 {
 		t.Errorf("past the budget: %q after %d nodes and %d reads", c.buf, c.keys.nodes, c.keys.reads)

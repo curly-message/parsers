@@ -21,7 +21,7 @@ type resolved struct {
 func resolveWith(options curly.Options, message any, payload map[string]any) (resolved, []curly.Report) {
 	var reports []curly.Report
 
-	options.OnReport = func(r curly.Report) { reports = append(reports, r) }
+	options.OnReport = func(r curly.Report, _ curly.Resolver) { reports = append(reports, r) }
 	out := curly.New(options).Resolve(message, curly.Context{Payload: payload, ID: "case"})
 	r := resolved{out: out}
 
@@ -289,7 +289,7 @@ func TestResolveReportTextIsCut(t *testing.T) {
 }
 
 func TestResolveSurvivesAPanickingOnReport(t *testing.T) {
-	p := curly.New(curly.Options{OnReport: func(curly.Report) { panic("logger down") }})
+	p := curly.New(curly.Options{OnReport: func(curly.Report, curly.Resolver) { panic("logger down") }})
 
 	if got := p.Resolve("{{v:nope; default:D}} {{w}}", curly.Context{Payload: map[string]any{"w": "W"}}); got != "D W" {
 		t.Errorf("got %q", got)
@@ -558,7 +558,7 @@ func TestResolveFromInsideAConversion(t *testing.T) {
 }
 
 func TestResolveConcurrently(t *testing.T) {
-	p := curly.New(curly.Options{OnReport: func(curly.Report) {}})
+	p := curly.New(curly.Options{OnReport: func(curly.Report, curly.Resolver) {}})
 	payload := map[string]any{"v": "b", "o": map[string]any{"a": []any{1.0}}, "s": celsius(1)}
 	done := make(chan string)
 

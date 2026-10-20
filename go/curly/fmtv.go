@@ -173,6 +173,9 @@ func (c *conversion) methods(arg any) (handled, ok bool) {
 	var completed bool
 
 	switch m := arg.(type) {
+	case Texter:
+		r := c.w.resolver()
+		completed = c.w.host(func() { text = m.CurlyText(r) })
 	case fmt.Formatter:
 		s := &state{}
 		completed = c.w.host(func() { m.Format(s, 'v') })
@@ -188,6 +191,10 @@ func (c *conversion) methods(arg any) (handled, ok bool) {
 	c.buf = append(c.buf, text...)
 
 	if !completed {
+		if c.w.closed {
+			return true, false
+		}
+
 		if v := reflect.ValueOf(arg); v.Kind() != reflect.Pointer || !v.IsNil() {
 			return true, false
 		}

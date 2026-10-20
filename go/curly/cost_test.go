@@ -81,7 +81,7 @@ func TestMapSortCostStopsAtTheBudget(t *testing.T) {
 
 		var codes []curly.Code
 
-		p := curly.New(curly.Options{OnReport: func(r curly.Report) { codes = append(codes, r.Code) }})
+		p := curly.New(curly.Options{OnReport: func(r curly.Report, _ curly.Resolver) { codes = append(codes, r.Code) }})
 		allocs := testing.AllocsPerRun(1, func() {
 			codes = nil
 			out = p.Resolve("{{v; default:D}}", curly.Context{Payload: map[string]any{"v": v}})
