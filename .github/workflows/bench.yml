@@ -1,16 +1,18 @@
 name: Benchmark
 
 # The benchmark of a PR against its base, posted on the PR and in the job's
-# summary. It fails where the benchmark does: a row of the branch that fails,
-# or, unless the PR carries the `bench-accepted` label, a count that grew, a
-# row gone missing or changing kind, or a row that fails on the base.
+# summary, for each package the PR touches: each directory that holds a
+# `bench/rows.mjs`. It fails where the benchmark does: a row of the branch
+# that fails, or, unless the PR carries the `bench-accepted` label, a count
+# that grew, a row gone missing or changing kind, or a row that fails on the
+# base. A base that does not hold the package compares nothing.
 # `bench-label.yml` re-runs it when that label changes.
 on:
   pull_request:
     paths:
-      - js/**
-      - '!js/**/*.md'
-      - '!js/tests/**'
+      - '**'
+      - '!**/*.md'
+      - '!**/tests/**'
       - .github/workflows/bench.yml
 
 permissions:
@@ -24,13 +26,54 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The packages the PR touches: those with a changed file that is neither a
+  # document nor a test, or every package where this workflow changed.
+  packages:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      list: ${{ steps.list.outputs.list }}
+
+    steps:
+      - name: Checkout the branch
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: List the packages
+        id: list
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          packages=$(git ls-files '*/bench/rows.mjs' | { grep -v '/bench/check/' || true; } | sed 's#/bench/rows.mjs$##')
+          changed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
+          all=0
+          if grep -qxF '.github/workflows/bench.yml' <<< "$changed"; then all=1; fi
+          list=$(awk -v all="$all" '
+            NR == FNR { changed[++n] = $0; next }
+            $0 != "" {
+              for (i = 1; i <= n; i++) {
+                file = changed[i]
+                if (all || (index(file, $0 "/") == 1 && file !~ /\.md$/ && index(file, $0 "/tests/") != 1)) { print; break }
+              }
+            }
+          ' <(printf '%s\n' "$changed") <(printf '%s\n' "$packages") | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Packages: $list"
+          echo "list=$list" >> "$GITHUB_OUTPUT"
+
   Benchmark:
+    needs: packages
+    if: needs.packages.outputs.list != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        package: [js]
+        package: ${{ fromJSON(needs.packages.outputs.list) }}
 
     steps:
       - name: Checkout the branch
@@ -46,10 +89,34 @@ jobs:
           path: base
           persist-credentials: false
 
+      # The harness is Node's, whatever the package is written in.
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
           node-version: 24
+
+      # A toolchain per manifest the package holds. Rust needs no step: the
+      # runner's rustup honours the package's `rust-toolchain.toml`.
+      - name: Setup uv
+        if: hashFiles(format('change/{0}/pyproject.toml', matrix.package)) != ''
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: false
+
+      - name: Setup Go
+        if: hashFiles(format('change/{0}/go.mod', matrix.package)) != ''
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: change/${{ matrix.package }}/go.mod
+          cache: false
+
+      - name: Setup PHP
+        if: hashFiles(format('change/{0}/composer.json', matrix.package)) != ''
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version-file: change/${{ matrix.package }}/.php-version
+          extensions: intl, opcache
+          coverage: none
 
       # The harness on rows that fail wherever two measurements share a
       # process, so a table below is one whose sides were measured apart.
@@ -58,15 +125,29 @@ jobs:
         working-directory: change/${{ matrix.package }}/bench/check
         run: node ../harness.mjs --compare .
 
-      # Each side from its own lockfile, running no install script, since the
-      # job holds a token that writes to the PR. A base that does not build
-      # leaves rows that fail, which the label can accept.
+      # Each side by its `bench/prepare.sh`, or else from its lockfile with
+      # npm. Neither runs a dependency's install script where its toolchain
+      # lets it refuse one, since the job holds a token that writes to the PR.
+      # A base that does not build leaves rows that fail, which the label can
+      # accept; a base that does not hold the package is not prepared, and the
+      # harness compares nothing.
       - name: Install and build
         env:
           PACKAGE: ${{ matrix.package }}
         run: |
-          (cd "base/$PACKAGE" && npm ci --ignore-scripts && npm run build) || echo "::warning::The base did not install or build."
-          (cd "change/$PACKAGE" && npm ci --ignore-scripts && npm run build)
+          prepare() {
+            if [ -f bench/prepare.sh ]; then
+              sh bench/prepare.sh
+            else
+              npm ci --ignore-scripts && npm run build
+            fi
+          }
+          if [ -d "base/$PACKAGE" ]; then
+            (cd "base/$PACKAGE" && prepare) || echo "::warning::The base did not install or build."
+          else
+            echo "::notice::The base does not hold $PACKAGE."
+          fi
+          (cd "change/$PACKAGE" && prepare)
 
       # Read when the job runs rather than off the event, so a re-run sees a
       # label added since.
@@ -77,6 +158,8 @@ jobs:
           PR: ${{ github.event.pull_request.number }}
         run: echo "accepted=$(gh api "repos/$GITHUB_REPOSITORY/issues/$PR/labels" --jq 'any(.[]; .name == "bench-accepted")')" >> "$GITHUB_OUTPUT"
 
+      # The base by an absolute path, which holds for a package nested at any
+      # depth.
       - name: Benchmark
         id: bench
         working-directory: change/${{ matrix.package }}
@@ -87,7 +170,7 @@ jobs:
           flags=()
           if [ "$ACCEPTED" = true ]; then flags+=(--accepted); fi
           status=0
-          node bench/harness.mjs --compare "../../base/$PACKAGE" "${flags[@]}" > "$RUNNER_TEMP/bench.md" || status=$?
+          node bench/harness.mjs --compare "$GITHUB_WORKSPACE/base/$PACKAGE" "${flags[@]}" > "$RUNNER_TEMP/bench.md" || status=$?
           cat "$RUNNER_TEMP/bench.md" >> "$GITHUB_STEP_SUMMARY"
           echo "status=$status" >> "$GITHUB_OUTPUT"
 
