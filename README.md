@@ -20,16 +20,23 @@ format, which the specification states is stable.
 
 It resolves over the format's own inputs and depends on no host library.
 
+The Go implementation, `github.com/curly-message/parsers/go`, implements the
+same version and is not yet released.
+
 ## Implementations
 
 | Path | Package | State |
 | --- | --- | --- |
 | [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
+| [`go/`](./go) | `github.com/curly-message/parsers/go` | Unreleased |
 
 One directory per language, each a standalone package with its own build,
-tests and version line. Release tags are namespaced by directory
-(`js-v1.0.0`), so an implementation can leave for its own repository without
-that being a breaking change for the others.
+tests and version line. Release tags are namespaced by directory: `js-v1.0.0`
+for a package a registry addresses by name, so it can leave for its own
+repository without that being a breaking change for the others; and
+`go/v1.0.0` for a Go module, whose version the go command reads only from a
+tag named after the module's directory. A Go module's path is where it
+lives, so moving one changes what every importer writes.
 
 ## Pre-commit hook
 
@@ -39,11 +46,16 @@ and how to install them, rather than failing the commit. `npm ci` in `js/`
 installs it; without Node, `git config core.hooksPath .githooks` does. Git
 then runs every hook from `.githooks/`, and none from `.git/hooks/`.
 
+The check of a directory is `.githooks/<dir>.sh`: `npm run lint` for `js/`,
+and for `go/` the formatting, vet and ASCII checks of the Lint job of
+`tests-go.yml`.
+
 ## Benchmarks
 
 Each implementation directory has a benchmark, run by the command its README
-names (`npm run bench` in `js/`), that measures what its build costs: counts,
-such as what checking a call costs a type checker, sizes, and times. A PR is
+names (`npm run bench` in `js/`, `sh bench/prepare.sh && node
+bench/harness.mjs` in `go/`), that measures what its build costs: counts, such
+as what checking a call costs a type checker, sizes, and times. A PR is
 benchmarked against its base by `bench.yml`, for each implementation it
 touches, which posts a table per implementation on the PR (a PR from a fork
 finds them in the job's summary). A count that grew, a row gone missing or
@@ -97,6 +109,24 @@ registered only for a package that exists, so the first version,
 `1.0.0-next.0`, was published by hand from `main` by a maintainer of the scope
 (`cd js && npm ci && npm publish --access public --tag next`); the workflow
 refuses to run for a package the registry does not know.
+
+### Go
+
+A Go module has no registry: its version is the tag `go/vX.Y.Z`, which the
+module proxy and the checksum database record, with the hash of what it
+holds, the first time anyone asks for it. A version cannot be withdrawn
+once recorded; a later version retracts it. The **Go parser release**
+workflow (`.github/workflows/publish-go.yml`, started by hand with the
+module directory and a release type) reads the changelog's pending section
+and the release types as the JavaScript workflow does. After the tests, a
+job with no credential benchmarks the module into `BENCH.md`, makes the
+release commit locally and computes, from that commit, the `h1:` hash the
+proxy will record. The release job, in the `release` environment, makes the
+same commit as the GitHub App and pushes it with its tag only when its tree
+is the one the build hashed. It then holds the proxy's hash for the version
+to the build's and publishes a GitHub release. There is no registry token to
+hold and no first version to publish by hand: the workflow cuts the first
+prerelease as it cuts every later version.
 
 ## Specification
 
