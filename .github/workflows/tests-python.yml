@@ -1,0 +1,148 @@
+name: Python parser tests
+
+on:
+  # A pull request from a fork pushes nothing here, so the tests run on the
+  # pull request, whatever its base, which tests a stacked one too. A rebase
+  # merge and a release commit land commits no pull request ran, so main is
+  # tested again on a push. A tag is left out: it names a tree the publish
+  # workflow has just tested. A branch with no pull request runs by hand.
+  push:
+    branches: [main]
+    paths: &paths
+      - python/**
+      - .github/workflows/tests-python.yml
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+  # The publish workflow runs these tests before it releases.
+  workflow_call:
+
+defaults:
+  run:
+    working-directory: python
+
+jobs:
+  # Each leg states whether it expects Intl, so a supplier that failed to
+  # install cannot pass as a leg that never asked for one.
+  Tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        python: ['3.11', '3.12', '3.13', '3.14', '3.15']
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        intl: [with, without]
+    env:
+      UV_PYTHON: ${{ matrix.python }}
+      CURLY_MESSAGE_EXPECT_INTL: ${{ matrix.intl == 'with' && '1' || '0' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Setup Python
+        run: uv python install ${{ matrix.python }}
+
+      - name: Test
+        run: uv run --no-project tasks.py ${{ matrix.intl == 'with' && 'test' || 'test-core' }}
+
+  # GitHub's runners keep UTC, which has no transitions: a date with no zone
+  # of its own, and one formatted without a timeZone, meets one here.
+  LocalTime:
+    name: Local time
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: '3.13'
+      TZ: America/New_York
+      CURLY_MESSAGE_EXPECT_INTL: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Test
+        run: uv run --no-project tasks.py test
+
+  # The extra accepts every Babel from 2.14 on; the lock pins the newest.
+  Lowest:
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: '3.11'
+      CURLY_MESSAGE_EXPECT_INTL: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Test
+        run: uv run --no-project tasks.py test-lowest
+
+  # The tests lint too; on its own, a lint failure reads as one.
+  Lint:
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: '3.13'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Lint
+        run: |
+          uv run --no-project tasks.py lint
+          uv run --no-project tasks.py typecheck
+
+  # Built from a fresh checkout, so what the sdist and the wheel hold is what
+  # building produced. A downstream build runs the suite from the sdist, so
+  # the sdist's own tasks run in the tree it unpacks to. The sdist carries the
+  # conformance archive the suite reads, which is held to the digest the
+  # runner pins.
+  Pack:
+    runs-on: ubuntu-latest
+    env:
+      UV_PYTHON: '3.13'
+      CURLY_MESSAGE_EXPECT_INTL: '1'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+
+      - name: Build, and test from the sdist
+        run: uv run --no-project tasks.py test-sdist
+
+      - name: Check the build
+        run: |
+          uv run --no-project python - <<'PY'
+          import ast, hashlib, pathlib, tarfile, zipfile
+
+          source = pathlib.Path("tests/conformance/runner/archive.py").read_text(encoding="utf-8")
+          (pin,) = [
+              ast.literal_eval(node.value)
+              for node in ast.parse(source).body
+              if isinstance(node, ast.AnnAssign) and getattr(node.target, "id", None) == "PIN"
+          ]
+          (wheel,) = pathlib.Path("dist").glob("*.whl")
+          (sdist,) = pathlib.Path("dist").glob("*.tar.gz")
+          names = set(zipfile.ZipFile(wheel).namelist())
+          for name in ("curly_message/__init__.py", "curly_message/py.typed"):
+              assert name in names, f"{wheel.name} holds no {name}"
+          archive = f"tests/conformance/conformance-{pin[0]}.zip"
+          with tarfile.open(sdist) as packed:
+              (member,) = [m for m in packed.getmembers() if m.name.split("/", 1)[-1] == archive]
+              digest = hashlib.sha256(packed.extractfile(member).read()).hexdigest()
+          assert digest == pin[1], f"{sdist.name} holds {archive} with the digest {digest}, not {pin[1]}"
+          PY
