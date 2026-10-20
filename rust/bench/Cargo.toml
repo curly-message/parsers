@@ -1,0 +1,34 @@
+[package]
+name = "curly-message-bench"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+description = "The programs the benchmark of curly-message-parser measures."
+license = "MIT"
+repository = "https://github.com/curly-message/parsers"
+publish = false
+
+# The parser is declared without features and `intl` is forwarded, so this
+# member never turns the parser's `intl` on in a build that does not ask.
+[features]
+intl = ["curly-message-parser/intl"]
+
+[dependencies]
+curly-message-parser = { path = ".." }
+
+[[bin]]
+name = "curly-message-bench"
+path = "src/main.rs"
+required-features = ["intl"]
+
+[[bin]]
+name = "hello"
+path = "src/bin/hello.rs"
+
+[[bin]]
+name = "hello-intl"
+path = "src/bin/hello_intl.rs"
+required-features = ["intl"]
+
+[lints]
+workspace = true
