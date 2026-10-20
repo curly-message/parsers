@@ -12,5 +12,8 @@ parameters:
         - tools
     excludePaths:
         - tools/qa
+    # A property that exists to be held, and so is never read, says so.
+    propertyAlwaysReadTags:
+        - '@held'
     bootstrapFiles:
         - vendor/autoload.php
