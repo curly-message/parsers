@@ -85,6 +85,28 @@ final class Text
     }
 
     /**
+     * The code point the character at `$at` encodes, or -1 for a byte that
+     * begins no well-formed sequence.
+     */
+    public static function codePoint(string $text, int $at): int
+    {
+        $size = self::charLength($text, $at, strlen($text));
+        $lead = ord($text[$at]);
+
+        if ($size === 1) {
+            return $lead < 0x80 ? $lead : -1;
+        }
+
+        $codePoint = $lead & (0xFF >> ($size + 1));
+
+        for ($index = 1; $index < $size; $index += 1) {
+            $codePoint = ($codePoint << 6) | (ord($text[$at + $index]) & 0x3F);
+        }
+
+        return $codePoint;
+    }
+
+    /**
      * Where the escape sequence opening at `$at` ends. A backslash consumes
      * the character after it (section 7), every byte of it, so a sequence is
      * claimed whole rather than cut inside a character.
