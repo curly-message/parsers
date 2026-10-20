@@ -4,6 +4,7 @@ use std::cell::{Cell, OnceCell};
 use crate::builtins::{Builtin, Selected};
 use crate::convert::{Converted, Record, Txt};
 use crate::depth::{Current, Producing, host_call, modifier_call};
+use crate::formatting::{Asked, Conversions, Formatting};
 use crate::modifier::{Modifier, ModifierInput};
 use crate::parser::{Config, Context};
 use crate::props::{Layers, Props};
@@ -32,6 +33,9 @@ pub(crate) struct Walker<'a> {
     output: Cell<usize>,
     read: Cell<isize>,
     record: Record,
+    // What the formatting modifiers convert from the layers a placeholder
+    // without props of its own shares with every other.
+    conversions: Conversions,
 }
 
 /// How a placeholder resolved: to text, or to a span of the message to be
@@ -41,15 +45,17 @@ enum Outcome<'a> {
     Inline(usize, usize),
 }
 
-/// What reading a placeholder came to: its outcome, or a host's modifier to
-/// call for it. The call is made from the walk's loop, so the frame that read
-/// the placeholder is gone from the stack while the modifier holds it.
+/// What reading a placeholder came to: its outcome, or a host's modifier or
+/// a formatting modifier to call for it. The call is made from the walk's
+/// loop, so the frame that read the placeholder is gone from the stack while
+/// the host's code holds it.
 enum Step<'a> {
     Settled(Outcome<'a>),
     // What one of the format's own modifiers selected, rendered while that
     // modifier is current, as a host's call is (section 13).
     Selected(Outcome<'a>, Current),
     Call(&'a dyn Modifier, Box<Ph<'a>>),
+    Intl(Formatting, Box<Ph<'a>>),
 }
 
 // A span being rendered: the text the walk has made of it so far, the
@@ -120,6 +126,7 @@ impl<'a> Ph<'a> {
 #[derive(Clone, Copy)]
 enum Resolved<'c> {
     Builtin(Builtin),
+    Intl(Formatting),
     Host(&'c dyn Modifier),
 }
 
@@ -127,6 +134,7 @@ impl Resolved<'_> {
     fn is_selection(self) -> bool {
         match self {
             Self::Builtin(builtin) => builtin.is_selection(),
+            Self::Intl(formatting) => formatting.is_selection(),
             Self::Host(_) => false,
         }
     }
@@ -143,6 +151,13 @@ fn detached(text: Txt<'_>) -> Txt<'static> {
 
 fn is_wrapper(object: &Object) -> bool {
     !object.is_empty() && object.iter().all(|(key, _)| WRAPPED.contains(&key))
+}
+
+// The props a placeholder's wrapper adds over the resolution's.
+fn own_props<'p>(ph: &'p Ph<'_>) -> Option<&'p Object> {
+    ph.wrapper
+        .and_then(|wrapper| wrapper.get("props"))
+        .and_then(Value::as_object)
 }
 
 fn push_text(out: &mut String, text: &str, from: usize, to: usize) {
@@ -166,6 +181,7 @@ impl<'a> Walker<'a> {
             output: Cell::new(MAX_OUTPUT_LENGTH),
             read: Cell::new(isize::try_from(MAX_READ_LENGTH).unwrap_or(isize::MAX)),
             record,
+            conversions: Conversions::default(),
         }
     }
 
@@ -220,6 +236,7 @@ impl<'a> Walker<'a> {
                 Step::Settled(outcome) => (outcome, None),
                 Step::Selected(outcome, current) => (outcome, Some(current)),
                 Step::Call(modifier, ph) => (self.call(modifier, ph), None),
+                Step::Intl(formatting, ph) => self.intl(formatting, *ph),
             };
 
             match outcome {
@@ -379,24 +396,107 @@ impl<'a> Walker<'a> {
                 let selected = builtin.select(value, &ph.options);
                 let current = Current::format_defined();
                 let outcome = match selected {
-                    Selected::Option(at) => match ph.options.get(at) {
-                        Some(option) => Outcome::Inline(option.value.0, option.value.1),
-                        None => self.chain(ph),
-                    },
+                    Selected::Option(at) => self.option(ph, at),
                     Selected::Default => self.chain(ph),
                 };
 
                 Step::Selected(outcome, current)
             }
+            Resolved::Intl(formatting) => Step::Intl(formatting, Box::new(ph)),
             Resolved::Host(modifier) => Step::Call(modifier, Box::new(ph)),
         }
     }
 
+    // The formatting modifiers are known only where a facility was configured
+    // to delegate them to.
     fn modifier_for(&self, name: &str) -> Option<Resolved<'a>> {
-        match self.config.modifiers.get(name) {
-            Some(modifier) => Some(Resolved::Host(&**modifier)),
-            None => Builtin::named(name).map(Resolved::Builtin),
+        if let Some(modifier) = self.config.modifiers.get(name) {
+            return Some(Resolved::Host(&**modifier));
         }
+
+        if let Some(builtin) = Builtin::named(name) {
+            return Some(Resolved::Builtin(builtin));
+        }
+
+        self.config
+            .intl
+            .as_ref()
+            .and(Formatting::named(name))
+            .map(Resolved::Intl)
+    }
+
+    // The steps of sections 11.2 and 11.5 in their order: the locale, then
+    // what the modifier tests itself, then the request. The facility is host
+    // code, so how it fails and whether it came back are the placeholder's to
+    // settle. A locale nobody supplied is the one failure the chain does not
+    // answer: a default stands in for a value, never for the locale it would
+    // have been formatted in. The modifier is current from the test of its
+    // value, through its props' conversion and the facility's call, to the
+    // end of what a selection selected; the chain a failure takes renders
+    // after the call.
+    fn intl(&self, formatting: Formatting, ph: Ph<'a>) -> (Outcome<'a>, Option<Current>) {
+        let Some(facility) = self.config.intl.as_deref() else {
+            return (self.chain(ph), None);
+        };
+        let Some(locale) = self.locale.filter(|locale| !locale.is_empty()) else {
+            self.report(Code::MissingLocale, ph.open, ph.close);
+
+            return (Outcome::Done(Txt::Borrowed("")), None);
+        };
+        let current = Current::format_defined();
+        let value = ph.value_text.as_deref().unwrap_or_default();
+        let input = match formatting.input(value, &ph.options) {
+            Ok(input) => input,
+            Err(Asked::Option(at)) => return (self.option(ph, at), Some(current)),
+            Err(_) => {
+                drop(current);
+
+                return (self.failed(ph), None);
+            }
+        };
+        let own = own_props(&ph);
+        let kept = own.is_none().then_some(&self.conversions);
+        let mut configured = formatting.configure(&self.layers(own), kept);
+        let answer = match formatting.ask(input, &mut configured) {
+            Asked::Format => host_call(|| facility.format(locale, &configured.request))
+                .and_then(Result::ok)
+                .map(Ok),
+            Asked::Select => host_call(|| facility.select(locale, &configured.request))
+                .and_then(Result::ok)
+                .map(Err),
+            Asked::Option(_) | Asked::Failed => None,
+        };
+
+        match answer {
+            Some(Ok(text)) => (Outcome::Done(Txt::Owned(text)), None),
+            Some(Err(category)) => {
+                let category = category.as_str();
+                let outcome = match ph.options.iter().position(|option| option.key == category) {
+                    Some(at) => self.option(ph, at),
+                    None => self.chain(ph),
+                };
+
+                (outcome, Some(current))
+            }
+            None => {
+                drop(current);
+
+                (self.failed(ph), None)
+            }
+        }
+    }
+
+    fn option(&self, ph: Ph<'a>, at: usize) -> Outcome<'a> {
+        match ph.options.get(at) {
+            Some(option) => Outcome::Inline(option.value.0, option.value.1),
+            None => self.chain(ph),
+        }
+    }
+
+    fn failed(&self, ph: Ph<'a>) -> Outcome<'a> {
+        self.report(Code::FailedModifier, ph.open, ph.close);
+
+        self.chain(ph)
     }
 
     // A modifier is host code: what it answers, how it fails and whether it
@@ -566,20 +666,15 @@ impl<'a> Walker<'a> {
     where
         'a: 'p,
     {
-        Props::layered(&self.layers(ph), &ph.name)
+        Props::layered(&self.layers(own_props(ph)), &ph.name)
     }
 
-    fn layers<'p>(&self, ph: &'p Ph<'_>) -> Layers<'p>
+    // The layers of section 11.2, a placeholder's own props on top.
+    fn layers<'p>(&self, own: Option<&'p Object>) -> Layers<'p>
     where
         'a: 'p,
     {
-        [
-            self.config.modifier_defaults.as_ref(),
-            self.props,
-            ph.wrapper
-                .and_then(|wrapper| wrapper.get("props"))
-                .and_then(Value::as_object),
-        ]
+        [self.config.modifier_defaults.as_ref(), self.props, own]
     }
 
     pub(crate) fn locale(&self) -> Option<&'a str> {
