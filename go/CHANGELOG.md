@@ -29,3 +29,8 @@
   at once in the same way, and one that meets a value being converted is
   refused where it meets it, the empty string being that option's or
   default's one production.
+- The Intl level, delegated to the host's facility through `Options.Intl`:
+  `number`, `currency`, `date`, `ago`, `plural` and `ordinal`, with every
+  rule of the format decided in the parser and only the text and the plural
+  category asked of the supplier. A supplier implementing `IntlResolving` is
+  handed the `Resolver` of the resolution asking it.

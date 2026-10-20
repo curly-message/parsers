@@ -29,7 +29,9 @@ placeholder it is in, and `Options.OnReport` is told about it.
 The parser implements the Core level of the format: substitution, the
 fallback chain, value wrappers (`Options.IgnoreWrappers` turns their
 recognition off) and the comparisons `eq`, `ne`, `lt`, `gt`, `lte` and `gte`;
-and the Extensions level: the modifiers a host registers. Every other
+the Extensions level: the modifiers a host registers; and, where
+`Options.Intl` supplies the facility it delegates to, the Intl level:
+`number`, `currency`, `date`, `ago`, `plural` and `ordinal`. Every other
 modifier name is unknown.
 
 ### Values
@@ -155,11 +157,12 @@ error a program can recover from, and names no goroutine a count could be
 kept for. So the parser counts along a lineage, as section 13 has it on such
 a host: `Parser.Resolve` begins one and is never refused, and every piece of
 host code the parser calls is handed a `Resolver` that continues it — a
-modifier with its `Input`, `CurlyText` and `OnReport`. A method that calls
-`Parser.Resolve` where it could ask its `Resolver`, a plain `String` that
-resolves among them, is counted by nothing, and where it resolves the
-message that names it, it ends the process: section 14.2 leaves that
-recursion to the host code that makes it.
+modifier with its `Input`, `CurlyText`, `OnReport`, and an `Intl` supplier
+that implements `curly.IntlResolving`. A method that calls `Parser.Resolve`
+where it could ask its `Resolver`, a plain `String` that resolves among
+them, is counted by nothing, and where it resolves the message that names
+it, it ends the process: section 14.2 leaves that recursion to the host
+code that makes it.
 
 ### Comparisons
 
@@ -217,8 +220,8 @@ A modifier receives an `Input`:
   defaults and `Context.Props`, are composed once in a resolution. A
   wrapper's layer is composed with them once for each run of the modifier's
   placeholders whose wrappers hold that one layer, and a resolution keeps
-  only the one composed last, so what it holds never grows with the wrappers
-  of its payload. Every placeholder a composition serves is handed the same
+  only the one composed last, so the compositions it holds never grow with
+  the wrappers of its payload. Every placeholder a composition serves is handed the same
   map: a modifier reads it and never writes to it. Go cannot make a map
   read-only, so a write reaches every placeholder sharing the map, and one
   into the nil map panics, which fails the modifier as any panic does. The
@@ -334,6 +337,74 @@ that calls `runtime.Goexit` or panics on a goroutine of its own, and host
 code that waits for `Resolve` to return while it produces what the walk
 needs, which waits forever, and so does `Resolve`.
 
+### The Intl level
+
+The formatting modifiers and the plural selections depend on locale data,
+which this package does not carry. `Options.Intl` takes the host's facility
+as an `Intl`, four requests in the vocabulary of ECMAScript's `Intl`:
+`NumberFormat`, `DateTimeFormat`, `RelativeTimeFormat` and `PluralRules`.
+Without one, those six names are unknown.
+
+```go
+p := curly.New(curly.Options{Intl: supplier}) // the host's curly.Intl
+
+en := "en"
+
+p.Resolve("{{n:plural; one:one file; other:{{n:number}} files}}", curly.Context{
+	Payload: map[string]any{"n": 1234.5678},
+	Locale:  &en,
+}) // "1,234.57 files", where the supplier formats as Intl does in "en"
+```
+
+The parser decides everything the format decides and asks the supplier only
+for the text or the category. A locale is tested first: where
+`Context.Locale` is nil or empty, the placeholder resolves to the empty
+string and reports `missing-locale`. The value must then be a finite number
+by the conversion the comparisons use, so blank text, `12px` and `Infinity`
+take the fallback chain and report `failed-modifier`. The properties are
+composed as a host modifier's are, so requests of one resolution can carry
+the same map, which the supplier reads and never writes to, and `date`
+carries a nil one where no layer holds a property:
+
+| Modifier | Request |
+|----------|---------|
+| `number` | `NumberFormat` of the value, with `maximumFractionDigits` 2 where no layer names it, widened to a larger `minimumFractionDigits` a layer names |
+| `currency` | `NumberFormat` of the value times the `ratio` property, which the request leaves out, with `style` `currency` over every layer |
+| `date` | `DateTimeFormat` of the value read as milliseconds since the epoch, and failing that as text in one of the layouts below |
+| `ago` | `RelativeTimeFormat` of the count and unit the value, a signed delta in milliseconds, climbs to, with `numeric` `auto` where no layer names it; the `format` property names the unit, and the request leaves it out |
+| `plural` | an option whose key is a number equal to the value; failing that, `PluralRules` with the digit properties composed under `number`, its own over them, `number`'s default maximum and `type` `cardinal` |
+| `ordinal` | the same for an integer, with its own properties alone and `type` `ordinal` |
+
+A property is read with ECMAScript's `ToNumber` where the parser computes
+with it, `minimumFractionDigits` and `ratio`: a Go number as itself, a
+`bool` as 1 or 0, `nil` as 0, blank text as 0 and other text by the numeric
+conversion, and anything else as NaN.
+
+`date` reads text, Go having no layout-free reading of a date, in these
+layouts: the one `time.Time`'s `String` method writes, read as it writes
+it, so a `time.Time` in the payload stays a date in any zone, and the same
+instant whatever zone the host runs in: its monotonic clock reading dropped,
+a year of four to nine digits, signed where it is negative, and whatever
+name the zone has after the offset, which decides the instant to the minute
+`String` writes it in; an RFC 3339 date-time as `time.RFC3339` reads it, an
+uppercase `T`, seconds, a fraction of a second or none, and `Z` or an offset
+`+hh:mm` or `-hh:mm`, so a lowercase `t` or `z` is not read; and
+`time.DateTime` and `time.DateOnly`, in UTC. A `time.Duration` prints as
+`1h0m0s` and is no number.
+
+A request that returns an error or panics, and a category that is none of
+the six, take the fallback chain and report `failed-modifier`. The supplier's
+text is the placeholder's result, emitted as it stands.
+
+The parser judges no locale and no property beyond what the format decides:
+a locale that is no well-formed language tag, a `currency` request with no
+well-formed currency code, and a property outside the range `Intl` accepts
+each reach the supplier as written. Where ECMA-402 would throw a
+`RangeError` or a `TypeError`, the supplier should return an error, so the
+placeholder takes its fallback chain and reports `failed-modifier`; a
+well-formed tag it has no data for is the supplier's to match to a locale
+it has, as `Intl` does.
+
 ### Limits and reports
 
 The limits of section 13 are `MaxOutputLength`, `MaxReadLength`,
@@ -360,6 +431,27 @@ spells it: cut to `MaxReportedLength` bytes and escaped as JSON escapes a
 string, every line terminator of the format included, so it never forges a
 line in a log. A panicking `OnReport` loses that report and the resolution
 carries on.
+
+No limit counts the work done on what a modifier is handed before it
+answers (section 13). Here is what that work grows with. The padding around
+an option's value or an inline default is read once in a resolution, from
+each end, however deep the option nests, so the work grows with the
+padding's length. An option key is converted to a number at each `lt`, `gt`,
+`lte`, `gte`, `plural` or `ordinal` placeholder that reads it, which grows
+with the key's length.
+The props a modifier is handed are composed from the three layers once in a
+resolution where no wrapper names properties for that modifier. They are
+composed again for each run of placeholders whose wrappers hold one layer
+under its name, and each composition grows with the width of the three
+layers. A composition for `number`, `plural` or `currency` also reads one
+property as a number. For `currency` that property is `ratio`. For `number`
+and `plural` it is `minimumFractionDigits`, where no layer names a maximum.
+A text there is converted once in a resolution, which grows with its length,
+and each later composition that reads the same text finds its number by the
+text, which reads the text again but converts nothing.
+So props that alternate between two wrappers are composed at each
+placeholder, and the work grows with the placeholders times the layers'
+width: doubling either doubles the time.
 
 ## Describing a message
 
