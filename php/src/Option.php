@@ -18,7 +18,12 @@ final readonly class Option
         private \Closure $read,
     ) {}
 
-    /** The option's value, rendered on the first call and the same text on every later one. */
+    /**
+     * The option's value, rendered on the first call that is not refused,
+     * and the same text on every call after that rendering finished.
+     *
+     * @throws ReentryLimit where `Parser::MAX_REENTRY` walks are in progress on this thread of execution, or, once nothing of the option's resolution is in progress, `Parser::MAX_IN_PROGRESS` resolutions in the process; and where a rendering of the value began and has not finished, whether it is in progress or a fiber was let go in the middle of it
+     */
     public function value(): string
     {
         return ($this->read)();

@@ -20,13 +20,15 @@ use CurlyMessage\Undefined;
  * its identity, and an array, which has none, by where the resolution read
  * it, beside the array, so that one host code put there since is a new value
  * and converts, as far as the resolution compares what it reads again
- * (`same`). A scalar runs no host code and converts alike every time, so
- * it is not recorded. A conversion is recorded as begun before any host code runs, and
- * a read of the value before it finished, from inside it or from a fiber
- * while the one converting it is suspended, converts nothing and answers that
- * nothing describes the value: one that converted again would, where each of
- * a modifier's fibers reads it, convert it once a fiber, and a conversion a
- * fiber was let go in the middle of never finishes.
+ * (`same`); what a host modifier answers is recorded at a place of the
+ * modifier's own. A scalar runs no host code and converts alike every time,
+ * so it is not recorded. A conversion is recorded as begun before any host
+ * code runs, and a read of the value before it finished, from inside it or
+ * from a fiber while the one converting it is suspended, converts nothing
+ * and answers that nothing describes the value: one that converted again
+ * would, where each of a modifier's fibers reads it, convert it once a
+ * fiber, and a conversion a fiber was let go in the middle of never
+ * finishes.
  *
  * @internal
  */
@@ -75,8 +77,9 @@ final class Conversion
      * tells apart and reports.
      *
      * @param string|null $place where the resolution read an array, which is what records it
+     * @param bool $answered whether a host modifier handed the value over at the place, rather than the resolution reading it there: a conversion under way at the place is of another answer, so this one converts, and is not recorded
      */
-    public function text(mixed $value, ?string $place = null): ?string
+    public function text(mixed $value, ?string $place = null, bool $answered = false): ?string
     {
         if (is_string($value)) {
             return $value;
@@ -101,7 +104,7 @@ final class Conversion
             $record = $this->places[$place] ?? null;
 
             if ($record === true) {
-                return null;
+                return $answered ? $this->serialize($value) : null;
             }
 
             if ($record === null || !$this->same($record, $value)) {
