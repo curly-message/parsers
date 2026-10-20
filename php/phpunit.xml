@@ -20,10 +20,14 @@
         <testsuite name="unit">
             <directory>tests/Unit</directory>
         </testsuite>
+        <testsuite name="runner">
+            <directory>tests/Runner</directory>
+        </testsuite>
     </testsuites>
     <source>
         <include>
             <directory>src</directory>
+            <directory>conformance/src</directory>
         </include>
     </source>
 </phpunit>
