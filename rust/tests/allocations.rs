@@ -12,12 +12,15 @@
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
-use curly_message_parser::{Context, MAX_SERIALIZED_LENGTH, Object, Parser, Value};
+use curly_message_parser::{
+    Context, MAX_SERIALIZED_LENGTH, ModifierError, ModifierInput, Object, Parser, Value,
+};
 
 struct Counting;
 
 thread_local! {
     static ALLOCATIONS: Cell<usize> = const { Cell::new(0) };
+    static BYTES: Cell<usize> = const { Cell::new(0) };
     static LARGE: Cell<(usize, usize)> = const { Cell::new((usize::MAX, 0)) };
     static LARGEST: Cell<usize> = const { Cell::new(0) };
     static LIVE: Cell<isize> = const { Cell::new(0) };
@@ -29,12 +32,17 @@ fn live(change: isize) {
     let _ = LIVE.try_with(|live| live.set(live.get() + change));
 }
 
+fn count(bytes: usize) {
+    let _ = ALLOCATIONS.try_with(|count| count.set(count.get() + 1));
+    let _ = BYTES.try_with(|count| count.set(count.get() + bytes));
+    let _ = LARGEST.try_with(|largest| largest.set(largest.get().max(bytes)));
+}
+
 // SAFETY: every call is forwarded to the system allocator unchanged; the count
 // is a thread-local `Cell` of a const initializer, which allocates nothing.
 unsafe impl GlobalAlloc for Counting {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
-        let _ = ALLOCATIONS.try_with(|count| count.set(count.get() + 1));
-        let _ = LARGEST.try_with(|largest| largest.set(largest.get().max(layout.size())));
+        count(layout.size());
         live(layout.size().cast_signed());
         let _ = LARGE.try_with(|large| {
             let (from, count) = large.get();
@@ -54,8 +62,7 @@ unsafe impl GlobalAlloc for Counting {
     }
 
     unsafe fn realloc(&self, ptr: *mut u8, layout: Layout, new_size: usize) -> *mut u8 {
-        let _ = ALLOCATIONS.try_with(|count| count.set(count.get() + 1));
-        let _ = LARGEST.try_with(|largest| largest.set(largest.get().max(new_size)));
+        count(new_size);
         live(new_size.cast_signed() - layout.size().cast_signed());
         // SAFETY: the caller's contract is passed on as it is.
         unsafe { System.realloc(ptr, layout, new_size) }
@@ -70,6 +77,13 @@ fn allocations<T>(run: impl FnOnce() -> T) -> (usize, T) {
     let output = run();
 
     (ALLOCATIONS.with(Cell::get) - before, output)
+}
+
+fn bytes<T>(run: impl FnOnce() -> T) -> (usize, T) {
+    let before = BYTES.with(Cell::get);
+    let output = run();
+
+    (BYTES.with(Cell::get) - before, output)
 }
 
 // The fresh allocations of at least `from` bytes a run makes: what a buffer
@@ -90,6 +104,17 @@ fn largest<T>(run: impl FnOnce() -> T) -> (usize, T) {
     (LARGEST.with(Cell::get), output)
 }
 
+// The bytes resolving a message of many placeholders allocates, with props
+// holding, under `name`, a string of `size` bytes no placeholder reads.
+fn props_bytes(parser: &Parser, placeholder: &str, name: &str, size: usize) -> (usize, String) {
+    let message = placeholder.repeat(100);
+    let payload = Object::new().with("a", 1);
+    let props = Object::new().with(name, Object::new().with("unread", "x".repeat(size)));
+    let context = Context::new().payload(&payload).props(&props).locale("en");
+
+    bytes(|| parser.resolve(message.as_str(), &context))
+}
+
 #[test]
 fn an_object_of_n_keys_costs_n_plus_two_allocations() {
     let keys: Vec<String> = (0..1000).map(|n| format!("key{n}")).collect();
@@ -106,6 +131,83 @@ fn an_object_of_n_keys_costs_n_plus_two_allocations() {
         assert_eq!(count, expected, "{size} keys");
         assert_eq!(object.len(), size);
     }
+}
+
+#[test]
+fn a_modifier_reading_props_costs_nothing_per_byte_of_a_string_they_hold() {
+    let parser = Parser::builder()
+        .modifier(
+            "peek",
+            |input: &ModifierInput<'_>| -> Result<Option<Value>, ModifierError> {
+                Ok(Some(Value::from(input.props().len())))
+            },
+        )
+        .build();
+    let (small, output) = props_bytes(&parser, "{{a:peek}}", "peek", 10);
+    let (large, _) = props_bytes(&parser, "{{a:peek}}", "peek", 100_000);
+
+    assert_eq!(output, "1".repeat(100));
+    assert_eq!(large, small);
+}
+
+// What a hundred more of a message's units allocate, where the payload and
+// the props `inputs` makes hold a string of 10 bytes, then of 100 000.
+fn growth(parser: &Parser, unit: &str, inputs: impl Fn(usize) -> (Object, Object)) -> [usize; 2] {
+    let fewer = unit.repeat(100);
+    let more = unit.repeat(200);
+
+    [10, 100_000].map(|size| {
+        let (payload, props) = inputs(size);
+        let context = Context::new().payload(&payload).props(&props).locale("en");
+        // What a resolution sets up once a process, the first time it is
+        // read, is not what a placeholder costs.
+        parser.resolve(unit, &context);
+        let (before, _) = bytes(|| parser.resolve(fewer.as_str(), &context));
+        let (after, _) = bytes(|| parser.resolve(more.as_str(), &context));
+
+        after - before
+    })
+}
+
+fn unread(size: usize) -> Object {
+    Object::new().with("unread", "x".repeat(size))
+}
+
+// A host's modifier reads its props where they lie in every layer that holds
+// them: the parser's defaults, the caller's props and the wrapper's.
+#[test]
+fn a_modifier_reading_props_in_several_layers_costs_nothing_per_byte_of_a_string_they_hold() {
+    let peek = |input: &ModifierInput<'_>| -> Result<Option<Value>, ModifierError> {
+        Ok(Some(Value::from(input.props().len())))
+    };
+    let defaults = Object::new().with("peek", Object::new().with("y", 1));
+    let parser = Parser::builder()
+        .modifier("peek", peek)
+        .modifier_defaults(defaults)
+        .build();
+    let [small, large] = growth(&parser, "{{a:peek}}", |size| {
+        (
+            Object::new().with("a", 1),
+            Object::new().with("peek", unread(size)),
+        )
+    });
+
+    assert_eq!(large, small, "defaults and props");
+
+    let parser = Parser::builder().modifier("peek", peek).build();
+    let [small, large] = growth(&parser, "{{a:peek}}", |size| {
+        let wrapped = Object::new().with("value", 1).with(
+            "props",
+            Object::new().with("peek", Object::new().with("z", 1)),
+        );
+
+        (
+            Object::new().with("a", wrapped),
+            Object::new().with("peek", unread(size)),
+        )
+    });
+
+    assert_eq!(large, small, "props and a wrapper");
 }
 
 // The text a value serializes to is kept in the buffer it was written into: a
