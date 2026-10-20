@@ -6,22 +6,24 @@ namespace CurlyMessage;
 
 /**
  * What a modifier is called with (SPEC.md section 11). One is built for each
- * call and dropped after it, so a modifier may sort `options` or write into
- * `props` in place: neither reaches the placeholder after it, nor the caller.
+ * call and dropped after it, so a modifier may sort `options` in place,
+ * which reaches neither the placeholder after it nor the caller. `props` is
+ * read-only: every placeholder naming the modifier shares what the layers
+ * hold under its name, and a modifier that writes into it fails.
  */
 final class ModifierInput
 {
     /**
      * @param string $value the value's text
      * @param list<Option> $options the options the placeholder declares, in source order
-     * @param array<array-key, mixed> $props the properties the layers hold under the modifier's name, composed
+     * @param Props $props the properties the layers hold under the modifier's name, composed, read as an array is and never written
      * @param string|null $locale the locale the resolution was given, null where none
      * @param \Closure(): string $default the fallback chain
      */
     public function __construct(
         public string $value,
         public array $options,
-        public array $props,
+        public Props $props,
         public ?string $locale,
         private readonly \Closure $default,
     ) {}
