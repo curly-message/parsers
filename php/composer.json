@@ -58,7 +58,9 @@
             "@fetch-set",
             "@lint",
             "@analyse",
-            "@php vendor/bin/phpunit"
-        ]
+            "@php vendor/bin/phpunit",
+            "@test:dist"
+        ],
+        "test:dist": "@php tools/artifact.php"
     }
 }
