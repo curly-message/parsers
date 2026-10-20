@@ -50,10 +50,12 @@ include = [
     "/src",
     "/tests",
     "/bench",
+    "/build-constraints.txt",
     "/LICENSE",
     "/package.json",
     "/pyproject.toml",
     "/tasks.py",
+    "/uv.lock",
 ]
 
 [tool.ruff]
