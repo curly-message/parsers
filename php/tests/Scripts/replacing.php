@@ -12,7 +12,7 @@ declare(strict_types=1);
 
 use CurlyMessage\Parser;
 
-require dirname(__DIR__, 2) . '/vendor/autoload.php';
+require dirname(__DIR__) . '/autoload.php';
 
 $counted = new class implements JsonSerializable {
     public int $calls = 0;
