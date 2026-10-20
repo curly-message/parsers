@@ -11,6 +11,8 @@ import os
 import shutil
 import subprocess
 import sys
+import tarfile
+import tempfile
 from collections.abc import Callable
 from pathlib import Path
 
@@ -191,6 +193,27 @@ def test_lowest() -> None:
     _suite(VENV, WHEEL_VENV, intl=True, lowest=True)
 
 
+def test_sdist() -> None:
+    """The sdist's own ``test`` task, run in the tree the sdist unpacks to.
+
+    A downstream build runs the suite from the sdist, so what the suite or a
+    task reads and the sdist leaves out fails here, where a checkout would
+    still hold it.
+    """
+    build()
+    sdists = sorted(DIST.glob("*.tar.gz"))
+    if len(sdists) != 1:
+        raise SystemExit(f"dist/ holds {len(sdists)} sdists, not one")
+    env = dict(os.environ)
+    for name in ("UV_PROJECT_ENVIRONMENT", "VIRTUAL_ENV"):
+        env.pop(name, None)
+    with tempfile.TemporaryDirectory() as scratch:
+        with tarfile.open(sdists[0]) as packed:
+            packed.extractall(scratch, filter="data")
+        (tree,) = Path(scratch).iterdir()
+        _run("uv", "run", "--no-project", tree / "tasks.py", "test", env=env)
+
+
 def bench_venv(*, no_build: bool = False) -> None:
     """The wheel and the ``intl`` extra, installed into ``.bench-venv`` for ``bench/rows.mjs``.
 
@@ -210,6 +233,7 @@ TASKS: dict[str, Callable[[], None]] = {
     "test": test,
     "test-core": test_core,
     "test-lowest": test_lowest,
+    "test-sdist": test_sdist,
     "typecheck": typecheck,
 }
 
