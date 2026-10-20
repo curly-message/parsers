@@ -307,6 +307,10 @@ impl Object {
         self
     }
 
+    pub(crate) fn entries(&self) -> &[(Arc<str>, Value)] {
+        &self.entries
+    }
+
     fn position(&self, key: &str) -> Option<usize> {
         match &self.index {
             Some(index) => index.get(key).copied(),
