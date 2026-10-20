@@ -151,3 +151,78 @@ pub(crate) fn named(text: &str, from: usize, to: usize) -> Named<'_> {
         name: unescape(text.get(start..end).unwrap_or_default()),
     }
 }
+
+/// An option a placeholder declares, its value left as a span to render: a
+/// value is message text, and rendering it is work the modifier asks for
+/// rather than work reading the placeholder does (section 9.4).
+pub(crate) struct Segment<'m> {
+    pub(crate) key: Cow<'m, str>,
+    pub(crate) value: (usize, usize),
+}
+
+/// What a placeholder declares (section 6): the key it names, the modifier it
+/// names, its options in source order and the default it states inline.
+pub(crate) struct Placeholder<'m> {
+    pub(crate) key: Option<Cow<'m, str>>,
+    pub(crate) modifier: Cow<'m, str>,
+    pub(crate) options: Vec<Segment<'m>>,
+    pub(crate) inline_default: Option<(usize, usize)>,
+}
+
+/// Reads the placeholder `scan` derived between `open` and `close`.
+pub(crate) fn placeholder<'m>(scan: &Scanner<'m>, open: usize, close: usize) -> Placeholder<'m> {
+    let text = scan.text();
+    let from = open.saturating_add(2);
+    let to = close.saturating_sub(2);
+    let declaration = find(text, from, to, b';', Some(scan)).unwrap_or(to);
+    // The selector's colon is the first one no escape claims, and everything
+    // after it is the modifier name (section 6, note 3).
+    let key_end = find(text, from, declaration, b':', None).unwrap_or(declaration);
+    let key = named(text, from, key_end);
+    let modifier = named(
+        text,
+        key_end.saturating_add(1).min(declaration),
+        declaration,
+    );
+    let mut options = Vec::new();
+    let mut inline_default = None;
+    let mut at = declaration;
+
+    while at < to {
+        let start = at.saturating_add(1);
+        let end = find(text, start, to, b';', Some(scan)).unwrap_or(to);
+        let colon = find(text, start, end, b':', Some(scan));
+        let option_key = named(text, start, colon.unwrap_or(end));
+        // The first colon is the separator and every later one is value. An
+        // option that names no value stands for itself; one that ends at its
+        // colon declares the empty string.
+        let value = match colon {
+            Some(colon) => trimmed(text, colon.saturating_add(1), end),
+            None => trimmed(text, start, end),
+        };
+
+        at = end;
+
+        if option_key.start == option_key.end {
+            continue;
+        }
+
+        // `default` is reserved in lowercase, so a segment is either the
+        // inline default or an option, and a second `default` is neither.
+        if option_key.name == "default" {
+            inline_default.get_or_insert(value);
+        } else {
+            options.push(Segment {
+                key: option_key.name,
+                value,
+            });
+        }
+    }
+
+    Placeholder {
+        key: (key.start != key.end).then_some(key.name),
+        modifier: modifier.name,
+        options,
+        inline_default,
+    }
+}
