@@ -23,15 +23,16 @@ checked out beside this repository on an up-to-date `main`, otherwise
 Official implementations of the
 [Curly Message Format](https://github.com/curly-message/spec).
 
-- **One directory per language** — `js/` today. Each is a fully standalone
-  package with its own build, tests, configs, README, CHANGELOG and version
-  line. There is no root package manifest and no workspace: run every command
-  from inside the implementation directory, for every directory a change
-  touches.
-- **Release tags are namespaced by directory** — `js-v1.0.0`, `py-v0.9.0` — so
-  moving an implementation to its own repository later is not a breaking event.
-  The publish workflow cuts them (`.github/workflows/publish-js.yml`; the
-  README's Releasing section says what it does).
+- **One directory per language** — `js/` and `python/` today. Each is a fully
+  standalone package with its own build, tests, configs, README, CHANGELOG
+  and version line. There is no root package manifest and no workspace: run
+  every command from inside the implementation directory, for every
+  directory a change touches.
+- **Release tags are namespaced by directory** — `js-v1.0.0`,
+  `python-v1.0.0` — so moving an implementation to its own repository later
+  is not a breaking event.
+  The publish workflows cut them (`.github/workflows/publish-js.yml`,
+  `publish-python.yml`; the README's Releasing section says what they do).
 - The root holds only `README.md`, this file, `CLAUDE.md`, `LICENSE`,
   `.gitignore`, `.githooks/` and `.github/workflows/`. An implementation
   directory may hold a `.gitignore` of its own, for what only its toolchain
@@ -44,7 +45,8 @@ Official implementations of the
   passes; 75 when a tool it needs is missing, having printed which and how to
   install it, which skips the directory (`<dir>: skipped`) without failing the
   commit; and anything else to fail the commit. An implementation's check is
-  its script, `.githooks/js.sh` for `js/`.
+  its script, `.githooks/js.sh` for `js/` and `.githooks/python.sh` for
+  `python/`.
 - **`bench.yml` reads its packages from the tree**: each directory that holds
   a `bench/rows.mjs` outside a `bench/check/`, with its own copy of
   `bench/harness.mjs` and `bench/check/`. On a PR it benchmarks those with a
@@ -181,3 +183,98 @@ its `CHANGELOG.md` and the doc comments in `src/types.ts`.
 - What a message resolves to is the conformance set's to pin: a case the
   suite adds beyond it is either an implementation detail or a gap in the set
   (§ Architecture of `spec`'s AGENTS.md).
+
+## python/
+
+Tech stack of `python/` — **ground truth, do not assume otherwise**:
+
+| | |
+|---|---|
+| Package | `curly-message` on PyPI, imported as `curly_message`, unreleased; the first version, `1.0.0rc0`, is published by the workflow through a pending trusted publisher |
+| Language | Python, typed (`py.typed`) |
+| Package manager | uv, one lockfile (`uv.lock`); the commands are `tasks.py`'s |
+| Build | hatchling, pinned by hash in `build-constraints.txt`: an sdist and a pure wheel |
+| Tests | pytest; the conformance set vendored as `tests/conformance/conformance-4.1.0.zip`, pinned by its digest |
+| Lint | ruff (lint and format) and mypy strict, run by the Lint job of `tests-python.yml` and by `.githooks/python.sh` |
+| Runtime dependencies | none; the `intl` extra adds Babel (2.14 or later) and tzdata |
+| Supported runtimes | CPython 3.11 to 3.15 on Linux, macOS and Windows; PyPy and free-threaded builds are not claimed |
+| CI | `tests-python.yml`, `bench.yml` and `bench-label.yml`, `publish-python.yml` (self-contained: PyPI takes no reusable workflow as a trusted publisher) |
+
+Commands, run from `python/`:
+
+| Command | What it does |
+|---------|--------------|
+| `uv sync --locked --extra intl` | install from the lockfile |
+| `uv run --no-project tasks.py test` | build, lint, typecheck the source and the built wheel, then the suite against the source and against the wheel — what CI's legs with Intl run |
+| `uv run --no-project tasks.py test-core`, `... test-lowest` | build, then the same suite without the `intl` extra, or over Babel 2.14.0 — the other legs of CI |
+| `uv run --no-project tasks.py test-sdist` | build, then the sdist's own `test` in the tree the sdist unpacks to, as a downstream build runs it — what CI's Pack job runs |
+| `uv run --no-project tasks.py lint`, `... typecheck` | ruff, then mypy — what CI's Lint job and the pre-commit hook run |
+| `uv run --no-project tasks.py lint-fix` | fix what the formatting contract reports |
+| `uv run --no-project tasks.py bench-venv`, then `node bench/harness.mjs` | build, then the benchmark (`bench/rows.mjs`) over the wheel in `.bench-venv`; `sh bench/prepare.sh` is the first half |
+| `node bench/harness.mjs --compare <dir>` | the same, beside the package checked out and prepared at `<dir>` — what `bench.yml` runs on a PR |
+
+Map of `python/`:
+
+| Path | Role |
+|------|------|
+| `src/curly_message/__init__.py` | the public surface: `create_parser`, `cst`, `levels`, `UNDEFINED`, the limits and the types |
+| `src/curly_message/_resolve.py` | `create_parser` and the resolution walk, on an explicit stack, with its limits and reports |
+| `src/curly_message/_cst.py` | `cst`: the tree a message is described by, its spans in code points |
+| `src/curly_message/_modifiers.py` | the modifiers the format defines, and the detection of the Intl supplier |
+| `src/curly_message/_intl/` | the Intl modifiers over Babel: validation, digits, numbers, plurals, dates, relative time, locales |
+| `src/curly_message/_convert.py` | the value model of section 4: a value as text and as a number, and the wrappers of section 4.1 |
+| `src/curly_message/_utils.py` | pure helpers, the placeholder scanner, `LINE_TERM` and `own_value` among them |
+| `src/curly_message/_types.py` | the public types, the limits and their doc comments |
+| `src/curly_message/_requests.py` | the private seam that records the formatting requests a resolution makes, for the conformance adapter |
+| `tests/specs/` | the suite (see *Tests*) |
+| `tests/conformance/` | the runner (`runner/`), the adapter of section 14.3 (`adapter.py`), the vendored set and `fetch.py` |
+| `tests/types/surface.py` | the types the wheel ships, checked as a consumer's checker reads them |
+| `tasks.py` | every command above, in the standard library alone |
+| `bench/rows.mjs` | the rows of the benchmark, each read off the wheel through `bench/serve.py`; `bench/prepare.sh` builds what they read, `package.json` names the package and its version to the harness, and `bench/harness.mjs` and `bench/check/` are the family's copies |
+
+### Architecture you must respect
+
+The rules of `js/` hold here, with these readings:
+
+- **The public surface** is what `curly_message/__init__.py` exports; the
+  modules named with a leading underscore are private.
+- **Diagnostics leave through `on_report` and nowhere else**, and resolving
+  never raises: a handler that raises loses that report and nothing else.
+  The one exception is a resolution host code asks for while another is in
+  progress on the same call stack, which passes on the `RecursionError` or
+  `MemoryError` its walk ran out in.
+- **Only `dict` storage holds entries.** Reads by a key a message supplies go
+  through `own_value`, through `dict`'s own lookup: a subclass's
+  `__getitem__`, `get` or `__missing__` never answers, and a `ChainMap` or a
+  `MappingProxyType` holds nothing. This is the prototype-key rule in Python.
+- **The resolution limits** are `MAX_OUTPUT_LENGTH`, `MAX_READ_LENGTH`,
+  `MAX_CONVERSION_NODES` and `MAX_NESTING` in `_types.py`, held to the same
+  values and the same rules as `js/`'s.
+- **A report escapes every line terminator of `LINE_TERM`**, and also every
+  code point `str.splitlines` breaks on (read off the running CPython, never
+  spelled out) and every lone surrogate, since a consumer may split a report
+  the host's way or encode it to UTF-8.
+- **Intl is detected without importing Babel** (`importlib.util.find_spec`),
+  so importing the package costs nothing it does not use, and every Babel call
+  runs in the high-precision decimal context of `_intl/digits.py`, handed
+  exact digits.
+- **The walk is an explicit stack**, never Python recursion: a message nested
+  past the interpreter's recursion limit resolves the same as any other.
+- **Source is ASCII**; a test holds every source, test and bench file to it.
+
+### Tests
+
+- `python/tests/specs/`: `test_resolve.py` for resolution, `test_cst.py` for
+  the tree, `test_intl.py` for the Intl modifiers, `test_cost.py` for what a
+  resolution costs by count, `test_package.py` for the package's metadata and
+  build, `test_ascii.py` for the source's characters.
+- `python/tests/conformance/`: `test_conformance.py` runs every case of the
+  set through `adapter.py`, at every level and over the tree, with the cases
+  left out where the leg claims no Intl and the defect audit;
+  `test_runner.py` tests the runner on toy adapters.
+- `python/tests/types/surface.py`: the types the wheel ships, checked by mypy
+  against the installed wheel before the suite runs on it.
+- Every suite runs twice, against the source and against the built wheel
+  (`CURLY_MESSAGE_DIST=1`); `CURLY_MESSAGE_EXPECT_INTL` makes a leg fail where
+  Intl is not what it expects.
+- What a message resolves to is the conformance set's to pin, as for `js/`.
