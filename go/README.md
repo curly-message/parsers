@@ -29,7 +29,9 @@ placeholder it is in, and `Options.OnReport` is told about it.
 The parser implements the Core level of the format: substitution, the
 fallback chain, value wrappers (`Options.IgnoreWrappers` turns their
 recognition off) and the comparisons `eq`, `ne`, `lt`, `gt`, `lte` and `gte`;
-and the Extensions level: the modifiers a host registers. Every other
+the Extensions level: the modifiers a host registers; and, where
+`Options.Intl` supplies the facility it delegates to, the Intl level:
+`number`, `currency`, `date`, `ago`, `plural` and `ordinal`. Every other
 modifier name is unknown.
 
 ### Values
@@ -121,11 +123,11 @@ resolutions in progress itself where it can count them: those a modifier
 asks for through an `Input` (see Host modifiers). Go names no goroutine a
 count could be kept for, so a resolution `Parser.Resolve` starts counts as
 the first of a chain of its own wherever it is called from. A method of a
-value, a reporting handler, or a modifier that resolves through
-`Parser.Resolve` rather than an `Input` of its chain, leaves the count, as
-section 13 says a chain leaving a thread of execution leaves its bound; yet
-that chain stays on the goroutine's stack, so one that reaches itself
-without end ends the process rather than the placeholder taking its
+value, a reporting handler, the `Intl` supplier, or a modifier that resolves
+through `Parser.Resolve` rather than an `Input` of its chain, leaves the
+count, as section 13 says a chain leaving a thread of execution leaves its
+bound; yet that chain stays on the goroutine's stack, so one that reaches
+itself without end ends the process rather than the placeholder taking its
 fallback chain. That is the host's to avoid: there this port does not meet
 section 13's requirement to contain the failure.
 
@@ -261,6 +263,73 @@ waits for `Resolve` to return while it produces what code on the goroutine
 that called `Resolve` reads. A read waiting for itself on a goroutine of
 the modifier's waits until `Resolve` returns; on the goroutine that called
 `Resolve` it waits forever, and so does `Resolve`.
+
+### The Intl level
+
+The formatting modifiers and the plural selections depend on locale data,
+which this package does not carry. `Options.Intl` takes the host's facility
+as an `Intl`, four requests in the vocabulary of ECMAScript's `Intl`:
+`NumberFormat`, `DateTimeFormat`, `RelativeTimeFormat` and `PluralRules`.
+Without one, those six names are unknown.
+
+```go
+p := curly.New(curly.Options{Intl: supplier}) // the host's curly.Intl
+
+en := "en"
+
+p.Resolve("{{n:plural; one:one file; other:{{n:number}} files}}", curly.Context{
+	Payload: map[string]any{"n": 1234.5678},
+	Locale:  &en,
+}) // "1,234.57 files", where the supplier formats as Intl does in "en"
+```
+
+The parser decides everything the format decides and asks the supplier only
+for the text or the category. A locale is tested first: where
+`Context.Locale` is nil or empty, the placeholder resolves to the empty
+string and reports `missing-locale`. The value must then be a finite number
+by the conversion the comparisons use, so blank text, `12px` and `Infinity`
+take the fallback chain and report `failed-modifier`. The properties are
+composed as a host modifier's are, and each request carries a map of its
+own:
+
+| Modifier | Request |
+|----------|---------|
+| `number` | `NumberFormat` of the value, with `maximumFractionDigits` 2 where no layer names it, widened to a larger `minimumFractionDigits` a layer names |
+| `currency` | `NumberFormat` of the value times the `ratio` property, which the request leaves out, with `style` `currency` over every layer |
+| `date` | `DateTimeFormat` of the value read as milliseconds since the epoch, and failing that as text in one of the layouts below |
+| `ago` | `RelativeTimeFormat` of the count and unit the value, a signed delta in milliseconds, climbs to, with `numeric` `auto` where no layer names it; the `format` property names the unit, and the request leaves it out |
+| `plural` | an option whose key is a number equal to the value; failing that, `PluralRules` with the digit properties composed under `number`, its own over them, `number`'s default maximum and `type` `cardinal` |
+| `ordinal` | the same for an integer, with its own properties alone and `type` `ordinal` |
+
+A property is read with ECMAScript's `ToNumber` where the parser computes
+with it, `minimumFractionDigits` and `ratio`: a Go number as itself, a
+`bool` as 1 or 0, `nil` as 0, blank text as 0 and other text by the numeric
+conversion, and anything else as NaN.
+
+`date` reads text, Go having no layout-free reading of a date, in these
+layouts: the one `time.Time`'s `String` method writes, read as it writes
+it, so a `time.Time` in the payload stays a date in any zone, and the same
+instant whatever zone the host runs in: its monotonic clock reading dropped,
+a year of four to nine digits, signed where it is negative, and whatever
+name the zone has after the offset, which decides the instant to the minute
+`String` writes it in; an RFC 3339 date-time as `time.RFC3339` reads it, an
+uppercase `T`, seconds, a fraction of a second or none, and `Z` or an offset
+`+hh:mm` or `-hh:mm`, so a lowercase `t` or `z` is not read; and
+`time.DateTime` and `time.DateOnly`, in UTC. A `time.Duration` prints as
+`1h0m0s` and is no number.
+
+A request that returns an error or panics, and a category that is none of
+the six, take the fallback chain and report `failed-modifier`. The supplier's
+text is the placeholder's result, emitted as it stands.
+
+The parser judges no locale and no property beyond what the format decides:
+a locale that is no well-formed language tag, a `currency` request with no
+well-formed currency code, and a property outside the range `Intl` accepts
+each reach the supplier as written. Where ECMA-402 would throw a
+`RangeError` or a `TypeError`, the supplier should return an error, so the
+placeholder takes its fallback chain and reports `failed-modifier`; a
+well-formed tag it has no data for is the supplier's to match to a locale
+it has, as `Intl` does.
 
 ### Limits and reports
 

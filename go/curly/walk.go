@@ -397,6 +397,10 @@ func (p *Parser) lookup(name string) (custom Modifier, run func(*slot) (string, 
 
 	run, selection, known = builtin(name)
 
+	if !known && p.intl != nil {
+		run, selection, known = intlBuiltin(name)
+	}
+
 	return nil, run, selection, known
 }
 

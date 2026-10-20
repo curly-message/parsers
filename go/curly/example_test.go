@@ -1,7 +1,10 @@
 package curly_test
 
 import (
+	"errors"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 
 	"github.com/curly-message/parsers/go/curly"
@@ -107,4 +110,64 @@ func ExampleOptions_customModifiers() {
 	// ALICE!
 	// ALICE?
 	// ...
+}
+
+// english stands in for a host's locale data: it knows one locale, and
+// numbers and plural categories in it.
+type english struct{}
+
+func (english) NumberFormat(locale string, options map[string]any, input float64) (string, error) {
+	if locale != "en" {
+		return "", errors.New("no data for " + locale)
+	}
+
+	scale := 1.0
+
+	if digits, ok := options["maximumFractionDigits"].(float64); ok {
+		scale = math.Pow(10, digits)
+	}
+
+	return strconv.FormatFloat(math.Round(input*scale)/scale, 'f', -1, 64), nil
+}
+
+func (english) DateTimeFormat(string, map[string]any, float64) (string, error) {
+	return "", errors.New("no dates")
+}
+
+func (english) RelativeTimeFormat(string, map[string]any, float64, string) (string, error) {
+	return "", errors.New("no relative times")
+}
+
+func (english) PluralRules(locale string, options map[string]any, input float64) (curly.Category, error) {
+	if locale != "en" {
+		return "", errors.New("no data for " + locale)
+	}
+
+	if options["type"] == "cardinal" && input == 1 {
+		return curly.CategoryOne, nil
+	}
+
+	return curly.CategoryOther, nil
+}
+
+func ExampleOptions_intl() {
+	p := curly.New(curly.Options{
+		Intl: english{},
+		OnReport: func(r curly.Report) {
+			fmt.Println(r.Code)
+		},
+	})
+
+	const message = "{{n:plural; one:one file; other:{{n:number}} files}}"
+
+	en := "en"
+
+	fmt.Println(p.Resolve(message, curly.Context{Payload: map[string]any{"n": 1}, Locale: &en}))
+	fmt.Println(p.Resolve(message, curly.Context{Payload: map[string]any{"n": 1234.5678}, Locale: &en}))
+	fmt.Printf("%q\n", p.Resolve(message, curly.Context{Payload: map[string]any{"n": 1}}))
+	// Output:
+	// one file
+	// 1234.57 files
+	// missing-locale
+	// ""
 }
