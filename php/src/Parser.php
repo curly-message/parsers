@@ -40,29 +40,41 @@ final class Parser
     /**
      * Resolutions in progress on one thread of execution, past which
      * `resolve` throws `ReentryLimit`. A fiber is a thread of execution of
-     * its own.
+     * its own. An option or a fallback chain the call to its own modifier
+     * asks for, the conversion of what that call answered included, renders
+     * where the message nests it and takes no place. One
+     * any other host code asks for, a modifier it was kept for among them,
+     * is a resolution begun inside the one in progress and takes a place as
+     * it renders; past the bound it is the empty string, and the host code
+     * that asked fails.
      */
     public const MAX_REENTRY = 32;
 
     /**
      * Resolutions in progress in the process, every fiber's included,
      * suspended or not, that were each begun beneath another on their thread
-     * of execution, past which such a `resolve` throws `ReentryLimit`. One
-     * begun on a thread where none is in progress takes no place and is
-     * never refused (SPEC.md section 13), so a recursion that begins each
-     * level in a fiber of its own is the host's to bound; this adds up the
-     * parts of one that stay on one stack past their first level, which
-     * `MAX_REENTRY` counts afresh in each fiber, and what fibers left
-     * suspended in such resolutions hold.
+     * of execution, past which such a `resolve` throws `ReentryLimit`. An
+     * option or a fallback chain host code asks for from outside the call to
+     * its own modifier and the conversion of its answer, read beneath a resolution on its thread, takes a
+     * place too as it renders; past the bound it is the empty string, and
+     * the host code that asked fails. One begun on a thread where none is
+     * in progress takes no place, and the bound never refuses it (SPEC.md
+     * section 13), so a recursion that begins each level in a fiber of its
+     * own is the host's to bound; this adds up the parts of one that stay
+     * on one stack past their first level, which `MAX_REENTRY` counts
+     * afresh in each fiber, and what fibers left suspended in such
+     * resolutions hold.
      */
     public const MAX_IN_PROGRESS = 512;
 
     /**
+     * @param array<array-key, mixed>|\stdClass $customModifiers the modifiers the host defines, by name, each a `\Closure` or an object with `__invoke`; an entry of any other kind registers nothing and shadows nothing
      * @param array<array-key, mixed>|\stdClass $modifierDefaults the props each modifier is configured with, by its name
      * @param (\Closure(Report): mixed)|null $onReport called with each report, in walk order
      * @param bool $recognizeWrappers whether an entry holding only `value`, `default` and `props` configures its value (section 4.1)
      */
     public function __construct(
+        private readonly array|\stdClass $customModifiers = [],
         private readonly array|\stdClass $modifierDefaults = [],
         private readonly ?\Closure $onReport = null,
         private readonly bool $recognizeWrappers = true,
@@ -128,6 +140,7 @@ final class Parser
                 $props,
                 is_string($locale) ? $locale : null,
                 $id === Undefined::Value ? null : $id,
+                $this->customModifiers,
                 $this->modifierDefaults,
                 $this->onReport,
                 $this->recognizeWrappers,

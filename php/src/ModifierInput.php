@@ -29,7 +29,21 @@ final class ModifierInput
     /**
      * The fallback chain (SPEC.md section 10), walked on the first call and
      * not before: a modifier that never asks leaves it unread, so a link
-     * nobody consulted is never reported as missing.
+     * nobody consulted is never reported as missing. Every call after that
+     * walk finished answers its text. Once the input's resolution returned,
+     * a call answers the text a call during the resolution walked, and the
+     * empty string where none finished one: nothing is walked, reported or
+     * run then (SPEC.md section 11.3).
+     *
+     * A call is refused as `Option::value()` refuses one, and answers the
+     * same: called by anything but the modifier the input was handed to,
+     * from its own call or the conversion of what that call answered, the
+     * walk takes a place among the resolutions in
+     * progress on its thread of execution, and where that place is not to
+     * be had, or a walk of the chain began and has not finished, the call
+     * answers the empty string and fails the host code the parser called
+     * that made it, or, where none runs on its thread, the host code the
+     * parser called that waits on that thread.
      */
     public function default(): string
     {

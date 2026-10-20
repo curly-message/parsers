@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace CurlyMessage;
 
 /**
- * Thrown into host code that begins a resolution while `Parser::MAX_REENTRY`
- * are in progress on its thread of execution, or begins one beneath another
+ * Thrown into host code by a `resolve` it begins while `Parser::MAX_REENTRY`
+ * are in progress on its thread of execution, or begins beneath another
  * there while `Parser::MAX_IN_PROGRESS` resolutions so begun are in progress
  * in the process. PHP ends a recursion that never stops with a fatal error
  * no code can catch, so this stands in for the host's own limit SPEC.md
@@ -17,6 +17,9 @@ namespace CurlyMessage;
  * that stay on one stack past their first level, and what fibers left
  * suspended in such resolutions hold. It is thrown before anything is read,
  * and the placeholder that called the host code contains it; a `resolve` no
- * placeholder called fails, and nothing else.
+ * placeholder called fails, and nothing else. An option's `value()` or an
+ * input's `default()` that is refused throws nothing: it answers the empty
+ * string and fails the host code that asked, or, in a fiber that host code
+ * started, the host code waiting on the fiber.
  */
 final class ReentryLimit extends \Error {}

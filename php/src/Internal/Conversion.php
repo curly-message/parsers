@@ -27,7 +27,10 @@ use CurlyMessage\Undefined;
  * the one converting it is suspended, converts nothing and answers that
  * nothing describes the value: one that converted again would, where each of
  * a modifier's fibers reads it, convert it once a fiber, and a conversion a
- * fiber was let go in the middle of never finishes.
+ * fiber was let go in the middle of never finishes. What is recorded of
+ * arrays is let go as the resolution returns (`release`), after which
+ * nothing is read on its account: a conversion a fiber resumes then calls no
+ * more host code and records nothing.
  *
  * @internal
  */
@@ -50,6 +53,9 @@ final class Conversion
 
     /** @var array<string, array{array<array-key, mixed>, string|false, bool, bool}|true> each place's array beside its text, false where nothing describes it, whether `===` may be asked of it, and whether its text holds a float zero; true while it converts */
     private array $places = [];
+
+    /** Whether the resolution returned and let go of what was recorded. */
+    private bool $released = false;
 
     /** Entries the resolution's re-reads compared one by one, together. */
     private int $compared = 0;
@@ -76,8 +82,9 @@ final class Conversion
      * tells apart and reports.
      *
      * @param string|null $place where the resolution read an array, or null for one converted unrecorded
+     * @param HostFrame|null $call the call to a host modifier whose answer the value is, which its conversion runs as
      */
-    public function text(mixed $value, ?string $place = null): ?string
+    public function text(mixed $value, ?string $place = null, ?HostFrame $call = null): ?string
     {
         if (is_string($value)) {
             return $value;
@@ -88,7 +95,7 @@ final class Conversion
 
             if ($text === null) {
                 $this->objects[$value] = true;
-                $text = $this->objects[$value] = $this->object($value) ?? false;
+                $text = $this->objects[$value] = $this->object($value, $call) ?? false;
             }
 
             return is_string($text) ? $text : null;
@@ -96,7 +103,7 @@ final class Conversion
 
         if (is_array($value)) {
             if ($place === null) {
-                return $this->serialize($value);
+                return $this->serialize($value, call: $call);
             }
 
             $record = $this->places[$place] ?? null;
@@ -110,7 +117,14 @@ final class Conversion
                 $deepest = 0;
                 $zero = false;
                 $text = $this->serialize($value, $deepest, $zero) ?? false;
-                $record = $this->places[$place] = [$value, $text, $text !== false && $deepest <= self::SHALLOW, $zero];
+                $record = [$value, $text, $text !== false && $deepest <= self::SHALLOW, $zero];
+
+                // A fiber left suspended in the conversion may finish it once
+                // the resolution let go of its records, which it must not
+                // hold again.
+                if (!$this->released) {
+                    $this->places[$place] = $record;
+                }
             }
 
             return is_string($record[1]) ? $record[1] : null;
@@ -126,6 +140,23 @@ final class Conversion
 
         // A resource, open or closed, is the one kind left.
         return is_resource($value) || gettype($value) === 'resource (closed)' ? 'Resource id #' . get_resource_id($value) : null;
+    }
+
+    /**
+     * Lets go of what the resolution recorded, where nothing a `__destruct`
+     * runs leaves it, as the resolution returns.
+     */
+    public function release(): void
+    {
+        $this->released = true;
+
+        if ($this->places === []) {
+            return;
+        }
+
+        $held = $this->places;
+        $this->places = [];
+        Contained::release($held);
     }
 
     /**
@@ -256,14 +287,14 @@ final class Conversion
         return $recorded === $now && ($recorded !== 0.0 || fdiv(1, $recorded) === fdiv(1, $now));
     }
 
-    private function object(object $value): ?string
+    private function object(object $value, ?HostFrame $call): ?string
     {
         if ($value === Undefined::Value) {
             return null;
         }
 
         if (get_class($value) === \stdClass::class) {
-            return $this->serialize($value);
+            return $this->serialize($value, call: $call);
         }
 
         // What PHP makes of an object as a string: its `__toString`, or the
@@ -277,7 +308,7 @@ final class Conversion
             }
 
             return $value instanceof \GMP ? (string) $value : null;
-        }, null);
+        }, null, self::frame($call));
     }
 
     /**
@@ -298,12 +329,26 @@ final class Conversion
      * @param array<array-key, mixed>|\stdClass $root
      * @param int $deepest set to the most containers the walk had open at once
      * @param bool $zero set where the walk wrote a float zero no object holds, whose sign the text spells and `===` does not tell
+     * @param HostFrame|null $call the call to a host modifier whose answer `$root` is
      */
-    private function serialize(array|\stdClass $root, int &$deepest = 0, bool &$zero = false): ?string
+    private function serialize(array|\stdClass $root, int &$deepest = 0, bool &$zero = false, ?HostFrame $call = null): ?string
     {
         return Contained::run(function () use ($root, &$deepest, &$zero): ?string {
             return $this->write($root, $deepest, $zero);
-        }, null);
+        }, null, self::frame($call));
+    }
+
+    /** A frame to convert the answer of `$call` as that call, or null for a value that is no answer. */
+    private static function frame(?HostFrame $call): ?HostFrame
+    {
+        if ($call === null) {
+            return null;
+        }
+
+        $frame = new HostFrame();
+        $frame->call = $call;
+
+        return $frame;
     }
 
     /**
@@ -341,7 +386,7 @@ final class Conversion
             // does, and each one asked after it is a value visited, so a
             // chain of new answers ends at the limit.
             while ($value instanceof \JsonSerializable) {
-                if ($asked && ++$visits > Parser::MAX_CONVERSION_NODES) {
+                if ($asked && ++$visits > Parser::MAX_CONVERSION_NODES || $this->released) {
                     return null;
                 }
 
@@ -364,6 +409,13 @@ final class Conversion
             }
 
             unset($answer);
+
+            // A fiber left suspended in host code the conversion called may
+            // resume it once the resolution returned, after which it calls
+            // no more.
+            if (is_object($value) && $this->released) {
+                return null;
+            }
 
             $members = is_array($value) || is_object($value) ? $this->members($value, $visits, $path, $held) : null;
 

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Tests\Unit;
 
+use CurlyMessage\ModifierInput;
+use CurlyMessage\Option;
 use CurlyMessage\Parser;
 use CurlyMessage\ReentryLimit;
 use CurlyMessage\Report;
@@ -320,6 +322,280 @@ final class ReentryTest extends TestCase
         self::assertIsArray($answer);
         self::assertSame(141, $answer['levels'] ?? null);
         self::assertSame([], $answer['reports'] ?? null);
+    }
+
+    /** @return iterable<string, array{string, int, string, list<string>}> */
+    public static function keptChains(): iterable
+    {
+        $placeholders = static fn(int $count): string => str_repeat('{{x:keep; o:{{x:pop}}}}', $count) . '{{x:pop}}';
+        $options = static fn(int $count): string => '{{x:keep' . str_repeat('; o:{{x:pop}}', $count) . '}}{{x:pop}}';
+
+        yield 'as many placeholders, each keeping its option, as the bound leaves places' => [$placeholders(Parser::MAX_REENTRY - 1), Parser::MAX_REENTRY - 1, 'e', []];
+        yield 'one placeholder more' => [$placeholders(Parser::MAX_REENTRY), Parser::MAX_REENTRY, '', ['failed-modifier']];
+        yield 'twenty thousand placeholders' => [$placeholders(20_000), 20_000, '', ['failed-modifier']];
+        yield 'one placeholder keeping as many options as the bound leaves places' => [$options(Parser::MAX_REENTRY - 1), 1, 'e', []];
+        yield 'one option more' => [$options(Parser::MAX_REENTRY), 1, '', ['failed-modifier']];
+    }
+
+    // A modifier may keep what it is handed, and a later placeholder's
+    // modifier read it, rendering a text that reads the one kept before it,
+    // and so on, at the shallow depth each was kept at. Each such read is a
+    // resolution begun inside the one in progress (SPEC.md section 13), and
+    // takes a place on its thread as it renders, so the bound ends the
+    // chain however long the message: the read past it is the empty string,
+    // and the modifier that asked fails.
+    /** @param list<string> $codes */
+    #[DataProvider('keptChains')]
+    public function testBoundsAChainOfTextsKeptFromEarlierPlaceholders(string $message, int $keeps, string $last, array $codes): void
+    {
+        $kept = [];
+        $parser = $this->parser(customModifiers: [
+            'keep' => static function (ModifierInput $in) use (&$kept): string {
+                array_push($kept, ...$in->options);
+
+                return 'k';
+            },
+            'pop' => static function () use (&$kept): string {
+                $option = array_pop($kept);
+
+                return $option instanceof Option ? $option->value() : 'e';
+            },
+        ]);
+
+        self::assertSame(str_repeat('k', $keeps) . $last, $parser->resolve($message, ['x' => 1]));
+        self::assertSame($codes, $this->codes());
+    }
+
+    // A modifier whose read was refused fails whatever it answers after, a
+    // catch around the read included: the refusal is the parser's, not a
+    // raise the host code can answer for.
+    public function testFailsAModifierWhoseReadWasRefusedWhateverItAnswers(): void
+    {
+        $kept = null;
+        $parser = $this->parser(customModifiers: [
+            'k2' => static function (ModifierInput $in) use (&$kept): string {
+                $kept = $in->options[0];
+
+                return $kept->value();
+            },
+            'c' => static function () use (&$kept): string {
+                try {
+                    return $kept instanceof Option ? 'read:' . $kept->value() : 'none';
+                } catch (\Throwable) {
+                    return 'caught';
+                }
+            },
+        ]);
+
+        self::assertSame('[D]', $parser->resolve('{{x:k2; o:[{{x:c; default:D}}]}}', ['x' => 1]));
+        self::assertSame(['failed-modifier'], $this->codes());
+    }
+
+    /** @return iterable<string, array{string, bool, string}> */
+    public static function fibersReadingARenderingText(): iterable
+    {
+        foreach (['on the main thread' => false, 'in a fiber' => true] as $where => $inFiber) {
+            yield "a fiber the modifier starts, {$where}" => ['{{a:hold; o:[{{a:peek; default:D}}]}}', $inFiber, '[D]'];
+            // The modifier that resumes the fiber is the one waiting on it,
+            // not the one that started it, which has returned.
+            yield "a fiber another modifier started, resumed by the modifier, {$where}" => ['{{a:start; default:SD}}{{a:hold; o:[{{a:resume; default:RD}}]}}', $inFiber, 'S[RD]'];
+            yield "a fiber started in a fiber the modifier starts, {$where}" => ['{{a:hold; o:[{{a:through; default:D}}]}}', $inFiber, '[D]'];
+            // The innermost host code beneath the fiber is the modifier of a
+            // resolution another fiber began, not the one that began it.
+            yield "a fiber a modifier starts in a resolution a fiber began, {$where}" => ['{{a:hold; o:[{{a:outer; default:OD}}]}}', $inFiber, '[o:ID]'];
+        }
+    }
+
+    // A fiber host code starts runs none of the host code the parser called,
+    // so a read its own code makes of a text while it is rendering is
+    // refused as any is: it answers the empty string, and raises nothing
+    // the fiber's code could catch. What fails is the host code the parser
+    // called that is waiting on the fiber, beneath it.
+    #[DataProvider('fibersReadingARenderingText')]
+    public function testFailsTheHostCodeBeneathAFiberWhoseReadWasRefused(string $message, bool $inFiber, string $resolved): void
+    {
+        /** @var Option|null $kept */
+        $kept = null;
+        $parked = null;
+        /** @var list<string> $reads */
+        $reads = [];
+        $parser = null;
+        $read = static function () use (&$kept, &$reads): string {
+            try {
+                $text = $kept instanceof Option ? $kept->value() : 'none';
+            } catch (\Throwable $thrown) {
+                $text = $thrown::class;
+            }
+
+            $reads[] = $text;
+
+            return $text;
+        };
+        $started = static function (\Closure $work): string {
+            $fiber = new \Fiber($work);
+            $fiber->start();
+            $text = $fiber->getReturn();
+
+            return is_string($text) ? $text : '';
+        };
+        $parser = $this->parser(customModifiers: [
+            'hold' => static function (ModifierInput $in) use (&$kept): string {
+                $kept = $in->options[0];
+
+                return $kept->value();
+            },
+            'peek' => static fn(): string => 'p:' . $started($read),
+            'start' => static function () use (&$parked, $read): string {
+                $parked = new \Fiber(static function () use ($read): string {
+                    \Fiber::suspend();
+
+                    return $read();
+                });
+                $parked->start();
+
+                return 'S';
+            },
+            'resume' => static function () use (&$parked): string {
+                self::assertInstanceOf(\Fiber::class, $parked);
+                $parked->resume();
+                $text = $parked->getReturn();
+
+                return 'r:' . (is_string($text) ? $text : '');
+            },
+            'through' => static fn(): string => 't:' . $started(static fn(): string => $started($read)),
+            'outer' => static function () use (&$parser, $started): string {
+                return 'o:' . $started(static function () use (&$parser): string {
+                    self::assertInstanceOf(Parser::class, $parser);
+
+                    return $parser->resolve('{{a:peek; default:ID}}', ['a' => 1]);
+                });
+            },
+        ]);
+        $resolve = static fn(): string => $parser->resolve($message, ['a' => 1]);
+
+        self::assertSame($resolved, $inFiber ? $started($resolve) : $resolve());
+        self::assertSame([''], $reads);
+        self::assertSame(['failed-modifier'], $this->codes());
+    }
+
+    // On a thread where the parser runs no host code, and none beneath it,
+    // as in main code a fiber the resolution runs in suspended into, a
+    // refused read answers the empty string and fails nothing: no host
+    // code the parser called is waiting on it.
+    public function testAnswersNothingToARefusedReadNoHostCodeTheParserCalledIsBeneath(): void
+    {
+        $kept = null;
+        $parser = $this->parser(customModifiers: [
+            'hold' => static function (ModifierInput $in) use (&$kept): string {
+                $kept = $in->options[0];
+
+                return $kept->value();
+            },
+            'wait' => static function (): string {
+                \Fiber::suspend();
+
+                return 'w';
+            },
+        ]);
+        $fiber = new \Fiber(static fn(): string => $parser->resolve('{{a:hold; o:[{{a:wait}}]}}', ['a' => 1]));
+        $fiber->start();
+
+        self::assertInstanceOf(Option::class, $kept);
+        self::assertSame('', $kept->value());
+        $fiber->resume();
+        self::assertSame('[w]', $fiber->getReturn());
+        self::assertSame([], $this->codes());
+    }
+
+    /** @return iterable<string, array{string, \Closure(Option): mixed, string, list<string>}> */
+    public static function readsAtTheBoundOfTheThread(): iterable
+    {
+        $nested = str_repeat('{{x:own; o:', Parser::MAX_NESTING - 1) . '{{x:own; o:X}}' . str_repeat('}}', Parser::MAX_NESTING - 1);
+        $shown = str_repeat('<', Parser::MAX_NESTING) . 'X' . str_repeat('>', Parser::MAX_NESTING);
+
+        // The innermost resolution is the last the bound lets begin.
+        yield 'one more resolution' => ['{{x:again; default:F}}', static fn(): array => ['x' => 1], 'F|O', ['failed-modifier']];
+        // What a modifier reads of its own options renders where the message
+        // nests it, and takes no place, however deep.
+        yield 'options each read by their own modifier, nested as deep as the nesting limit' => [$nested, static fn(): array => ['x' => 1], $shown . '|O', []];
+        // A text kept from elsewhere takes a place, and is refused; it
+        // records nothing, so its own modifier reads it afterwards.
+        yield 'a kept option, read by another modifier' => ['{{x:read; default:F}}', static fn(): array => ['x' => 1], 'F|O', ['failed-modifier']];
+        // A fiber of its own is a thread where none is in progress.
+        yield 'a kept option, read by another modifier in a fiber of its own' => ['{{x:fork; default:F}}', static fn(): array => ['x' => 1], 'r:O|O', []];
+        // A value whose conversion asked for it has no text, and the
+        // modifier around it answers.
+        yield 'a kept option, read by a value as it converts' => ['{{x:show; o:[{{v; default:F}}]}}', static fn(Option $lent): array => ['x' => 1, 'v' => new Beneath(static fn(): string => $lent->value())], '[F]|O', ['unserializable-value']];
+        // What converts a modifier's answer is the modifier's own call.
+        yield 'an option, read by its own modifier\'s answer as it converts' => ['{{x:answer; o:A; default:F}}', static fn(): array => ['x' => 1], '<A>|O', []];
+        yield 'an option, read by its own modifier\'s answer as it serializes' => ['{{x:serialized; o:A; default:F}}', static fn(): array => ['x' => 1], '["A"]|O', []];
+        yield 'a fallback chain, read by its own modifier\'s answer as it converts' => ['{{x:chain; default:D}}', static fn(): array => ['x' => 1], '<D>|O', []];
+        yield 'a kept option, read by another modifier\'s answer as it converts' => ['{{x:readAnswer; default:F}}', static fn(): array => ['x' => 1], 'F|O', ['failed-modifier']];
+    }
+
+    // A modifier lends its option, then begins resolutions one inside
+    // another up to the bound of its thread, the innermost of which
+    // resolves `$message`; then it reads the option itself.
+    /**
+     * @param \Closure(Option): mixed $payload
+     * @param list<string> $codes
+     */
+    #[DataProvider('readsAtTheBoundOfTheThread')]
+    public function testReadsTextsWhereTheResolutionsInProgressReachTheBound(string $message, \Closure $payload, string $resolved, array $codes): void
+    {
+        $lent = null;
+        $levels = 0;
+        $parser = null;
+        $parser = $this->parser(customModifiers: [
+            'lend' => static function (ModifierInput $in) use (&$lent, &$parser): string {
+                $lent = $in->options[0];
+                self::assertInstanceOf(Parser::class, $parser);
+
+                return $parser->resolve('{{x:deep}}', ['x' => 1]) . '|' . $in->options[0]->value();
+            },
+            'deep' => static function () use (&$lent, &$levels, &$parser, $message, $payload): string {
+                $levels += 1;
+                self::assertInstanceOf(Parser::class, $parser);
+                self::assertInstanceOf(Option::class, $lent);
+
+                // The first is the second resolution in progress.
+                return $levels + 2 < Parser::MAX_REENTRY ? $parser->resolve('{{x:deep}}', ['x' => 1]) : $parser->resolve($message, $payload($lent));
+            },
+            'again' => static function () use (&$parser): string {
+                self::assertInstanceOf(Parser::class, $parser);
+
+                return $parser->resolve('A');
+            },
+            'own' => static fn(ModifierInput $in): string => '<' . $in->options[0]->value() . '>',
+            'read' => static function () use (&$lent): string {
+                return $lent instanceof Option ? 'r:' . $lent->value() : 'none';
+            },
+            'fork' => static function () use (&$lent): string {
+                $fiber = new \Fiber(static fn(): string => $lent instanceof Option ? 'r:' . $lent->value() : 'none');
+                $fiber->start();
+                $read = $fiber->getReturn();
+
+                return is_string($read) ? $read : '';
+            },
+            'show' => static fn(ModifierInput $in): string => $in->options[0]->value(),
+            'answer' => static fn(ModifierInput $in): Beneath => new Beneath(static fn(): string => '<' . $in->options[0]->value() . '>'),
+            'serialized' => static fn(ModifierInput $in): array => [new class ($in) implements \JsonSerializable {
+                public function __construct(private readonly ModifierInput $in) {}
+
+                public function jsonSerialize(): string
+                {
+                    return $this->in->options[0]->value();
+                }
+            }],
+            'chain' => static fn(ModifierInput $in): Beneath => new Beneath(static fn(): string => '<' . $in->default() . '>'),
+            'readAnswer' => static function () use (&$lent): Beneath {
+                return new Beneath(static fn(): string => $lent instanceof Option ? 'r:' . $lent->value() : 'none');
+            },
+        ]);
+
+        self::assertSame($resolved, $parser->resolve('{{x:lend; o:O}}', ['x' => 1]));
+        self::assertSame(Parser::MAX_REENTRY - 2, $levels);
+        self::assertSame($codes, $this->codes());
     }
 
     /**

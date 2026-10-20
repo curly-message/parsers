@@ -39,6 +39,12 @@ final class Resolution
 
     private int $read = Parser::MAX_READ_LENGTH;
 
+    // Once the `resolve` that made it returned, nothing resolves, reports or
+    // runs host code on the resolution's account (SPEC.md section 11.3): not
+    // a text host code kept and reads later, and not a rendering a fiber left
+    // suspended in it and resumes.
+    private bool $closed = false;
+
     /**
      * @param mixed $id the id reports carry, null where none
      */
@@ -48,6 +54,7 @@ final class Resolution
         private readonly mixed $props,
         private readonly ?string $locale,
         private readonly mixed $id,
+        private readonly mixed $customModifiers,
         private readonly mixed $modifierDefaults,
         private readonly ?\Closure $onReport,
         private readonly bool $recognizeWrappers,
@@ -62,7 +69,8 @@ final class Resolution
         try {
             return $this->render(0, strlen($this->message), 1);
         } finally {
-            $this->layers->release();
+            $this->closed = true;
+            $this->release();
         }
     }
 
@@ -116,7 +124,7 @@ final class Resolution
     {
         $onReport = $this->onReport;
 
-        if ($onReport === null) {
+        if ($onReport === null || $this->closed) {
             return;
         }
 
@@ -140,6 +148,10 @@ final class Resolution
      */
     public function declared(int $open, int $close): ?Declared
     {
+        if ($this->closed) {
+            return null;
+        }
+
         // The budget is tested before this placeholder reads, so the one that
         // spent it past the limit resolved all the same, and this one pays.
         if ($this->read < 0) {
@@ -178,10 +190,14 @@ final class Resolution
      */
     public function payloadDefault(Declared $declared): ?string
     {
+        if ($this->closed) {
+            return null;
+        }
+
         $key = $declared->placeholder->key;
         $own = $declared->wrapper === null ? null : $this->payloadText($this->layers->own($declared->wrapper, 'default'), 'wd:' . $key, $declared->raised);
 
-        if ($own !== null) {
+        if ($own !== null || $this->closed) {
             return $own;
         }
 
@@ -198,7 +214,9 @@ final class Resolution
 
         $declared = $this->declared($open, $close);
 
-        if ($declared === null) {
+        // Reading the value may suspend the fiber it runs in, which may be
+        // resumed once the resolution returned.
+        if ($declared === null || $this->closed) {
             return '';
         }
 
@@ -209,22 +227,28 @@ final class Resolution
     private function resolved(Declared $declared, int $open, int $close, int $depth): string
     {
         $placeholder = $declared->placeholder;
-        $resolvedDefault = null;
         // The wrapper speaks for its own value, the payload for every key it
         // does not carry, and the message only for what neither says. A link
         // waits for the one before it to come back empty, and the chain waits
-        // for a reader.
-        $default = function () use (&$resolvedDefault, $declared, $placeholder, $depth): string {
-            return $resolvedDefault ??= $this->payloadDefault($declared)
-                ?? ($placeholder->inlineDefault === null ? '' : $this->render($placeholder->inlineDefault[0], $placeholder->inlineDefault[1], $depth + 1));
+        // for a reader: the parser, or host code.
+        $chain = null;
+        $default = function (?HostFrame $reader = null) use (&$chain, $declared, $placeholder, $depth): string {
+            return $this->once($chain, fn(): string => $this->payloadDefault($declared)
+                ?? ($placeholder->inlineDefault === null ? '' : $this->render($placeholder->inlineDefault[0], $placeholder->inlineDefault[1], $depth + 1)), $reader);
         };
 
         $modifier = $placeholder->modifier;
+        $name = $modifier === '' ? 'eq' : $modifier;
+        $hosted = $this->hosted($name);
+        // What host code asks for of this placeholder names the frame the
+        // call to its modifier runs as, so that call can be told from any
+        // other host code.
+        $owner = $hosted === null ? null : new HostFrame();
 
         // A modifier nobody registered is a defect in the message, not a
         // selection: running `eq` in its place would answer a question the
         // message never asked.
-        if ($modifier !== '' && !in_array($modifier, Comparisons::NAMES, true)) {
+        if ($modifier !== '' && $hosted === null && !in_array($modifier, Comparisons::NAMES, true)) {
             $this->report(ReportCode::UnknownModifier, $open, $close);
 
             return $default();
@@ -233,8 +257,9 @@ final class Resolution
         // A selection declaring no options was asked to select from nothing,
         // which is how the placeholder is written, so it is reported before
         // the value is asked anything. One naming no key compares nothing and
-        // is no selection.
-        if ($placeholder->key !== null && $placeholder->options === [] && in_array($modifier, self::SELECTIONS, true)) {
+        // is no selection, and neither is a host's own modifier under a
+        // selection's name, which may answer from nothing.
+        if ($placeholder->key !== null && $placeholder->options === [] && $hosted === null && in_array($modifier, self::SELECTIONS, true)) {
             $this->report(ReportCode::MissingOptions, $open, $close);
 
             return $default();
@@ -250,35 +275,221 @@ final class Resolution
             return $declared->valueText;
         }
 
-        $name = $modifier === '' ? 'eq' : $modifier;
         $options = [];
 
         foreach ($placeholder->options as [$optionKey, [$from, $to]]) {
-            $options[] = $this->option($optionKey, $from, $to, $depth + 1);
+            $options[] = $this->option($optionKey, $from, $to, $depth + 1, $owner);
         }
 
         $props = $this->layers->compose([$this->modifierDefaults, $this->props, $declared->wrapper === null ? null : $this->layers->own($declared->wrapper, 'props')], $name);
 
-        return Comparisons::call($name, new ModifierInput($declared->valueText, $options, $props, $this->locale, $default));
+        if ($hosted === null) {
+            $input = new ModifierInput($declared->valueText, $options, $props, $this->locale, $default);
+
+            return Comparisons::call($name, $input);
+        }
+
+        return $this->call($hosted, fn(): ModifierInput => new ModifierInput($declared->valueText, $options, $props, $this->locale, fn(): string => $default($owner)), $declared, $default, $owner);
+    }
+
+    /**
+     * The modifier the host registered under `$name`, or null where its entry
+     * is none: a modifier is a `\Closure` or an object with `__invoke`, and
+     * telling either runs no host code. A string or an array is not asked,
+     * since asking whether one names a method can load a class.
+     *
+     * @return ((callable(ModifierInput): mixed)&object)|null
+     */
+    private function hosted(string $name): ?object
+    {
+        $entry = $this->layers->own($this->customModifiers, $name);
+
+        return is_object($entry) && is_callable($entry) ? $entry : null;
+    }
+
+    /**
+     * A host modifier's answer, which converts as a payload entry does: what
+     * it builds stays structured rather than becoming PHP's word for it. A
+     * modifier that answers nothing, as a PHP function does by answering
+     * `null`, or answers what nothing describes, or raises, has not answered,
+     * and the placeholder takes the fallback chain; containing the raise is
+     * what keeps it out of the caller's render path, and the report is what
+     * keeps the caller hearing of it. The answer is this placeholder's
+     * result rather than text it read, so it is bounded by the output limit
+     * and spends nothing of the read budget.
+     *
+     * @param (callable(ModifierInput): mixed)&object $modifier
+     * @param \Closure(): ModifierInput $input
+     * @param \Closure(): string $default
+     * @param HostFrame|null $owner the frame the call runs as, which what the modifier is handed names
+     */
+    private function call(object $modifier, \Closure $input, Declared $declared, \Closure $default, ?HostFrame $owner): string
+    {
+        // The input is built and the answer converted inside the containment,
+        // and both are let go as it ends, with whatever the modifier hung on
+        // either: what they run as they go is the modifier's, contained as
+        // its raise is.
+        $text = Contained::run(function () use ($modifier, $input, $owner): string|false|null {
+            $answer = $modifier($input());
+
+            // The modifier may have suspended the fiber it runs in, and been
+            // resumed once the resolution returned.
+            return $answer === null || $answer === Undefined::Value || $this->closed ? false : $this->conversion->text($answer, call: $owner);
+        }, true, $owner);
+
+        if ($text === true) {
+            $this->report(ReportCode::FailedModifier, $declared->open, $declared->close);
+
+            return $default();
+        }
+
+        if ($text === false) {
+            return $default();
+        }
+
+        if ($text === null) {
+            ($declared->raised)();
+
+            return $default();
+        }
+
+        return $text;
     }
 
     /**
      * An option whose value is rendered where it is first asked for and not
-     * again; one the modifier passes over is never rendered at all. Each is
-     * built in a scope of its own, so no two share what they recorded.
+     * again; one the modifier passes over is never rendered at all. Host
+     * code asks for what a host modifier is handed, `$owner` being the frame
+     * the call to that modifier runs as, and the parser for what its own
+     * modifiers are.
      */
-    private function option(string $key, int $from, int $to, int $depth): Option
+    private function option(string $key, int $from, int $to, int $depth, ?HostFrame $owner): Option
     {
         $rendered = null;
 
-        return new Option($key, function () use (&$rendered, $from, $to, $depth): string {
-            return $rendered ??= $this->render($from, $to, $depth);
+        return new Option($key, function () use (&$rendered, $from, $to, $depth, $owner): string {
+            return $this->once($rendered, fn(): string => $this->render($from, $to, $depth), $owner);
         });
     }
 
     /**
+     * Text rendered on the first read, at most once, and the text that one
+     * rendering made on every read after it finished. `$state` is that text
+     * once there is one; before that, true once the rendering began, and
+     * null where it did not. A rendering a fiber left suspended, or let go
+     * of while it was suspended, leaves it true, and no read renders the
+     * text again: one that did would, where a modifier reads its text in
+     * such a fiber at each level of a message, double what each level
+     * walks, however the host schedules its fibers.
+     *
+     * What the parser reads is bounded by the nesting limit, and never
+     * refused: its read of a text whose rendering began and has not finished
+     * is the empty string. What host code asks for of a placeholder,
+     * `$owner` naming the call to its modifier, renders where the message
+     * nests it when that call asks, on top of its thread of execution, or
+     * the conversion of what it answered does, and costs only the nesting
+     * limit then. Asked for by any other host code, from another
+     * placeholder's modifier it was kept for, from a handler or from a
+     * payload value's conversion, it is a resolution begun from inside the
+     * one in progress, and takes a place among the resolutions in progress
+     * on its thread for as long as it renders, as `resolve` does (SPEC.md
+     * section 13): otherwise a message of many placeholders, each reading
+     * what the one before kept, would nest a rendering per placeholder that
+     * no bound reaches. One asked for where none is in progress on its
+     * thread, in a fiber of its own, is never refused by the bound. A text
+     * asked for once a rendering of it began and before one finished is
+     * refused too: one asked for beneath its own rendering would render
+     * inside itself, and one whose rendering a fiber left suspended may
+     * never finish. Nothing is recorded of a refused text, so a later read
+     * may render it. The refused text is the
+     * empty string, and the host code the parser called that asked fails as
+     * it returns, whatever it answers or catches: the innermost on the
+     * reader's thread, or, where none runs there, as in a fiber host code
+     * started, the innermost on the nearest thread beneath it, each waiting
+     * on the one it started or resumed; where none runs on any, nothing
+     * fails.
+     *
+     * Once the resolution returned, a read answers the text a rendering
+     * finished during it, and the empty string where none did, rendering,
+     * reporting and running nothing (section 11.3). A rendering a fiber left
+     * suspended and resumes then resolves nothing more, and answers the
+     * empty string too.
+     *
+     * @param string|true|null $state
+     * @param \Closure(): string $render
+     * @param HostFrame|null $owner the frame the call to the modifier of the placeholder host code asks for the text of runs as, null where the parser reads it
+     *
+     * @param-out string|true|null $state
+     */
+    private function once(string|true|null &$state, \Closure $render, ?HostFrame $owner): string
+    {
+        if (is_string($state)) {
+            return $state;
+        }
+
+        if ($this->closed) {
+            return '';
+        }
+
+        if ($owner === null || ($top = Contained::top()) === $owner || $top?->call === $owner) {
+            if ($state !== null) {
+                return $owner === null ? '' : self::refuse();
+            }
+
+            $state = true;
+            $text = $render();
+
+            return $this->closed ? '' : $state = $text;
+        }
+
+        if ($state !== null) {
+            return self::refuse();
+        }
+
+        $entered = Guard::enter();
+
+        if (is_string($entered)) {
+            return self::refuse();
+        }
+
+        $state = true;
+
+        try {
+            $text = $render();
+        } finally {
+            Guard::leave($entered);
+        }
+
+        return $this->closed ? '' : $state = $text;
+    }
+
+    /**
+     * Fails the host code the parser called that asked for a text, or that
+     * waits on the thread of execution that asked, and answers it nothing.
+     */
+    private static function refuse(): string
+    {
+        Contained::fail();
+
+        return '';
+    }
+
+    /**
+     * Lets go of what the resolution read and recorded, where nothing a
+     * `__destruct` runs leaves it.
+     */
+    private function release(): void
+    {
+        $this->layers->release();
+        $this->conversion->release();
+    }
+
+    /**
      * Value text is what a placeholder takes from the payload, and every byte
-     * of it is spent whether or not any of it reaches the output.
+     * of it is spent whether or not any of it reaches the output. Converting
+     * it may run host code that suspends the fiber it runs in.
+     *
+     * @phpstan-impure
      */
     private function payloadText(mixed $declared, string $place, \Closure $raised): ?string
     {
