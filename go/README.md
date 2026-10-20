@@ -247,6 +247,17 @@ Run from `go/`:
 
 Every `.go` file is ASCII: a character outside ASCII is written as an escape.
 
+The suite runs the specification's conformance set and audits its runner
+against the set's defect catalogue. The set is the release vendored at
+`internal/conformance/set/`, checked against the sha256 its release states;
+`CURLY_CONFORMANCE_FIXTURES=<dir>` runs a set under development instead, a
+directory laid out as the conformance package is. The set runs at Core and
+Extensions, the Intl level left out, and again at every level against a
+stand-in supplier with each formatting request exposed, which measures the
+request the parser makes rather than a host's locale data.
+`internal/adapter/testdata/failing.txt` lists the cases of the vendored set
+the parser is known to fail, and why.
+
 ## License
 
 [MIT](./LICENSE)
