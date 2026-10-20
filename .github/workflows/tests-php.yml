@@ -1,0 +1,177 @@
+name: PHP parser tests
+
+on:
+  # A pull request from a fork pushes nothing here, so the tests run on the
+  # pull request, whatever its base, which tests a stacked one too. A rebase
+  # merge and a release commit land commits no pull request ran, so main is
+  # tested again on a push. A tag is left out: it names a tree the publish
+  # workflow has just tested. A branch with no pull request runs by hand, and
+  # the publish workflow runs the whole of it first.
+  push:
+    branches: [main]
+    paths: &paths
+      - php/**
+      - .github/workflows/tests-php.yml
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  # The suite on every supported PHP and OS with ext-intl, and on every
+  # supported PHP without it, where the Intl level is not claimed and its
+  # modifiers fall back as the specification says.
+  Tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        php: ['8.2', '8.3', '8.4', '8.5']
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        intl: ['on']
+        include:
+          - { php: '8.2', os: ubuntu-latest, intl: 'off' }
+          - { php: '8.3', os: ubuntu-latest, intl: 'off' }
+          - { php: '8.4', os: ubuntu-latest, intl: 'off' }
+          - { php: '8.5', os: ubuntu-latest, intl: 'off' }
+    defaults:
+      run:
+        working-directory: php
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Assertions on, as in development: the suite asserts nothing through
+      # them, but a library that leans on one fails here rather than in a
+      # host that runs with them.
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: ${{ matrix.intl == 'on' && 'intl, zip' || ':intl, zip' }}
+          ini-values: zend.assertions=1
+          coverage: none
+
+      - name: Check ext-intl is as the leg says
+        shell: php {0}
+        run: |
+          <?php
+          $want = getenv('INTL') === 'on';
+          if (extension_loaded('intl') !== $want) {
+              fwrite(STDERR, "::error::ext-intl is " . (extension_loaded('intl') ? 'loaded' : 'not loaded') . " in a leg that wants it " . getenv('INTL') . ".\n");
+              exit(1);
+          }
+          echo PHP_VERSION, ', ext-intl ', $want ? 'with ICU ' . INTL_ICU_VERSION : 'off', "\n";
+        env:
+          INTL: ${{ matrix.intl }}
+
+      - name: Cache dependencies and the set
+        uses: actions/cache@v6
+        with:
+          path: |
+            php/vendor
+            php/conformance/.set
+          key: php-tests-${{ runner.os }}-${{ matrix.php }}-${{ hashFiles('php/composer.lock', 'php/conformance/set.json') }}
+
+      # Without the QA tools, which the Lint and Artifact jobs install: the
+      # suite does not run them.
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress --no-scripts
+
+      - name: Fetch the conformance set
+        run: composer fetch-set
+
+      # The unit, runner and conformance suites, the audit among them.
+      - name: Test
+        run: php vendor/bin/phpunit
+
+  # On the floor of the supported range, so a function or a syntax newer than
+  # it fails here as well as in the analysis, which reads the source as 8.2.
+  Lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: php
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: intl, zip
+          coverage: none
+
+      - name: Cache dependencies
+        uses: actions/cache@v6
+        with:
+          path: |
+            php/vendor
+            php/tools/qa/vendor
+          key: php-lint-${{ hashFiles('php/composer.lock', 'php/tools/qa/composer.lock') }}
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Lint
+        run: composer lint
+
+      - name: Analyse
+        run: composer analyse
+
+      # The case table is committed rather than built, so it is generated
+      # again from the pinned Unicode data and held to what is on disk.
+      - name: Check the case table
+        run: composer unicode -- --check
+
+  # What a release ships, installed as a consumer installs it: the archive,
+  # its install by copy into a project, the suites against that copy, the
+  # surface probe and the run under `php -n`.
+  Artifact:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        php: ['8.2', '8.5']
+    defaults:
+      run:
+        working-directory: php
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: intl, zip
+          coverage: none
+
+      - name: Cache dependencies and the set
+        uses: actions/cache@v6
+        with:
+          path: |
+            php/vendor
+            php/tools/qa/vendor
+            php/conformance/.set
+          key: php-artifact-${{ matrix.php }}-${{ hashFiles('php/composer.lock', 'php/tools/qa/composer.lock', 'php/conformance/set.json') }}
+
+      - name: Install dependencies
+        run: composer install --no-interaction --no-progress
+
+      - name: Fetch the conformance set
+        run: composer fetch-set
+
+      - name: Test the archive
+        run: composer test:dist
