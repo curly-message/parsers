@@ -1,0 +1,18 @@
+[package]
+name = "curly-message-conformance"
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.88"
+description = "A runner for the conformance set of the Curly Message Format."
+license = "MIT"
+repository = "https://github.com/curly-message/parsers"
+publish = false
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+sha2 = "0.11"
+zip = { version = "9", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[lints]
+workspace = true
