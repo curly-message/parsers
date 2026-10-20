@@ -23,15 +23,18 @@ checked out beside this repository on an up-to-date `main`, otherwise
 Official implementations of the
 [Curly Message Format](https://github.com/curly-message/spec).
 
-- **One directory per language** — `js/` today. Each is a fully standalone
-  package with its own build, tests, configs, README, CHANGELOG and version
-  line. There is no root package manifest and no workspace: run every command
-  from inside the implementation directory, for every directory a change
-  touches.
+- **One directory per language** — `js/` and `go/` today. Each is a fully
+  standalone package with its own build, tests, configs, README, CHANGELOG
+  and version line. There is no root package manifest and no workspace: run
+  every command from inside the implementation directory, for every
+  directory a change touches.
 - **Release tags are namespaced by directory** — `js-v1.0.0`, `py-v0.9.0` — so
   moving an implementation to its own repository later is not a breaking event.
-  The publish workflow cuts them (`.github/workflows/publish-js.yml`; the
-  README's Releasing section says what it does).
+  A Go module's tag is `go/v1.0.0`, the only form the go command reads a
+  version from for a module in a subdirectory; a Go module's path is where it
+  lives, so moving one is a breaking event whatever its tags. The publish
+  workflows cut them (`.github/workflows/publish-js.yml`, `publish-go.yml`;
+  the README's Releasing section says what they do).
 - The root holds only `README.md`, this file, `CLAUDE.md`, `LICENSE`,
   `.gitignore`, `.githooks/` and `.github/workflows/`. An implementation
   directory may hold a `.gitignore` of its own, for what only its toolchain
@@ -44,7 +47,7 @@ Official implementations of the
   passes; 75 when a tool it needs is missing, having printed which and how to
   install it, which skips the directory (`<dir>: skipped`) without failing the
   commit; and anything else to fail the commit. An implementation's check is
-  its script, `.githooks/js.sh` for `js/`.
+  its script, `.githooks/js.sh` for `js/` and `.githooks/go.sh` for `go/`.
 - **`bench.yml` reads its packages from the tree**: each directory that holds
   a `bench/rows.mjs` outside a `bench/check/`, with its own copy of
   `bench/harness.mjs` and `bench/check/`. On a PR it benchmarks those with a
@@ -181,3 +184,86 @@ its `CHANGELOG.md` and the doc comments in `src/types.ts`.
 - What a message resolves to is the conformance set's to pin: a case the
   suite adds beyond it is either an implementation detail or a gap in the set
   (§ Architecture of `spec`'s AGENTS.md).
+
+## go/
+
+Tech stack of `go/` — **ground truth, do not assume otherwise**:
+
+| | |
+|---|---|
+| Module | `github.com/curly-message/parsers/go`, package `curly`, unreleased; tags `go/vX.Y.Z` |
+| Language | Go 1.26+ |
+| Build | the go command; no build step ships |
+| Tests | `go test`, examples included; the conformance set vendored and checked by its sha256 (`internal/conformance/set/`) |
+| Lint | `gofmt`, `go vet`, staticcheck v0.8.2, `go mod tidy -diff`, ASCII-only `.go`, all run by `tests-go.yml`'s Lint job; `.githooks/go.sh` runs `gofmt`, `go vet` and the ASCII check |
+| Runtime dependencies | none: `go list -m all` prints the module alone |
+| Supported toolchains | the Go `go.mod` names, the latest patch of that release, and the latest stable, on Linux, macOS and Windows |
+| CI | `tests-go.yml`, `bench.yml` and `bench-label.yml`, `publish-go.yml` |
+
+Commands, run from `go/`:
+
+| Command | What it does |
+|---------|--------------|
+| `go test ./...` | the suite, the conformance set and the defect audit included — what CI runs on each leg |
+| `go test -race ./...` | the same under the race detector |
+| `gofmt -l .`, `go vet ./...`, `go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...`, `go mod tidy -diff` | the formatting and lint contract, also run with `go -C dev` |
+| `sh bench/prepare.sh && node bench/harness.mjs` | build, then the benchmark (`bench/rows.mjs`) |
+| `node bench/harness.mjs --compare <dir>` | the same, beside the module checked out at `<dir>` and built by its `bench/prepare.sh` — what `bench.yml` runs on a PR |
+| `go -C dev run ./pack -module go -version <v> -proxy <dir>` | the module zip as the proxy builds it, from a commit; needs a plain clone, not a linked worktree |
+
+Map of `go/`:
+
+| Path | Role |
+|------|------|
+| `curly/curly.go` | `New`, `Options`, `Context`, `Parser.Resolve`, the limits |
+| `curly/scan.go`, `curly/text.go` | the placeholder scanner and the format's text classes, `lineTerm` among them |
+| `curly/walk.go`, `curly/layers.go`, `curly/modifiers.go` | the resolution walk, the property layers, the modifiers the format defines |
+| `curly/value.go`, `curly/jsonw.go`, `curly/fmtv.go`, `curly/numeric.go` | the value model: the JSON and `%v` writers, number text |
+| `curly/intl.go` | the `Intl` interface the Intl modifiers delegate to |
+| `curly/report.go` | `Report` and its escaping |
+| `curly/cst.go` | `CST` and `Node.AppendJSON` |
+| `internal/conformance/` | the runner of the set, and the vendored release |
+| `internal/adapter/` | the adapter of section 14.3, the set run and the audit |
+| `dev/` | a never-tagged module: `bench`, `size`, `pack` |
+| `bench/rows.mjs`, `bench/prepare.sh` | the rows, read off the programs `prepare.sh` builds into `dist/`; `bench/harness.mjs` and `bench/check/` are the family's copies |
+
+### Architecture you must respect
+
+The rules of `js/` above hold here, in their Go form:
+
+- **The public surface** is package `curly`'s exported identifiers. Until
+  the first release it is a prerelease's and promises nothing; from then
+  on, the API job of `tests-go.yml` fails on a change `gorelease` calls
+  incompatible.
+- **Diagnostics leave through `Options.OnReport`** and nowhere else.
+- **A Go value has no prototype.** An own-entry read is a map lookup, and a
+  value is plain by its `reflect` type: an unnamed map keyed by `string`, or
+  an unnamed slice of anything but bytes.
+- **The limits** are `MaxOutputLength`, `MaxReadLength`, `MaxConversionNodes`
+  and `MaxNesting`, plus `hostDepth`, how deep a value the parser hands to
+  code it does not own. Each is load-bearing, as in `js/`.
+- **A report carries message text, escaped.** `lineTerm`
+  (`curly/text.go`) plays the role of `LINE_TERM`: the scanner and the
+  report escaping both read it.
+- **The scan is a hand-written walk with a memo**, as in `js/`.
+- **Recursion is bounded by the parser, not the payload.** The walk's
+  recursion is bounded by `MaxNesting`; the parser's own JSON and `%v`
+  writers walk on a stack of their own, and hand code they do not own only a
+  value at most `hostDepth` deep.
+- **Each resolution holds a walk lock** and releases it around every call
+  into host code.
+- **Resolving a message must not panic**: a panicking method, modifier,
+  supplier or `OnReport` is contained.
+- **Docs** are `go/README.md`, `go/CHANGELOG.md` and the doc comments of the
+  exported identifiers.
+
+### Tests
+
+- The suite runs the conformance set at Core and Extensions. It runs it
+  again at every level against a stand-in supplier that exposes each
+  request.
+- The Pack job tests the module zip as a consumer meets it: fetched from a
+  file proxy and run in the read-only module cache. This stands in for
+  `--mode dist`.
+- Cost is asserted by count, with `testing.AllocsPerRun` and call
+  counters, never by time.

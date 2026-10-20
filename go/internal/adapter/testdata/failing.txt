@@ -1,0 +1,10 @@
+# The cases of the vendored set the parser is known to fail, one id per
+# line. A case listed here still runs and is still compared exactly; it
+# leaves this list when the set that corrects it is vendored.
+#
+# The case expects {"value":1,"unit":"kg"}, the members in the order
+# ECMAScript's JSON.stringify keeps them. A Go map holds no order, and the
+# serialisation of a plain object is the host's (section 4), so the parser
+# writes {"unit":"kg","value":1}. The set's own rule for a fixture excludes
+# what a host decides; the case is a defect of release 4.1.0.
+resolution/wrapper-near-miss-is-value
