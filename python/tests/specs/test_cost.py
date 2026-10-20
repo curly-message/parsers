@@ -15,6 +15,7 @@ from curly_message import (
     MAX_CONVERSION_NODES,
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
+    ModifierInput,
     Report,
     _convert,
     _resolve,
@@ -97,6 +98,26 @@ def test_selections_nested_past_the_host_stack_resolve() -> None:
         output = parser.resolve(message, {"v": "a"})
     assert output == ""
     assert [report.code for report in reports] == ["nesting-limit"]
+
+
+def test_a_resolution_begun_by_a_modifier_at_the_deepest_level_resolves() -> None:
+    # The deepest a walk calls host code from is a modifier at the nesting
+    # limit, every level above it a selection on the stack; one that resolves
+    # a deep message there walks it on a trampoline of its own.
+    depth = 100000
+    inner = "{{a; default:" * depth + "x" + "}}" * depth
+    reports: list[Report] = []
+
+    def deep(config: ModifierInput) -> str:
+        return parser.resolve(inner, {}, message_id="inner")
+
+    parser = create_parser(on_report=reports.append, custom_modifiers={"deep": deep})
+    message = "{{v; a:" * (MAX_NESTING - 1) + "{{v:deep}}" + "}}" * (MAX_NESTING - 1)
+    with _shallow_stack():
+        output = parser.resolve(message, {"v": "a"}, message_id="outer")
+    assert output == "x"
+    assert len(reports) == depth - MAX_NESTING
+    assert {(report.code, report.message_id) for report in reports} == {("nesting-limit", "inner")}
 
 
 def test_a_report_copies_no_more_of_the_message_than_its_cut() -> None:

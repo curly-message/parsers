@@ -267,9 +267,16 @@ class ModifierInput:
     """What a modifier is handed (section 11).
 
     ``value`` is text. ``options`` are the placeholder's options in source
-    order, duplicates kept and the inline default left out. ``default`` walks
-    the fallback chain (section 10) where it is first read, so a modifier that
-    answers without it leaves the chain unread.
+    order, duplicates kept and the inline default left out. ``props`` is what
+    the layers configure under the modifier's own name, composed per property:
+    the parser's ``modifier_defaults``, then the call's ``props``, then the
+    wrapper's own (section 11.3); it is a fresh ``dict`` for each call.
+    ``locale`` is exactly what the caller passed, ``None`` where it passed
+    none. ``default`` walks the fallback chain (section 10) where it is first
+    read, so a modifier that answers without it leaves the chain unread. An
+    input kept past the resolution answers what the resolution read of it, and
+    a ``default`` first read after the resolution returned is the empty string:
+    it resolves, reports and runs nothing.
     """
 
     __slots__ = ("_default", "_fallback", "locale", "options", "props", "value")
@@ -309,6 +316,15 @@ class ModifierInput:
         return self._default
 
 
+Modifier = Callable[[ModifierInput], object]
+"""A host-defined modifier (section 11.3).
+
+It answers with a host value, which becomes text the way a payload value does.
+``None`` or ``UNDEFINED`` is no answer, and neither is a raise, so the
+placeholder takes its fallback chain; a raise is reported as well.
+"""
+
+
 class Parser(Protocol):
     """What ``create_parser`` returns."""
 
@@ -317,6 +333,8 @@ class Parser(Protocol):
         message: object,
         payload: dict[str, Any] | None = None,
         *,
+        props: dict[str, dict[str, Any]] | None = None,
+        locale: object = None,
         message_id: object = None,
     ) -> str:
         """Resolve a message over a payload. A defect resolves and is reported.
@@ -326,5 +344,11 @@ class Parser(Protocol):
         lets pass, to that code, the ``RecursionError`` or ``MemoryError`` its
         walk ran out in, so the placeholder that called the code takes its
         fallback chain.
+
+        ``props`` configures modifiers by name, over the parser's
+        ``modifier_defaults`` and under a wrapper's own props. ``locale``
+        reaches every modifier exactly as passed; ``None`` or ``UNDEFINED``
+        is no locale, and ``""`` is one supplied empty. ``message_id`` is
+        read by no step, and every report carries it.
         """
         ...

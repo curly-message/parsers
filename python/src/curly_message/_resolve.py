@@ -15,6 +15,7 @@ from ._types import (
     MAX_OUTPUT_LENGTH,
     MAX_READ_LENGTH,
     UNDEFINED,
+    Modifier,
     ModifierInput,
     Option,
     Parser,
@@ -22,15 +23,22 @@ from ._types import (
     ReportCode,
     ReportOrigin,
 )
-from ._utils import MISSING, UNFINISHED, Scanner, Segment, own_value, parse_placeholder, unesc
+from ._utils import (
+    MISSING,
+    UNFINISHED,
+    Scanner,
+    Segment,
+    own_items,
+    own_value,
+    parse_placeholder,
+    unesc,
+)
 
 _Job = Generator["_Job", "str | _Text", "str | _Text"]
 """A step of the walk that renders nested text: it yields the job it waits on and gets its text."""
 
 _Result = str | _Job
 """A placeholder's text, or the job that will produce it."""
-
-_Modifier = Callable[[ModifierInput], object]
 
 _MESSAGES: Final[dict[ReportCode, str]] = {
     "unknown-modifier": "A placeholder named a modifier this parser does not know.",
@@ -178,12 +186,16 @@ class _Walk:
     __slots__ = (
         "closed",
         "conversions",
+        "defaults",
+        "locale",
         "message_id",
         "on_report",
         "output",
         "payload",
+        "props",
         "read",
         "recognize",
+        "registry",
         "scan",
         "source",
         "wrappers",
@@ -195,14 +207,22 @@ class _Walk:
         scan: Scanner,
         *,
         payload: object,
+        props: object,
+        locale: object,
         message_id: object,
         on_report: Callable[[Report], object] | None,
         recognize: bool,
+        registry: dict[str, Modifier],
+        defaults: object,
         conversions: Conversions,
     ) -> None:
         self.source = source
         self.scan = scan
         self.payload = payload
+        self.props = props
+        self.locale = locale
+        self.registry = registry
+        self.defaults = defaults
         self.message_id = message_id
         self.on_report = on_report
         self.recognize = recognize
@@ -253,8 +273,30 @@ class _Walk:
         self.read -= len(found)
         return found
 
-    def modifier_for(self, name: str) -> _Modifier | None:
-        return BUILTINS.get(name)
+    def modifier_for(self, name: str) -> Modifier | None:
+        # The host's table is asked first and the format's own second, rather
+        # than the two merged anew for each resolution. A registered modifier
+        # is host code, so whether it is one is asked of identity, never of its
+        # truth.
+        registered = self.registry.get(name)
+        return BUILTINS.get(name) if registered is None else registered
+
+    def props_for(
+        self, name: str, parts: WrapperParts | None, open_: int, close: int
+    ) -> dict[str, object]:
+        """What the layers configure under a modifier's own name, composed per property (11.3).
+
+        The defaults, the call's props and the wrapper's props each override
+        only the properties they name, and a property holding ``UNDEFINED``
+        names nothing. What leaves is the parser's own copy, so a modifier that
+        writes into it reaches neither the next placeholder nor the caller.
+        """
+        composed: dict[str, object] = {}
+        for layer in (self.defaults, self.props, MISSING if parts is None else parts[2]):
+            for prop, value in own_items(self.own(layer, name, open_, close)):
+                if value is not UNDEFINED:
+                    composed[prop] = value
+        return composed
 
     def _head(self, open_: int, close: int, depth: int) -> _Result:
         """Resolve a placeholder as far as it can without rendering nested text.
@@ -295,7 +337,13 @@ class _Walk:
         if not name and not segments:
             return value_text
         chain = _Chain(open_, close, depth, key, parts, value_text, inline)
-        return self._tail(chain, modifier or BUILTINS["eq"], value_text, segments)
+        if modifier is None:
+            # Options and no modifier compare with `eq`, which is whatever
+            # answers to the name.
+            name = "eq"
+            registered = self.registry.get(name)
+            modifier = BUILTINS["eq"] if registered is None else registered
+        return self._tail(chain, (name, modifier), value_text, segments)
 
     def _fallback(self, chain: _Chain) -> _Result:
         """The first link of the chain that yields text (section 10), read link by link."""
@@ -373,7 +421,11 @@ class _Walk:
         return render
 
     def _tail(
-        self, chain: _Chain, modifier: _Modifier, value_text: str, segments: list[Segment]
+        self,
+        chain: _Chain,
+        named: tuple[str, Modifier],
+        value_text: str,
+        segments: list[Segment],
     ) -> _Job:
         """Ask the modifier, and take the chain where it answers nothing (section 11)."""
         read: list[str] = []
@@ -387,9 +439,16 @@ class _Walk:
 
         depth = chain.depth + 1
         options = tuple(Option(k, self._rendered(a, b, depth)) for k, a, b in segments)
-        config = ModifierInput(value=value_text, options=options, default=default)
+        name, modifier = named
         try:
             try:
+                config = ModifierInput(
+                    value=value_text,
+                    options=options,
+                    props=self.props_for(name, chain.parts, chain.open, chain.close),
+                    locale=self.locale,
+                    default=default,
+                )
                 answer = modifier(config)
             except Exception as failure:
                 code: ReportCode = (
@@ -428,9 +487,21 @@ class _Walk:
 
 
 class _Parser:
-    __slots__ = ("_on_report", "_recognize")
+    __slots__ = ("_custom_modifiers", "_modifier_defaults", "_on_report", "_recognize")
 
-    def __init__(self, on_report: object, recognize_wrappers: object) -> None:
+    def __init__(
+        self,
+        *,
+        custom_modifiers: object,
+        modifier_defaults: object,
+        on_report: object,
+        recognize_wrappers: object,
+    ) -> None:
+        # The tables are the caller's and are read again for each resolution,
+        # for their own entries, so a table the host fills after creating the
+        # parser is the one the next resolution reads.
+        self._custom_modifiers = custom_modifiers
+        self._modifier_defaults = modifier_defaults
         self._on_report: Callable[[Report], object] | None = (
             on_report if callable(on_report) else None
         )
@@ -442,10 +513,12 @@ class _Parser:
         message: object,
         payload: dict[str, Any] | None = None,
         *,
+        props: dict[str, dict[str, Any]] | None = None,
+        locale: object = None,
         message_id: object = None,
     ) -> str:
         try:
-            return self._resolve(message, payload, message_id)
+            return self._resolve(message, payload, props, locale, message_id)
         except UNFINISHED as failure:
             # Every call into host code is contained where it is made, so what
             # reaches here is the interpreter's stack or memory running out in
@@ -467,7 +540,9 @@ class _Parser:
         except Exception:
             return ""
 
-    def _resolve(self, message: object, payload: object, message_id: object) -> str:
+    def _resolve(
+        self, message: object, payload: object, props: object, locale: object, message_id: object
+    ) -> str:
         conversions: Conversions = {}
         # The message becomes text before anything reads it, and a message no
         # conversion describes is nothing to resolve (section 4).
@@ -478,13 +553,22 @@ class _Parser:
         found = scan.next(0, len(source))
         if found is None:
             return unesc(source)
+        # An entry that cannot be called is not one a message can name, and
+        # shadows nothing the format defines under its name.
+        registry = {
+            name: entry for name, entry in own_items(self._custom_modifiers) if callable(entry)
+        }
         walk = _Walk(
             source,
             scan,
             payload=payload,
+            props=props,
+            locale=None if locale is UNDEFINED else locale,
             message_id=None if message_id is UNDEFINED else message_id,
             on_report=self._on_report,
             recognize=self._recognize,
+            registry=cast(dict[str, Modifier], registry),
+            defaults=self._modifier_defaults,
             conversions=conversions,
         )
         try:
@@ -499,15 +583,27 @@ _WALK: Final = _Parser._resolve.__code__
 
 def create_parser(
     *,
+    custom_modifiers: dict[str, Modifier] | None = None,
+    modifier_defaults: dict[str, dict[str, Any]] | None = None,
     on_report: Callable[[Report], object] | None = None,
     recognize_wrappers: bool = True,
 ) -> Parser:
     """A parser for the Curly Message Format, version 3.
 
-    ``on_report`` receives every report a resolution makes (section 14.3), and
-    is the only channel the parser reports through: a handler that raises loses
-    that report and nothing else. ``recognize_wrappers=False`` reads every
-    payload entry as a value, which is where a caller holding untrusted data
-    passes it (section 4.1). An option of the wrong type is read as not given.
+    ``custom_modifiers`` registers the host's modifiers by name (section 11.3);
+    a name it holds is looked up there before the format's own, and an entry
+    that cannot be called registers nothing. ``modifier_defaults`` is the
+    bottom layer of the props a modifier receives, under its own name. Both are
+    read again on each resolution. ``on_report`` receives every report a
+    resolution makes (section 14.3), and is the only channel the parser reports
+    through: a handler that raises loses that report and nothing else.
+    ``recognize_wrappers=False`` reads every payload entry as a value, which is
+    where a caller holding untrusted data passes it (section 4.1). An option of
+    the wrong type is read as not given.
     """
-    return _Parser(on_report, recognize_wrappers)
+    return _Parser(
+        custom_modifiers=custom_modifiers,
+        modifier_defaults=modifier_defaults,
+        on_report=on_report,
+        recognize_wrappers=recognize_wrappers,
+    )
