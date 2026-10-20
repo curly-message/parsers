@@ -19,14 +19,16 @@ thread_local! {
 /// What [`Parser::resolve`](crate::Parser::resolve) unwinds with where it
 /// refuses a resolution, before reading anything: [`MAX_REENTRY`] were in
 /// progress on its thread. It unwinds into the host code that asked, a
-/// modifier, a value's `Display` or a report handler, without running the
-/// panic hook. That code may catch it, as it may any panic; one it lets pass
-/// is contained as any panic of host code is, so the resolution around it
-/// carries on. One refused while the thread already unwinds, from a `Drop`
-/// say, starts no unwind of its own, since one leaving a `Drop` there would
-/// abort the process: `resolve` answers the empty string to its caller
-/// instead, and the host code the parser called that asked for it counts as
-/// failed, as one that let the refusal pass does.
+/// modifier, an [`Intl`](crate::Intl) facility, a value's `Display` or a
+/// report handler, without running the panic hook. That code may catch it,
+/// as it may any panic; one it lets pass is contained as any panic of host
+/// code is, so the resolution around it carries on, and a modifier's or a
+/// facility's placeholder reports `failed-modifier`. One refused while the
+/// thread already unwinds, from a `Drop` say, starts no unwind of its own,
+/// since one leaving a `Drop` there would abort the process: `resolve`
+/// answers the empty string to its caller instead, and the host code the
+/// parser called that asked for it counts as failed, as one that let the
+/// refusal pass does.
 ///
 /// Its thread is the operating-system thread, so stackful fibers that share
 /// one share its count, whether it unwinds, and the mark of a refusal made
@@ -138,10 +140,10 @@ fn discard<T>(value: T) {
     let _ = catch_unwind(AssertUnwindSafe(move || drop(value)));
 }
 
-/// Calls host code: a report handler, a value's `Display`, a modifier. The
-/// answer is nothing where the call panicked, a refused resolution it let
-/// pass among them, or where a resolution it asked for was refused while the
-/// thread unwinds.
+/// Calls host code: a report handler, a value's `Display`, a modifier, an
+/// `Intl` facility. The answer is nothing where the call panicked, a refused
+/// resolution it let pass among them, or where a resolution it asked for was
+/// refused while the thread unwinds.
 ///
 /// No borrow of a walker's state is held across it.
 pub(crate) fn host_call<T>(call: impl FnOnce() -> T) -> Option<T> {

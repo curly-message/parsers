@@ -13,7 +13,8 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;
 
 use curly_message_parser::{
-    Context, MAX_SERIALIZED_LENGTH, ModifierError, ModifierInput, Object, Parser, Value,
+    Category, Context, Intl, MAX_SERIALIZED_LENGTH, ModifierError, ModifierInput, Object, Parser,
+    Refusal, Request, Value,
 };
 
 struct Counting;
@@ -104,15 +105,33 @@ fn largest<T>(run: impl FnOnce() -> T) -> (usize, T) {
     (LARGEST.with(Cell::get), output)
 }
 
-// The bytes resolving a message of many placeholders allocates, with props
+// The bytes resolving a message of `count` placeholders allocates, with props
 // holding, under `name`, a string of `size` bytes no placeholder reads.
-fn props_bytes(parser: &Parser, placeholder: &str, name: &str, size: usize) -> (usize, String) {
-    let message = placeholder.repeat(100);
+fn props_bytes(
+    parser: &Parser,
+    placeholder: &str,
+    count: usize,
+    name: &str,
+    size: usize,
+) -> (usize, String) {
+    let message = placeholder.repeat(count);
     let payload = Object::new().with("a", 1);
     let props = Object::new().with(name, Object::new().with("unread", "x".repeat(size)));
     let context = Context::new().payload(&payload).props(&props).locale("en");
 
     bytes(|| parser.resolve(message.as_str(), &context))
+}
+
+struct Fixed;
+
+impl Intl for Fixed {
+    fn format(&self, _: &str, _: &Request) -> Result<String, Refusal> {
+        Ok("n".to_owned())
+    }
+
+    fn select(&self, _: &str, _: &Request) -> Result<Category, Refusal> {
+        Ok(Category::Other)
+    }
 }
 
 #[test]
@@ -143,11 +162,29 @@ fn a_modifier_reading_props_costs_nothing_per_byte_of_a_string_they_hold() {
             },
         )
         .build();
-    let (small, output) = props_bytes(&parser, "{{a:peek}}", "peek", 10);
-    let (large, _) = props_bytes(&parser, "{{a:peek}}", "peek", 100_000);
+    let (small, output) = props_bytes(&parser, "{{a:peek}}", 100, "peek", 10);
+    let (large, _) = props_bytes(&parser, "{{a:peek}}", 100, "peek", 100_000);
 
     assert_eq!(output, "1".repeat(100));
     assert_eq!(large, small);
+}
+
+// A formatting modifier hands the host its props composed into one request,
+// which a resolution builds once and reuses for each placeholder it serves:
+// what a string the props hold costs is paid once, never per placeholder.
+#[test]
+fn a_formatting_modifier_costs_nothing_per_placeholder_for_a_string_its_props_hold() {
+    let parser = Parser::builder().intl(Fixed).build();
+    let per_placeholder = |size| {
+        let (fewer, output) = props_bytes(&parser, "{{a:number}}", 100, "number", size);
+        let (more, _) = props_bytes(&parser, "{{a:number}}", 200, "number", size);
+
+        assert_eq!(output, "n".repeat(100));
+
+        more - fewer
+    };
+
+    assert_eq!(per_placeholder(100_000), per_placeholder(10));
 }
 
 // What a hundred more of a message's units allocate, where the payload and
@@ -171,6 +208,60 @@ fn growth(parser: &Parser, unit: &str, inputs: impl Fn(usize) -> (Object, Object
 
 fn unread(size: usize) -> Object {
     Object::new().with("unread", "x".repeat(size))
+}
+
+// Placeholders that take turns, one formatting modifier after another, are
+// each configured from the layers as they lie, never from a copy of them.
+#[test]
+fn formatting_modifiers_taking_turns_cost_nothing_per_byte_of_a_string_their_props_hold() {
+    let parser = Parser::builder().intl(Fixed).build();
+    let payload = || Object::new().with("a", 1);
+
+    for (unit, other) in [
+        ("{{a:number}}{{a:date}}", "date"),
+        ("{{a:number}}{{a:plural; other:x}}", "plural"),
+    ] {
+        let [small, large] = growth(&parser, unit, |size| {
+            let props = Object::new()
+                .with("number", unread(size))
+                .with(other, unread(size));
+
+            (payload(), props)
+        });
+
+        assert_eq!(large, small, "{unit}");
+    }
+}
+
+// A wrapper's props are a layer of their own over the caller's: placeholders
+// of different wrappers, or of one wrapper holding the string, cost the same
+// whatever the string's size.
+#[test]
+fn wrapped_values_cost_nothing_per_byte_of_a_string_the_props_hold() {
+    let parser = Parser::builder().intl(Fixed).build();
+    let wrapper = |value, props: Object| {
+        Object::new()
+            .with("value", value)
+            .with("props", Object::new().with("number", props))
+    };
+    let [small, large] = growth(&parser, "{{a:number}}{{b:number}}", |size| {
+        let payload = Object::new()
+            .with("a", wrapper(1, Object::new().with("x", 1)))
+            .with("b", wrapper(2, Object::new().with("y", 2)));
+
+        (payload, Object::new().with("number", unread(size)))
+    });
+
+    assert_eq!(large, small, "two wrappers");
+
+    let [small, large] = growth(&parser, "{{w:number}}{{w:plural; other:x}}", |size| {
+        (
+            Object::new().with("w", wrapper(1, unread(size))),
+            Object::new(),
+        )
+    });
+
+    assert_eq!(large, small, "a wrapper holding the string");
 }
 
 // A host's modifier reads its props where they lie in every layer that holds

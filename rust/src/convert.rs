@@ -123,7 +123,7 @@ impl Record {
 // nothing, and so does one writing more than a string holds in V8: past
 // `MAX_SERIALIZED_LENGTH` the writer refuses, as a serialization does, and a
 // `Display` that goes on writing after a refusal still describes nothing.
-fn display(host: &(dyn fmt::Display + Send + Sync)) -> Option<String> {
+pub(crate) fn display(host: &(dyn fmt::Display + Send + Sync)) -> Option<String> {
     host_call(|| {
         let mut text = Written::new();
         let written = write!(text, "{host}");
