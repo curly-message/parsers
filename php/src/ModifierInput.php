@@ -29,7 +29,13 @@ final class ModifierInput
     /**
      * The fallback chain (SPEC.md section 10), walked on the first call and
      * not before: a modifier that never asks leaves it unread, so a link
-     * nobody consulted is never reported as missing.
+     * nobody consulted is never reported as missing. Every call after that
+     * walk finished answers its text. Once the input's resolution returned,
+     * a call answers the text a call during the resolution walked, and the
+     * empty string where none finished one: nothing is walked, reported or
+     * run then (SPEC.md section 11.3).
+     *
+     * @throws ReentryLimit where, while the input's resolution is in progress, a walk of the chain began and has not finished, whether it is in progress or a fiber was let go in the middle of it
      */
     public function default(): string
     {

@@ -40,7 +40,9 @@ final class Parser
     /**
      * Resolutions in progress on one thread of execution, past which
      * `resolve` throws `ReentryLimit`. A fiber is a thread of execution of
-     * its own.
+     * its own. An option or a fallback chain host code asks for is part of
+     * the walk of its resolution and takes no place: each renders at most
+     * once, so what such reads nest is bounded by the message.
      */
     public const MAX_REENTRY = 32;
 
@@ -58,11 +60,13 @@ final class Parser
     public const MAX_IN_PROGRESS = 512;
 
     /**
+     * @param array<array-key, mixed>|\stdClass $customModifiers the modifiers the host defines, by name, each a `\Closure` or an object with `__invoke`; an entry of any other kind registers nothing and shadows nothing
      * @param array<array-key, mixed>|\stdClass $modifierDefaults the props each modifier is configured with, by its name
      * @param (\Closure(Report): mixed)|null $onReport called with each report, in walk order
      * @param bool $recognizeWrappers whether an entry holding only `value`, `default` and `props` configures its value (section 4.1)
      */
     public function __construct(
+        private readonly array|\stdClass $customModifiers = [],
         private readonly array|\stdClass $modifierDefaults = [],
         private readonly ?\Closure $onReport = null,
         private readonly bool $recognizeWrappers = true,
@@ -128,6 +132,7 @@ final class Parser
                 $props,
                 is_string($locale) ? $locale : null,
                 $id === Undefined::Value ? null : $id,
+                $this->customModifiers,
                 $this->modifierDefaults,
                 $this->onReport,
                 $this->recognizeWrappers,

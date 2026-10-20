@@ -15,8 +15,11 @@ namespace CurlyMessage;
  * refused, so a recursion that begins each level in a fiber of its own is
  * the host's to bound; the count of the process adds up the parts of one
  * that stay on one stack past their first level, and what fibers left
- * suspended in such resolutions hold. It is thrown before anything is read,
- * and the placeholder that called the host code contains it; a `resolve` no
- * placeholder called fails, and nothing else.
+ * suspended in such resolutions hold. An option's `value()` or an input's
+ * `default()` throws this too where, while its resolution is in progress, a
+ * rendering of the same text began and none finished, on any thread of
+ * execution. It is thrown before anything is read, and the placeholder that
+ * called the host code contains it; a `resolve` no placeholder called fails,
+ * and nothing else.
  */
 final class ReentryLimit extends \Error {}
