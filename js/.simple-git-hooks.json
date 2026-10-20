@@ -1,3 +1,0 @@
-{
-  "pre-commit": "cd js && npm run lint"
-}
