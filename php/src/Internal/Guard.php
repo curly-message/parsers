@@ -27,6 +27,17 @@ use CurlyMessage\Parser;
  * past their first level, and what fibers left suspended in such
  * resolutions hold.
  *
+ * A text host code reads from outside the call it was handed to is rendered
+ * as a resolution begun there is, a walk of message text beneath whatever
+ * walk reached the read, so it takes the same places while it renders. To
+ * tell such a read, each thread of execution knows the host modifier being
+ * asked on it: the one whose call is the innermost the parser made into
+ * host code there and has not returned from, which is none beneath a text
+ * host code asked for, until a host modifier is called there, and while a
+ * modifier the format defines runs. A resolution host
+ * code began leaves it asked, as SPEC.md section 13 keeps a modifier
+ * current through what a resolution asked for beneath its call runs.
+ *
  * @internal
  */
 final class Guard
@@ -37,6 +48,39 @@ final class Guard
 
     /** @var \WeakMap<object, int>|null */
     private static ?\WeakMap $fibers = null;
+
+    private static ?Asked $asked = null;
+
+    /** @var \WeakMap<object, Asked>|null */
+    private static ?\WeakMap $askeds = null;
+
+    /**
+     * Makes `$call` the host modifier being asked on this thread of
+     * execution, null being none, and answers the one it stands in front
+     * of, which the caller puts back the same way.
+     */
+    public static function asks(?Asked $call): ?Asked
+    {
+        $fiber = \Fiber::getCurrent();
+
+        if ($fiber === null) {
+            $outer = self::$asked;
+            self::$asked = $call;
+
+            return $outer;
+        }
+
+        $askeds = self::$askeds ??= new \WeakMap();
+        $outer = $askeds[$fiber] ?? null;
+
+        if ($call === null) {
+            unset($askeds[$fiber]);
+        } else {
+            $askeds[$fiber] = $call;
+        }
+
+        return $outer;
+    }
 
     /**
      * Takes a place on this thread of execution, and one in the process too

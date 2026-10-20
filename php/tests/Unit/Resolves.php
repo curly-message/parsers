@@ -13,13 +13,17 @@ trait Resolves
     /** @var list<Report> */
     private array $reports = [];
 
-    private function parser(bool $recognizeWrappers = true): Parser
+    /**
+     * @param array<array-key, mixed>|\stdClass $customModifiers
+     * @param array<array-key, mixed>|\stdClass $modifierDefaults
+     */
+    private function parser(bool $recognizeWrappers = true, array|\stdClass $customModifiers = [], array|\stdClass $modifierDefaults = []): Parser
     {
         $this->reports = [];
 
-        return new Parser(onReport: function (Report $report): void {
+        return new Parser($customModifiers, $modifierDefaults, function (Report $report): void {
             $this->reports[] = $report;
-        }, recognizeWrappers: $recognizeWrappers);
+        }, $recognizeWrappers);
     }
 
     private function resolve(mixed $message, mixed $payload = null, mixed $id = null): string
