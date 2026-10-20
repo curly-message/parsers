@@ -1,0 +1,3 @@
+# The cases of the vendored set the parser is known to fail, one id per
+# line. A case listed here still runs and is still compared exactly; it
+# leaves this list when the set that corrects it is vendored.
