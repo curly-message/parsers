@@ -1,0 +1,1594 @@
+{
+  "node": "22.22.0",
+  "icu": "77.1",
+  "cldr": "47.0",
+  "answers": [
+    {
+      "name": "fallback-intl/number-zero-is-present",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2
+      },
+      "input": 0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "fallback-intl/currency-zero-is-present",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD"
+      },
+      "input": 0,
+      "answer": {
+        "text": "$0.00"
+      }
+    },
+    {
+      "name": "intl/number-formats",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5678,
+      "answer": {
+        "text": "1,234.57"
+      }
+    },
+    {
+      "name": "intl/number-locale-is-the-callers",
+      "locale": "cs",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1\u00a0234,5"
+      }
+    },
+    {
+      "name": "intl/date-timestamp",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/2024"
+      }
+    },
+    {
+      "name": "intl/date-locale-is-the-callers",
+      "locale": "de",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "5. M\u00e4rz 2024"
+      }
+    },
+    {
+      "name": "intl/ago-negative-is-past",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -20,
+        "minute"
+      ],
+      "answer": {
+        "text": "20 minutes ago"
+      }
+    },
+    {
+      "name": "intl/ago-positive-is-future",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        20,
+        "minute"
+      ],
+      "answer": {
+        "text": "in 20 minutes"
+      }
+    },
+    {
+      "name": "intl/ago-locale-is-the-callers",
+      "locale": "cs",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -20,
+        "minute"
+      ],
+      "answer": {
+        "text": "p\u0159ed 20 minutami"
+      }
+    },
+    {
+      "name": "intl/currency-ratio-defaults-to-one",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD"
+      },
+      "input": 2,
+      "answer": {
+        "text": "$2.00"
+      }
+    },
+    {
+      "name": "intl/currency-ratio",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD"
+      },
+      "input": 200,
+      "answer": {
+        "text": "$200.00"
+      }
+    },
+    {
+      "name": "intl/currency-locale-is-the-callers",
+      "locale": "de",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "EUR"
+      },
+      "input": 200,
+      "answer": {
+        "text": "200,00\u00a0\u20ac"
+      }
+    },
+    {
+      "name": "intl/number-surrounding-whitespace",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2
+      },
+      "input": 12,
+      "answer": {
+        "text": "12"
+      }
+    },
+    {
+      "name": "intl/number-exponent",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2
+      },
+      "input": 1000,
+      "answer": {
+        "text": "1,000"
+      }
+    },
+    {
+      "name": "intl/date-digits-are-a-timestamp",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 2024,
+      "answer": {
+        "text": "1/1/1970"
+      }
+    },
+    {
+      "name": "intl/date-two-digits-are-a-timestamp",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 99,
+      "answer": {
+        "text": "1/1/1970"
+      }
+    },
+    {
+      "name": "intl/date-signed-number-is-a-timestamp",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1000,
+      "answer": {
+        "text": "1/1/1970"
+      }
+    },
+    {
+      "name": "intl/layers-worked-example",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 1,
+        "useGrouping": true
+      },
+      "input": 1234.5678,
+      "answer": {
+        "text": "1,234.6"
+      }
+    },
+    {
+      "name": "intl/defaults-layer",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 4
+      },
+      "input": 1234.5678,
+      "answer": {
+        "text": "1,234.5678"
+      }
+    },
+    {
+      "name": "intl/props-over-defaults",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 3
+      },
+      "input": 1234.5678,
+      "answer": {
+        "text": "1,234.568"
+      }
+    },
+    {
+      "name": "intl/wrapper-over-props",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 1
+      },
+      "input": 1234.5678,
+      "answer": {
+        "text": "1,234.6"
+      }
+    },
+    {
+      "name": "intl/layer-keeps-unnamed-property",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2,
+        "useGrouping": false
+      },
+      "input": 1234.5678,
+      "answer": {
+        "text": "1234.57"
+      }
+    },
+    {
+      "name": "intl/null-property-is-named",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": null
+      },
+      "input": 1.23456,
+      "answer": {
+        "text": "1"
+      }
+    },
+    {
+      "name": "intl/date-layers-compose",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "medium",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 10:00 AM"
+      }
+    },
+    {
+      "name": "intl/ago-layers-compose",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto",
+        "style": "narrow"
+      },
+      "input": [
+        -2,
+        "day"
+      ],
+      "answer": {
+        "text": "2d ago"
+      }
+    },
+    {
+      "name": "intl/currency-layers-compose",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "currencyDisplay": "code"
+      },
+      "input": 10,
+      "answer": {
+        "text": "USD\u00a010.00"
+      }
+    },
+    {
+      "name": "intl/minimum-widens-default-maximum",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 4,
+        "maximumFractionDigits": 4
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "1.5000"
+      }
+    },
+    {
+      "name": "intl/widening-runs-after-composition",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 6,
+        "maximumFractionDigits": 6
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "1.500000"
+      }
+    },
+    {
+      "name": "intl/minimum-under-default-keeps-maximum",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 1,
+        "maximumFractionDigits": 2
+      },
+      "input": 1.23456,
+      "answer": {
+        "text": "1.23"
+      }
+    },
+    {
+      "name": "intl/widens-to-minimum-exactly",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 3,
+        "maximumFractionDigits": 3
+      },
+      "input": 1.23456789,
+      "answer": {
+        "text": "1.235"
+      }
+    },
+    {
+      "name": "intl/named-maximum-decides",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 3,
+        "maximumFractionDigits": 5
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "1.500"
+      }
+    },
+    {
+      "name": "intl/currency-style-over-defaults",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD"
+      },
+      "input": 0.5,
+      "answer": {
+        "text": "$0.50"
+      }
+    },
+    {
+      "name": "intl/currency-code-from-wrapper",
+      "locale": "cs",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "CZK"
+      },
+      "input": 10,
+      "answer": {
+        "text": "10,00\u00a0K\u010d"
+      }
+    },
+    {
+      "name": "intl/currency-code-from-props-over-defaults",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "CZK"
+      },
+      "input": 10,
+      "answer": {
+        "text": "CZK\u00a010.00"
+      }
+    },
+    {
+      "name": "intl/option-is-not-a-maximum",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2
+      },
+      "input": 1.23456,
+      "answer": {
+        "text": "1.23"
+      }
+    },
+    {
+      "name": "intl/option-is-not-a-format",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -1,
+        "week"
+      ],
+      "answer": {
+        "text": "last week"
+      }
+    },
+    {
+      "name": "intl/option-is-not-a-currency",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "EUR"
+      },
+      "input": 2,
+      "answer": {
+        "text": "\u20ac2.00"
+      }
+    },
+    {
+      "name": "intl/ago-ladder-second",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -2,
+        "second"
+      ],
+      "answer": {
+        "text": "2 seconds ago"
+      }
+    },
+    {
+      "name": "intl/ago-ladder-minute",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -2,
+        "minute"
+      ],
+      "answer": {
+        "text": "2 minutes ago"
+      }
+    },
+    {
+      "name": "intl/ago-ladder-hour",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -2,
+        "hour"
+      ],
+      "answer": {
+        "text": "2 hours ago"
+      }
+    },
+    {
+      "name": "intl/ago-ladder-day",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -2,
+        "day"
+      ],
+      "answer": {
+        "text": "2 days ago"
+      }
+    },
+    {
+      "name": "intl/ago-ladder-week",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -2,
+        "week"
+      ],
+      "answer": {
+        "text": "2 weeks ago"
+      }
+    },
+    {
+      "name": "intl/ago-ladder-month",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -2,
+        "month"
+      ],
+      "answer": {
+        "text": "2 months ago"
+      }
+    },
+    {
+      "name": "intl/ago-ladder-year",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -2,
+        "year"
+      ],
+      "answer": {
+        "text": "2 years ago"
+      }
+    },
+    {
+      "name": "intl/ago-rounds-at-every-step-week",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "week"
+      ],
+      "answer": {
+        "text": "next week"
+      }
+    },
+    {
+      "name": "intl/ago-rounds-at-every-step-month",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "month"
+      ],
+      "answer": {
+        "text": "next month"
+      }
+    },
+    {
+      "name": "intl/ago-half-step-minute",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "minute"
+      ],
+      "answer": {
+        "text": "in 1 minute"
+      }
+    },
+    {
+      "name": "intl/ago-half-step-hour",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "hour"
+      ],
+      "answer": {
+        "text": "in 1 hour"
+      }
+    },
+    {
+      "name": "intl/ago-half-step-day",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "day"
+      ],
+      "answer": {
+        "text": "tomorrow"
+      }
+    },
+    {
+      "name": "intl/ago-half-step-year",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "year"
+      ],
+      "answer": {
+        "text": "next year"
+      }
+    },
+    {
+      "name": "intl/ago-under-half-step-not-taken",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        29,
+        "second"
+      ],
+      "answer": {
+        "text": "in 29 seconds"
+      }
+    },
+    {
+      "name": "intl/ago-under-half-second-is-zero",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        0,
+        "second"
+      ],
+      "answer": {
+        "text": "now"
+      }
+    },
+    {
+      "name": "intl/ago-top-rung-rounds",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        2,
+        "year"
+      ],
+      "answer": {
+        "text": "in 2 years"
+      }
+    },
+    {
+      "name": "intl/ago-runs-out-at-year",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -30,
+        "year"
+      ],
+      "answer": {
+        "text": "30 years ago"
+      }
+    },
+    {
+      "name": "intl/ago-named-unit-stops",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -48,
+        "hour"
+      ],
+      "answer": {
+        "text": "48 hours ago"
+      }
+    },
+    {
+      "name": "intl/ago-named-unit-zero-count",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        0,
+        "day"
+      ],
+      "answer": {
+        "text": "today"
+      }
+    },
+    {
+      "name": "intl/ago-named-unit-large-count",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        69120000,
+        "second"
+      ],
+      "answer": {
+        "text": "in 69,120,000 seconds"
+      }
+    },
+    {
+      "name": "intl/ago-named-unit-climbs-past-automatic-stop",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        0,
+        "month"
+      ],
+      "answer": {
+        "text": "this month"
+      }
+    },
+    {
+      "name": "intl/ago-named-unit-same-rounding",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        4,
+        "day"
+      ],
+      "answer": {
+        "text": "in 4 days"
+      }
+    },
+    {
+      "name": "intl/ago-named-unit-plural",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -7,
+        "day"
+      ],
+      "answer": {
+        "text": "7 days ago"
+      }
+    },
+    {
+      "name": "intl/ago-numeric-auto-by-default",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -1,
+        "day"
+      ],
+      "answer": {
+        "text": "yesterday"
+      }
+    },
+    {
+      "name": "intl/ago-numeric-always-from-props",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "always"
+      },
+      "input": [
+        -1,
+        "day"
+      ],
+      "answer": {
+        "text": "1 day ago"
+      }
+    },
+    {
+      "name": "intl/ago-half-hour-ago",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -1,
+        "hour"
+      ],
+      "answer": {
+        "text": "1 hour ago"
+      }
+    },
+    {
+      "name": "intl/ago-symmetry-future",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        2,
+        "hour"
+      ],
+      "answer": {
+        "text": "in 2 hours"
+      }
+    },
+    {
+      "name": "intl/ago-half-second-future",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "second"
+      ],
+      "answer": {
+        "text": "in 1 second"
+      }
+    },
+    {
+      "name": "intl/ago-half-second-past",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -1,
+        "second"
+      ],
+      "answer": {
+        "text": "1 second ago"
+      }
+    },
+    {
+      "name": "plural/ru-21-one",
+      "locale": "ru",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 21,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/ru-22-few",
+      "locale": "ru",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 22,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/ru-11-many",
+      "locale": "ru",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 11,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/ru-25-many",
+      "locale": "ru",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 25,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/pl-122-few",
+      "locale": "pl",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 122,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/pl-112-many",
+      "locale": "pl",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 112,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/ar-0-zero",
+      "locale": "ar",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 0,
+      "answer": {
+        "category": "zero"
+      }
+    },
+    {
+      "name": "plural/ar-2-two",
+      "locale": "ar",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 2,
+      "answer": {
+        "category": "two"
+      }
+    },
+    {
+      "name": "plural/ar-103-few",
+      "locale": "ar",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 103,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/ar-11-many",
+      "locale": "ar",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 11,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/ar-100-other",
+      "locale": "ar",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 100,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/cs-2-few",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 2,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/cs-5-other",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 5,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/cs-fraction-many",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 1.5,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/lv-10-zero",
+      "locale": "lv",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 10,
+      "answer": {
+        "category": "zero"
+      }
+    },
+    {
+      "name": "plural/lv-21-one",
+      "locale": "lv",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 21,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/fr-0-one",
+      "locale": "fr",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 0,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/en-0-other",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 0,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/number-not-as-shown",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 1.999,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/key-neither-number-nor-category",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 1000,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/first-category-option-wins",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/other-is-not-the-inline-default",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 5,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/digits-from-number-props",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "minimumFractionDigits": 1,
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/digits-czech-one-point-zero",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "minimumFractionDigits": 1,
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/own-props-override-number",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 3,
+        "type": "cardinal"
+      },
+      "input": 1.999,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/own-props-compose-per-property",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "minimumFractionDigits": 1,
+        "maximumFractionDigits": 3,
+        "type": "cardinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/own-minimum-widens",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "minimumFractionDigits": 3,
+        "maximumFractionDigits": 3,
+        "type": "cardinal"
+      },
+      "input": 2,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/number-digits-only",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "maximumFractionDigits": 1,
+        "type": "cardinal"
+      },
+      "input": 1.04,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/significant-digits",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "minimumSignificantDigits": 2,
+        "maximumFractionDigits": 2,
+        "type": "cardinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/type-pinned",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "cardinal",
+        "maximumFractionDigits": 2
+      },
+      "input": 2,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-1",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-2",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 2,
+      "answer": {
+        "category": "two"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-3",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 3,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-4",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 4,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-11",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 11,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-12",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 12,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-13",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 13,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-21",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 21,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-22",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 22,
+      "answer": {
+        "category": "two"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-23",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 23,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/ordinal-en-111",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 111,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-sv-2",
+      "locale": "sv",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 2,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/ordinal-sv-12",
+      "locale": "sv",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 12,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-sv-22",
+      "locale": "sv",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 22,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/ordinal-it-8",
+      "locale": "it",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 8,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/ordinal-it-800",
+      "locale": "it",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 800,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/ordinal-it-9",
+      "locale": "it",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 9,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-cy-7",
+      "locale": "cy",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 7,
+      "answer": {
+        "category": "zero"
+      }
+    },
+    {
+      "name": "plural/ordinal-cy-3",
+      "locale": "cy",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 3,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural/ordinal-cy-5",
+      "locale": "cy",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 5,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural/ordinal-cs-other",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "plural/ordinal-negative",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": -1,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural/ordinal-own-props-alone",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal",
+        "minimumIntegerDigits": 2
+      },
+      "input": 22,
+      "answer": {
+        "category": "two"
+      }
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "format": "curly-message-3",
+  "level": "core",
+  "section": "13",
+  "cases": [
+    { "id": "mini/output-at-limit", "description": "At the output limit.", "generate": "output-at-limit" },
+    { "id": "mini/output-over-limit", "description": "Past the output limit.", "generate": "output-over-limit" },
+    { "id": "mini/output-over-limit-continues", "description": "Past the output limit, and on.", "generate": "output-over-limit-continues" },
+    { "id": "mini/read-at-limit", "description": "At the read limit.", "generate": "read-at-limit" },
+    { "id": "mini/read-over-limit", "description": "Past the read limit.", "generate": "read-over-limit" },
+    { "id": "mini/conversion-over-limit", "description": "Past the conversion limit.", "generate": "conversion-over-limit" },
+    { "id": "mini/nesting-at-limit", "description": "At the nesting limit.", "generate": "nesting-at-limit" },
+    { "id": "mini/nesting-over-limit", "description": "Past the nesting limit.", "generate": "nesting-over-limit" }
+  ]
+}

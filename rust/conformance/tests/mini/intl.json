@@ -1,0 +1,53 @@
+{
+  "format": "curly-message-3",
+  "level": "intl",
+  "section": "11.2",
+  "cases": [
+    {
+      "id": "mini/number",
+      "description": "A number is formatted as the request states.",
+      "message": "{{n:number; maximumFractionDigits:2}}",
+      "payload": { "n": 1234.5678 },
+      "locale": "en",
+      "expected": {
+        "format": { "api": "NumberFormat", "options": { "maximumFractionDigits": 2 }, "input": 1234.5678 },
+        "reports": []
+      }
+    },
+    {
+      "id": "mini/currency",
+      "description": "A currency amount is formatted as the request states.",
+      "message": "{{n:currency; currency:USD; maximumFractionDigits:0}}",
+      "payload": { "n": 2 },
+      "locale": "en",
+      "expected": {
+        "format": {
+          "api": "NumberFormat",
+          "options": { "style": "currency", "currency": "USD", "maximumFractionDigits": 0 },
+          "input": 2
+        },
+        "reports": []
+      }
+    },
+    {
+      "id": "mini/plural",
+      "description": "A count selects the option of its category.",
+      "section": "11.5",
+      "message": "{{n:plural; one:# file; other:# files}}",
+      "payload": { "n": 1 },
+      "locale": "en",
+      "expected": {
+        "format": { "api": "PluralRules", "input": 1 },
+        "categories": {
+          "zero": "# files",
+          "one": "# file",
+          "two": "# files",
+          "few": "# files",
+          "many": "# files",
+          "other": "# files"
+        },
+        "reports": []
+      }
+    }
+  ]
+}
