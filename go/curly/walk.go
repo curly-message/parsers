@@ -1,31 +1,46 @@
 package curly
 
-import "reflect"
+import (
+	"reflect"
+	"sync"
+)
 
 // walk is the state of one resolution: the message, its scanner, what the
 // payload is read through, and the budgets the resolution spends (section
 // 13). Nothing in it outlives the call, so a nested resolution started from
 // inside one owns budgets, a nesting count and a record of its own.
+//
+// mu is held while parser code runs and released around every call into
+// host code, so a modifier that reads its options from goroutines of its
+// own serializes them on the parser's state and never deadlocks on it.
 type walk struct {
+	mu         sync.Mutex
 	p          *Parser
 	src        string
 	sc         *scanner
 	payload    map[string]any
 	payloadPtr uintptr
+	props      map[string]any
+	locale     *string
 	id         string
 	output     int
 	read       int
 	record     map[recordKey]recorded
+	settled    *sync.Cond
 }
 
-// host runs code the parser does not own and reports whether it returned:
-// a panic in it is contained here, so it resolves the placeholder that ran
-// it rather than escaping Resolve.
+// host runs code the parser does not own, without the walk's lock, and
+// reports whether it returned: a panic in it is contained here, so it
+// resolves the placeholder that ran it rather than escaping Resolve.
 func (w *walk) host(f func()) (completed bool) {
+	w.mu.Unlock()
+
 	defer func() {
 		if !completed {
 			_ = recover()
 		}
+
+		w.mu.Lock()
 	}()
 
 	f()
@@ -93,9 +108,59 @@ type slot struct {
 	value    string
 	has      bool
 	options  []string
-	rendered []bool
+	rendered []settling
 	fallback string
-	fell     bool
+	fell     settling
+}
+
+// settling is how far an option value or a fallback chain is produced.
+type settling uint8
+
+const (
+	unsettled settling = iota
+	producing
+	produced
+)
+
+// claim reports whether the caller is the one to produce what state
+// guards. A placeholder is reached at most once (section 5), so a reader
+// arriving from another goroutine while one produces it, which happens while
+// the producer has the lock released around host code, waits for that one
+// rather than producing it, and its placeholders' reports, a second time.
+func (w *walk) claim(state *settling) bool {
+	for *state == producing {
+		w.wait()
+	}
+
+	if *state == produced {
+		return false
+	}
+
+	*state = producing
+
+	return true
+}
+
+// settle marks what state guards produced, and wakes whoever waits on it.
+func (w *walk) settle(state *settling) {
+	*state = produced
+	w.wake()
+}
+
+// wait holds the caller until something another goroutine produces is
+// settled.
+func (w *walk) wait() {
+	if w.settled == nil {
+		w.settled = sync.NewCond(&w.mu)
+	}
+
+	w.settled.Wait()
+}
+
+func (w *walk) wake() {
+	if w.settled != nil {
+		w.settled.Broadcast()
+	}
 }
 
 // begin is what every placeholder does before it can be refused: parse,
@@ -177,14 +242,15 @@ func (s *slot) links() (string, bool) {
 // chain is the placeholder's fallback chain, walked on the first reader's
 // call.
 func (s *slot) chain() string {
-	if !s.fell {
+	if s.w.claim(&s.fell) {
 		text, ok := s.links()
 
 		if !ok && s.d.hasDefault {
 			text = s.w.render(s.d.inline[0], s.d.inline[1], s.depth+1)
 		}
 
-		s.fallback, s.fell = text, true
+		s.fallback = text
+		s.w.settle(&s.fell)
 	}
 
 	return s.fallback
@@ -194,12 +260,13 @@ func (s *slot) chain() string {
 func (s *slot) option(i int) string {
 	if s.rendered == nil {
 		s.options = make([]string, len(s.d.options))
-		s.rendered = make([]bool, len(s.d.options))
+		s.rendered = make([]settling, len(s.d.options))
 	}
 
-	if !s.rendered[i] {
+	if s.w.claim(&s.rendered[i]) {
 		span := s.d.options[i].value
-		s.options[i], s.rendered[i] = s.w.render(span[0], span[1], s.depth+1), true
+		s.options[i] = s.w.render(span[0], span[1], s.depth+1)
+		s.w.settle(&s.rendered[i])
 	}
 
 	return s.options[i]
@@ -218,7 +285,7 @@ func (w *walk) placeholder(open, close, depth int) string {
 
 	s := w.begin(open, close, depth)
 	name := s.d.modifier
-	run, selection, known := builtin(name)
+	custom, run, selection, known := w.p.lookup(name)
 
 	if name != "" && !known {
 		w.report(UnknownModifier, s.spelling)
@@ -244,7 +311,12 @@ func (w *walk) placeholder(open, close, depth int) string {
 			return s.value
 		}
 
-		run, _, _ = builtin("eq")
+		name = "eq"
+		custom, run, _, _ = w.p.lookup(name)
+	}
+
+	if custom != nil {
+		return w.call(&s, name, custom)
 	}
 
 	text, code := run(&s)
@@ -257,6 +329,63 @@ func (w *walk) placeholder(open, close, depth int) string {
 		if code == MissingLocale {
 			return ""
 		}
+
+		return s.chain()
+	}
+
+	return text
+}
+
+// lookup is the modifier answering to name: the host's where it registered
+// one, the format's otherwise. Only the format's own selections are
+// selections; a host modifier in a selection's place is asked like any.
+func (p *Parser) lookup(name string) (custom Modifier, run func(*slot) (string, Code), selection, known bool) {
+	if m, ok := p.custom[name]; ok {
+		return m, nil, false, true
+	}
+
+	run, selection, known = builtin(name)
+
+	return nil, run, selection, known
+}
+
+// call asks a host modifier, contained, and converts its answer as a
+// payload value converts, charged to the output and not to the read budget:
+// it is the placeholder's result rather than text it read.
+func (w *walk) call(s *slot, name string, m Modifier) string {
+	in := Input{Value: s.value, Props: w.composed(name, s.wrapper), s: s}
+
+	if w.locale != nil {
+		locale := *w.locale
+		in.Locale = &locale
+	}
+
+	if len(s.d.options) > 0 {
+		in.Options = make([]Option, len(s.d.options))
+
+		for i, o := range s.d.options {
+			in.Options[i] = Option{Key: o.key, s: s, i: i}
+		}
+	}
+
+	var answer any
+
+	var err error
+
+	if !w.host(func() { answer, err = m(in) }) || err != nil {
+		w.report(FailedModifier, s.spelling)
+
+		return s.chain()
+	}
+
+	if answer == nil || isUndefinedValue(answer) {
+		return s.chain()
+	}
+
+	text, ok := w.convert(answer, noSite)
+
+	if !ok {
+		w.report(UnserializableValue, s.spelling)
 
 		return s.chain()
 	}

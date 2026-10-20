@@ -16,10 +16,16 @@ import (
 	"unicode/utf8"
 )
 
-func convertOne(v any) (string, bool) {
+// lockedWalk is a walk as Resolve holds it: parser code runs under its lock.
+func lockedWalk() *walk {
 	w := &walk{p: New(Options{})}
+	w.mu.Lock()
 
-	return w.convert(v, noSite)
+	return w
+}
+
+func convertOne(v any) (string, bool) {
+	return lockedWalk().convert(v, noSite)
 }
 
 // Section 3.3 of the design takes ECMAScript's Number::toString as the
@@ -128,7 +134,7 @@ func TestConversionStopsAtItsBudget(t *testing.T) {
 		"fmt":     func(c *conversion) bool { return c.print(named) },
 		"prewalk": func(c *conversion) bool { return c.json(reflect.ValueOf([]any{holder{named}})) },
 	} {
-		c := &conversion{w: &walk{p: New(Options{})}}
+		c := &conversion{w: lockedWalk()}
 
 		if run(c) || c.nodes > MaxConversionNodes+1 {
 			t.Errorf("%s: visited %d nodes", what, c.nodes)
@@ -460,7 +466,7 @@ func TestMapKeysSortWithinTheBudget(t *testing.T) {
 			refs[i] = m
 		}
 
-		c := &conversion{w: &walk{p: New(Options{})}}
+		c := &conversion{w: lockedWalk()}
 
 		if c.print(refs) {
 			t.Errorf("%d references: described", n)
@@ -490,7 +496,7 @@ func TestMapKeysAreVisitedOnce(t *testing.T) {
 
 	for _, n := range []int{(MaxConversionNodes - 1) / 4, (MaxConversionNodes-1)/4 + 1} {
 		m := keyed(n)
-		c := &conversion{w: &walk{p: New(Options{})}}
+		c := &conversion{w: lockedWalk()}
 		ok := c.print(m)
 
 		if within := 1+4*n <= MaxConversionNodes; ok != within || within && (c.nodes != 1+4*n || string(c.buf) != fmt.Sprint(m)) {

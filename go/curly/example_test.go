@@ -2,6 +2,7 @@ package curly_test
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/curly-message/parsers/go/curly"
 )
@@ -69,4 +70,41 @@ func ExampleUndefined() {
 	}))
 	// Output:
 	// {"y":1}, none, [null]
+}
+
+func ExampleOptions_customModifiers() {
+	p := curly.New(curly.Options{
+		CustomModifiers: map[string]curly.Modifier{
+			// shout writes the value upper-cased, followed by the value of
+			// the option keyed by its mark property.
+			"shout": func(in curly.Input) (any, error) {
+				for _, o := range in.Options {
+					if o.Key == in.Props["mark"] {
+						return strings.ToUpper(in.Value) + o.Value(), nil
+					}
+				}
+
+				return in.Default(), nil
+			},
+		},
+		ModifierDefaults: map[string]any{"shout": map[string]any{"mark": "bang"}},
+	})
+
+	const message = "{{name:shout; bang:!; ask:?; default:...}}"
+
+	payload := map[string]any{"name": "Alice"}
+
+	fmt.Println(p.Resolve(message, curly.Context{Payload: payload}))
+	fmt.Println(p.Resolve(message, curly.Context{
+		Payload: payload,
+		Props:   map[string]any{"shout": map[string]any{"mark": "ask"}},
+	}))
+	fmt.Println(p.Resolve(message, curly.Context{
+		Payload: payload,
+		Props:   map[string]any{"shout": map[string]any{"mark": "none"}},
+	}))
+	// Output:
+	// ALICE!
+	// ALICE?
+	// ...
 }

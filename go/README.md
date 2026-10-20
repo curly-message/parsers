@@ -28,8 +28,9 @@ placeholder it is in, and `Options.OnReport` is told about it.
 
 The parser implements the Core level of the format: substitution, the
 fallback chain, value wrappers (`Options.IgnoreWrappers` turns their
-recognition off) and the comparisons `eq`, `ne`, `lt`, `gt`, `lte` and `gte`.
-Every other modifier name is unknown.
+recognition off) and the comparisons `eq`, `ne`, `lt`, `gt`, `lte` and `gte`;
+and the Extensions level: the modifiers a host registers. Every other
+modifier name is unknown.
 
 ### Values
 
@@ -82,6 +83,68 @@ no valid UTF-8 sequence compares as itself. `lt`, `gt`, `lte` and `gte` read
 numbers with `strconv.ParseFloat` after trimming the format's whitespace:
 `Inf`, `1e3` and `1_000` are numbers, and `0x10`, blank text and `NaN` are
 not.
+
+### Host modifiers
+
+```go
+p := curly.New(curly.Options{
+	CustomModifiers: map[string]curly.Modifier{
+		"upper": func(in curly.Input) (any, error) {
+			return strings.ToUpper(in.Value), nil
+		},
+	},
+})
+
+p.Resolve("{{name:upper}}", curly.Context{
+	Payload: map[string]any{"name": "Alice"},
+}) // "ALICE"
+```
+
+`Options.CustomModifiers` registers a modifier by name; one named as a
+modifier of the format replaces it, so a host `eq` also answers a placeholder
+that selects without naming a modifier, and over a selection nothing reports
+`missing-options`. A nil entry registers nothing. A modifier is asked only
+about a value: a placeholder naming no key, or a key the payload lacks, takes
+its fallback chain without asking.
+
+A modifier receives an `Input`:
+
+- `Value`, the text the value became.
+- `Options`, in the order the placeholder writes them, duplicates kept.
+  `Option.Value()` renders an option on its first call; one never asked for
+  is never resolved and reports nothing. `Input.Default()` is the fallback
+  chain, walked on its first call.
+- `Props`, the properties written under the modifier's own name, composed
+  property by property from `Options.ModifierDefaults`, then
+  `Context.Props`, then the `props` member of the wrapper the value came in.
+  A layer's entry is read where it is a map keyed by a string type; a
+  property holding `curly.Undefined{}` names nothing, and one holding `nil`
+  names null. The map is the modifier's own, empty where no layer wrote.
+- `Locale`, `Context.Locale` as the caller supplied it: nil where it supplied
+  none, and a copy of its own otherwise.
+
+The answer becomes text as a payload value does, and spends the output but
+none of the read budget. An answer of nil or `curly.Undefined{}` is none, and
+the placeholder takes its fallback chain; so it does, reporting
+`failed-modifier`, where the modifier returns an error or panics, whose value
+is never printed, and reporting `unserializable-value` where nothing
+describes the answer.
+
+A modifier may read its options and its default from goroutines of its own,
+and after it returned. Each resolution holds a lock while parser code runs
+and releases it around every call into host code, so those reads serialize
+on the resolution and never deadlock on it, and a reader arriving while
+another renders the same option, or converts the same value, waits for that
+one: an option is rendered, and its placeholders report, once, and a value
+converts once. `OnReport` is called with the lock released, on the goroutine
+that met the defect, so calls of one resolution can overlap. A modifier may
+resolve another message, which spends budgets of its own.
+
+Neither can be contained, and both are the host's to avoid: a modifier that
+calls `runtime.Goexit` or panics on a goroutine of its own, and one that,
+through state it keeps, reads an option or default of a placeholder while
+that option or default is being rendered, or a value from inside a method of
+that value the parser called, which waits for itself forever.
 
 ### Limits and reports
 
