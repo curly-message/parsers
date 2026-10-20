@@ -1,0 +1,373 @@
+name: Python parser publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'next cuts a release candidate; patch, minor and major cut a final release'
+        required: true
+        default: next
+        type: choice
+        options:
+          - next
+          - patch
+          - minor
+          - major
+
+# The jobs of publish.yml, written out here rather than called: PyPI does not
+# accept a reusable workflow as a trusted publisher. A release runs in three
+# jobs after the tests, so that no code a dependency ships runs where the
+# release's credentials are: `version` settles what is released, `build`
+# installs and builds with no credential that can push or publish, and
+# `release` holds the App's key and the right to publish and takes the build
+# as files. Of the three, only `build` runs a dependency's code.
+jobs:
+  tests:
+    uses: ./.github/workflows/tests-python.yml
+
+  version:
+    needs: tests
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: python
+    outputs:
+      name: ${{ steps.version.outputs.name }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      section: ${{ steps.version.outputs.section }}
+      patch: ${{ steps.bump.outputs.patch }}
+      changes: ${{ steps.bump.outputs.changes }}
+
+    steps:
+      - name: Refuse anything but main
+        working-directory: .
+        run: |
+          [ "$GITHUB_REF" = refs/heads/main ] || { echo "::error::A release is cut from main only, not from $GITHUB_REF_NAME."; exit 1; }
+
+      # No credential stays in a checkout for what runs after it to read.
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # The changelog's pending section names the version it will be released
+      # as, so a version is settled in the commit that writes the section
+      # rather than in the dispatch. `patch`, `minor` and `major` cut that
+      # section as a final release and must arrive at the version it names,
+      # which over a release candidate is the bump that drops the candidate
+      # rather than the one that opened it (1.1.0rc3 reaches 1.1.0 under
+      # `patch`). `next` publishes a release candidate of that version
+      # (1.1.0rc0, then rc1) and leaves the section open, because a candidate
+      # has not released what the section names. The version is written where
+      # the project, its lock and the benchmark's manifest each state it; the
+      # runner's own Python reads and writes them with nothing installed.
+      - name: Bump the version
+        id: version
+        env:
+          RELEASE: ${{ inputs.release }}
+        run: |
+          case "$RELEASE" in
+            next) tag=next ;;
+            patch|minor|major) tag=latest ;;
+            *) echo "::error::Unknown release type '$RELEASE'; expected next, patch, minor or major."; exit 1 ;;
+          esac
+          # One spelling of the heading, read by the gate, by the version it
+          # names and by the rewrite: a widening one of them missed would pass
+          # one and not the others.
+          heading='### ([0-9]+\.[0-9]+\.[0-9]+) \(Unreleased\)'
+          sections=$(grep -cE "^$heading$" CHANGELOG.md) || sections=0
+          [ "$sections" = 1 ] || { echo "::error::CHANGELOG.md holds $sections sections headed '### <major.minor.patch> (Unreleased)'; a release reads exactly one."; exit 1; }
+          declared=$(sed -nE "s/^$heading$/\1/p" CHANGELOG.md)
+          version=$(python3 - "$RELEASE" "$declared" <<'PY'
+          import json
+          import pathlib
+          import re
+          import sys
+
+          release, declared = sys.argv[1:]
+
+
+          def fail(message):
+              print(f"::error::{message}", file=sys.stderr)
+              sys.exit(1)
+
+
+          # Each pattern finds the one place a file states the version: the
+          # value, between what comes before it and what follows.
+          PLACES = {
+              "pyproject.toml": r'^(version = )"([^"\n]*)"()$',
+              "uv.lock": r'^(\[\[package\]\]\nname = "curly-message"\nversion = )"([^"\n]*)"(\nsource = \{ editable = "\." \})$',
+          }
+
+
+          def stated(name):
+              found = re.findall(PLACES[name], pathlib.Path(name).read_text(encoding="utf-8"), re.M)
+              if len(found) != 1:
+                  fail(f"{name} states the project's version {len(found)} times, not once.")
+              return found[0][1]
+
+
+          before = stated("pyproject.toml")
+          if stated("uv.lock") != before:
+              fail(f"uv.lock locks the project at {stated('uv.lock')}, and pyproject.toml names {before}.")
+          parts = re.fullmatch(r"([0-9]+)\.([0-9]+)\.([0-9]+)(?:rc([0-9]+))?", before)
+          if not parts:
+              fail(f"pyproject.toml names {before}, which is neither X.Y.Z nor X.Y.ZrcN.")
+          major, minor, patch = (int(part) for part in parts.group(1, 2, 3))
+          candidate = parts.group(4)
+          if release == "next":
+              ongoing = candidate is not None and f"{major}.{minor}.{patch}" == declared
+              version = f"{declared}rc{int(candidate) + 1}" if ongoing else f"{declared}rc0"
+          elif candidate is not None and (
+              release == "patch"
+              or (release == "minor" and patch == 0)
+              or (release == "major" and minor == patch == 0)
+          ):
+              version = f"{major}.{minor}.{patch}"
+          elif release == "patch":
+              version = f"{major}.{minor}.{patch + 1}"
+          elif release == "minor":
+              version = f"{major}.{minor + 1}.0"
+          else:
+              version = f"{major + 1}.0.0"
+
+          for name, pattern in PLACES.items():
+              path = pathlib.Path(name)
+              text = path.read_text(encoding="utf-8")
+              path.write_text(
+                  re.sub(pattern, lambda found: f'{found[1]}"{version}"{found[3]}', text, flags=re.M),
+                  encoding="utf-8",
+              )
+          path = pathlib.Path("package.json")
+          manifest = json.loads(path.read_text(encoding="utf-8"))
+          manifest["version"] = version
+          path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          print(version)
+          PY
+          )
+          before=$(git show HEAD:python/pyproject.toml | sed -nE 's/^version = "(.*)"$/\1/p')
+          section="### $declared (Unreleased)"
+          if [ "$tag" = latest ]; then
+            [ "$version" = "$declared" ] || { echo "::error::$RELEASE over $before is $version, and CHANGELOG.md's pending section names $declared. Release what the section names, or rewrite its heading."; exit 1; }
+            sed -i -E "s/^$heading$/## \1/" CHANGELOG.md
+            section="## $version"
+          fi
+          echo "name=$(python3 -c 'import tomllib; print(tomllib.load(open("pyproject.toml", "rb"))["project"]["name"])')" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "section=$section" >> "$GITHUB_OUTPUT"
+
+      # The other jobs check out the same commit and apply the bump as this
+      # patch, held to the files it changed here.
+      - name: Record the bump
+        id: bump
+        working-directory: .
+        run: |
+          echo "patch=$(git diff --binary | base64 -w0)" >> "$GITHUB_OUTPUT"
+          echo "changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    defaults:
+      run:
+        working-directory: python
+    env:
+      UV_PYTHON: '3.14'
+    outputs:
+      digests: ${{ steps.pack.outputs.digests }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # No cache is restored: what this job builds is what is published, so
+      # nothing another run wrote reaches it.
+      - name: Setup uv
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          enable-cache: false
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      # From the root: run in a subdirectory, git apply drops every path
+      # outside it without a word.
+      - name: Apply the bump
+        working-directory: .
+        env:
+          PATCH: ${{ needs.version.outputs.patch }}
+          CHANGES: ${{ needs.version.outputs.changes }}
+        run: |
+          base64 -d <<< "$PATCH" | git apply
+          changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)
+          [ "$changes" = "$CHANGES" ] || { echo "::error::The bump changes '$changes' here and changed '$CHANGES' where it was made."; exit 1; }
+
+      # The sdist, then the wheel built from it, by the hash-pinned build
+      # backend.
+      - name: Build
+        run: uv run --no-project tasks.py build
+
+      # Each release records what its build costs, measured on the runner that
+      # builds it, on the very wheel it publishes; a row that fails stops the
+      # release here.
+      - name: Benchmark
+        run: |
+          uv run --no-project tasks.py bench-venv --no-build
+          node bench/harness.mjs > BENCH.md
+
+      # One tar file rather than the artifact's own zip, which drops each
+      # file's mode. The digests are what the release job has to find in it.
+      - name: Pack the build
+        id: pack
+        run: |
+          tar -cf "$RUNNER_TEMP/build.tar" dist BENCH.md
+          echo "digests=$(cd dist && sha256sum -- * | base64 -w0)" >> "$GITHUB_OUTPUT"
+
+      - name: Upload the build
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ runner.temp }}/build.tar
+          archive: false
+          if-no-files-found: error
+
+  release:
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    environment: release
+    concurrency: publish-python
+    permissions:
+      contents: read
+      id-token: write # PyPI trusted publishing
+    defaults:
+      run:
+        working-directory: python
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Apply the bump
+        working-directory: .
+        env:
+          PATCH: ${{ needs.version.outputs.patch }}
+          CHANGES: ${{ needs.version.outputs.changes }}
+        run: |
+          base64 -d <<< "$PATCH" | git apply
+          changes=$(git status --porcelain | cut -c4- | paste -sd ' ' -)
+          [ "$changes" = "$CHANGES" ] || { echo "::error::The bump changes '$changes' here and changed '$CHANGES' where it was made."; exit 1; }
+
+      # The build job chooses how its upload is sent, and one sent as a zip
+      # would be unpacked over the files this job keeps in its temporary
+      # directory. So it lands in a directory of its own, unpacked by nothing
+      # but the tar below.
+      - name: Download the build
+        uses: actions/download-artifact@v8
+        with:
+          name: build.tar
+          path: ${{ runner.temp }}/artifact
+          skip-decompress: true
+
+      # Only the build is taken from it, and only as files and directories, so
+      # nothing else it carries lands where git would read it.
+      - name: Take the build
+        env:
+          DIGESTS: ${{ needs.build.outputs.digests }}
+        run: |
+          mkdir "$RUNNER_TEMP/build"
+          tar -xf "$RUNNER_TEMP/artifact/build.tar" -C "$RUNNER_TEMP/build"
+          # On its own, so that a find which cannot read the build fails the step.
+          others=$(find "$RUNNER_TEMP/build" ! -type f ! -type d)
+          [ -d "$RUNNER_TEMP/build/dist" ] && [ -f "$RUNNER_TEMP/build/BENCH.md" ] && [ -z "$others" ] || { echo "::error::The build is to hold a dist directory and a BENCH.md file, and nothing but files and directories."; exit 1; }
+          cp -a "$RUNNER_TEMP/build/dist" "$RUNNER_TEMP/build/BENCH.md" .
+          git add BENCH.md
+          digests=$(cd dist && sha256sum -- * | base64 -w0)
+          [ "$digests" = "$DIGESTS" ] || { echo "::error::dist holds $(base64 -d <<< "$digests") here and held $(base64 -d <<< "$DIGESTS") where it was built."; exit 1; }
+
+      # Before anything is pushed, so that a tag never names a version PyPI
+      # would refuse. The exchange is the one the publish step makes: PyPI
+      # mints a token only where a publisher, pending or registered, names this
+      # repository, this workflow and the release environment, and it refuses a
+      # pending publisher whose project someone else registered first. On the
+      # first release, this exchange is what creates the project. The token it
+      # answers with is masked and dropped; the publish step mints its own.
+      - name: Check PyPI will take the release
+        env:
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/$NAME/$VERSION/json")
+          [ "$status" = 404 ] || { echo "::error::PyPI answers $status for $NAME $VERSION, where a version it does not hold answers 404."; exit 1; }
+          audience=$(curl -sSf https://pypi.org/_/oidc/audience | jq -r .audience)
+          identity=$(curl -sSf --get --data-urlencode "audience=$audience" -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
+          echo "::add-mask::$identity"
+          answer=$(jq -n --arg token "$identity" '{token: $token}' | curl -sS -X POST -H 'Content-Type: application/json' --data-binary @- https://pypi.org/_/oidc/mint-token)
+          token=$(jq -r '.token // empty' <<< "$answer")
+          [ -n "$token" ] || { echo "::error::PyPI mints no token for this workflow: $(jq -c '.errors // .' <<< "$answer")"; exit 1; }
+          echo "::add-mask::$token"
+
+      # The release commit, its tag and the GitHub release are the app's: its
+      # token passes the rules on main, and unlike the workflow's own token, a
+      # push made with it starts the workflows that watch the branch.
+      - name: Mint the release token
+        id: app
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.APP_CLIENT_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          permission-contents: write
+
+      # One atomic push carries the commit and the tag: either both land or
+      # neither, and --follow-tags would have left a lightweight tag behind.
+      # The token reaches git through the environment of this step alone.
+      - name: Commit, tag and push
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          APP: ${{ steps.app.outputs.app-slug }}
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          id=$(gh api "/users/$APP[bot]" --jq .id)
+          git config user.name "$APP[bot]"
+          git config user.email "$id+$APP[bot]@users.noreply.github.com"
+          git commit --all --message "chore(python): release $NAME@$VERSION"
+          git tag --annotate --message "$NAME@$VERSION" "python-v$VERSION"
+          export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
+          GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          export GIT_CONFIG_VALUE_0
+          git push --atomic origin main "python-v$VERSION"
+
+      # No token: PyPI trusts this workflow's OIDC identity (the project's
+      # trusted publisher names its filename), and the action uploads an
+      # attestation of each file. What it uploads is the build taken above.
+      # Should it fail now, the tag just pushed names a version PyPI does not
+      # hold: delete the tag before dispatching again.
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: python/dist
+
+      # The release notes are the changelog section this release names: the one
+      # just cut, or, for a release candidate, the pending one it leaves open.
+      - name: Publish the GitHub release
+        env:
+          GH_TOKEN: ${{ steps.app.outputs.token }}
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+          SECTION: ${{ needs.version.outputs.section }}
+        run: |
+          awk -v heading="$SECTION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
+          [ "$TAG" = next ] && prerelease=--prerelease || prerelease=
+          gh release create "python-v$VERSION" --verify-tag --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" $prerelease
