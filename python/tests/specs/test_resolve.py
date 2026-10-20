@@ -19,11 +19,15 @@ from curly_message import (
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
     MAX_READ_LENGTH,
+    MAX_REENTRY,
     UNDEFINED,
     Modifier,
     ModifierInput,
     Option,
+    ReentryLimitError,
     Report,
+    _modifiers,
+    _reads,
     create_parser,
     levels,
 )
@@ -258,29 +262,26 @@ def test_a_conversion_that_raises_a_base_exception_is_not_contained() -> None:
         create_parser().resolve("{{v}}", {"v": Interrupting()})
 
 
-def test_a_value_that_resolves_itself_until_the_stack_runs_out_takes_its_chain() -> None:
+def test_a_value_that_resolves_itself_takes_its_chain_at_the_reentry_bound() -> None:
     message = "A{{v; default:F}}B"
+    refused: list[ReentryLimitError] = []
 
     class Again:
         def __str__(self) -> str:
-            return "<" + parser.resolve(message, {"v": Again()}) + ">"
-
-    def deeper(frames: int) -> str:
-        return parser.resolve(message, {"v": Again()}) if frames == 0 else deeper(frames - 1)
+            try:
+                return "<" + parser.resolve(message, {"v": Again()}) + ">"
+            except ReentryLimitError as failure:
+                refused.append(failure)
+                raise
 
     reports: list[Report] = []
     parser = create_parser(on_report=reports.append)
-    # Which frame the stack runs out in depends on how deep the caller
-    # starts, so the chain is started from a few depths.
-    for frames in range(4):
-        output = deeper(frames)
-        assert (output[:2], output[-2:]) == ("A<", ">B")
-        assert "A<AFB>B" in output
-        assert "<>" not in output
-    # Where it runs out in the conversion's own frame, the report is made a
-    # frame or two from the limit, where it may be lost on any version; so
-    # whether it arrives is not held.
-    assert set(codes(reports)) <= {"unserializable-value"}
+    # The resolution asked for and those its conversions ask for are in
+    # progress together, and the one asked for past the bound is refused in the
+    # conversion that asked, whose value is then one no conversion describes.
+    held = MAX_REENTRY - 1
+    assert parser.resolve(message, {"v": Again()}) == "A<" * held + "AFB" + ">B" * held
+    assert (len(refused), codes(reports)) == (1, ["unserializable-value"])
 
 
 SWEEP = """
@@ -559,12 +560,73 @@ def test_a_handler_that_cannot_be_called_is_no_handler(handler: object) -> None:
     assert create_parser(on_report=handler).resolve("{{v:zz; default:D}}") == "D"  # type: ignore[arg-type]
 
 
-def test_this_installation_satisfies_the_core_and_extensions_levels() -> None:
+def resolve_in(message: str, payload: Any, **options: Any) -> tuple[str, list[Report]]:
+    reports: list[Report] = []
+    output = create_parser(on_report=reports.append, **options).resolve(
+        message, payload, locale="en", message_id="id"
+    )
+    return output, reports
+
+
+def test_this_installation_satisfies_the_levels_its_leg_expects(expect_intl: bool) -> None:
+    expected = {"core", "extensions", "intl"} if expect_intl else {"core", "extensions"}
+    assert levels() == frozenset(expected)
+
+
+def test_the_intl_modifiers_are_defined_exactly_where_the_supplier_is(
+    expect_intl: bool,
+) -> None:
+    output, reports = resolve_in("{{n:number}}", {"n": "5"})
+    if expect_intl:
+        assert (output, reports) == ("5", [])
+    else:
+        assert output == ""
+        assert codes(reports) == ["unknown-modifier"]
+
+
+def test_without_the_supplier_the_intl_names_are_unknown_modifiers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_modifiers, "supplier", lambda: False)
+    for name in ("number", "currency", "date", "ago", "plural", "ordinal"):
+        output, reports = resolve_in("{{n:" + name + "; one: a}}", {"n": "1"})
+        assert codes(reports) == ["unknown-modifier"], name
+        assert output == "", name
     assert levels() == frozenset({"core", "extensions"})
 
 
-def test_importing_the_package_loads_no_optional_dependency() -> None:
-    probe = "import sys, curly_message; print(sorted({'babel', 'dataclasses'} & set(sys.modules)))"
+def test_a_host_modifier_overrides_an_intl_name_either_way(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def number(config: ModifierInput) -> str:
+        return "host"
+
+    for present in (True, False):
+        monkeypatch.setattr(_modifiers, "supplier", lambda present=present: present)
+        output, reports = resolve_in(
+            "{{n:number}}", {"n": "1"}, custom_modifiers={"number": number}
+        )
+        assert (output, reports) == ("host", [])
+
+
+def test_a_supplier_that_fails_to_import_fails_each_intl_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_modifiers, "supplier", lambda: True)
+    monkeypatch.setattr(_modifiers, "_intl", lambda: None)
+    monkeypatch.setattr(_modifiers, "_LOADED", [])
+    output, reports = resolve_in("{{n:number}} {{n:plural; one: a}}", {"n": "1"})
+    assert output == " "
+    assert codes(reports) == ["failed-modifier", "failed-modifier"]
+
+
+def test_importing_the_package_loads_nothing_it_does_not_need() -> None:
+    # importlib.metadata as well: it costs more to import than the package,
+    # and only the first question about the supplier reads it.
+    probe = (
+        "import sys, curly_message; "
+        "print(sorted({'babel', 'dataclasses', 'importlib.metadata'} & set(sys.modules)))"
+    )
     loaded = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     ).stdout
@@ -812,19 +874,70 @@ def test_a_layer_lookup_that_raises_is_reported_and_names_nothing() -> None:
     props: Any = {Colliding("other"): {"b": 2}}
     assert parser.resolve("{{v:show}}|{{w}}", {"v": "x", "w": "W"}, props=props) == "a=1|W"
     assert codes(parser_reports) == ["unserializable-value"]
+    # Each placeholder that reads the layer reports it, though the lookup is
+    # made once for them all.
+    parser_reports.clear()
+    assert parser.resolve("{{v:show}}|{{v:show}}", {"v": "x"}, props=props) == "a=1|a=1"
+    assert [(report.code, report.text) for report in parser_reports] == [
+        ("unserializable-value", "{{v:show}}"),
+        ("unserializable-value", "{{v:show}}"),
+    ]
 
 
-def test_the_props_a_modifier_is_handed_are_its_own_copy() -> None:
+@pytest.mark.parametrize(
+    "write",
+    [
+        lambda props: props.__setitem__("a", "written"),
+        lambda props: props.update(new=1),
+        lambda props: props.pop("a"),
+        lambda props: props.clear(),
+        lambda props: props.maps[0].update(a="written"),
+    ],
+)
+def test_a_modifier_that_writes_to_its_props_fails_and_writes_nothing(
+    write: Any,
+) -> None:
+    # One read-only mapping answers every placeholder that names the modifier
+    # over the same layers, under a wrapper's props as beside them, so a write
+    # is refused as host code that raises is (section 11.3).
+    seen: list[Any] = []
+
     def scribble(config: ModifierInput) -> str:
-        shown = props_of(config)
-        config.props["a"] = "written"
-        config.props["new"] = 1
-        return shown
+        seen.append(config.props)
+        if len(seen) % 3 == 1:
+            write(config.props)
+        return props_of(config)
 
     props = {"scribble": {"a": 1}}
-    parser = create_parser(custom_modifiers={"scribble": scribble})
-    assert parser.resolve("{{v:scribble}} {{v:scribble}}", {"v": "x"}, props=props) == "a=1 a=1"
+    payload = {"v": "x", "w": {"value": "x", "props": {"scribble": {"b": 2}}}}
+    reports: list[Report] = []
+    parser = create_parser(custom_modifiers={"scribble": scribble}, on_report=reports.append)
+    message = "{{v:scribble; default:D}} {{v:scribble}} {{v:scribble}}"
+    assert parser.resolve(message, payload, props=props) == "D a=1 a=1"
+    assert parser.resolve(message.replace("v:", "w:"), payload, props=props) == "D a=1,b=2 a=1,b=2"
+    assert codes(reports) == ["failed-modifier"] * 2
     assert props == {"scribble": {"a": 1}}
+    assert payload["w"] == {"value": "x", "props": {"scribble": {"b": 2}}}
+    assert seen[0] is seen[1] is seen[2]
+    assert seen[3] is seen[4] is seen[5]
+    assert not isinstance(seen[0], dict)
+
+
+def test_a_modifier_that_only_reads_its_props_reads_a_mapping() -> None:
+    # Near miss: every read a mapping answers is answered, a copy is the
+    # modifier's own to write, and the format's own modifiers read the same.
+    def reading(config: ModifierInput) -> str:
+        props = config.props
+        own = dict(props)
+        own["mine"] = 1
+        listed = ",".join(f"{key}={props[key]}" for key in props)
+        return f"{len(props)}:{listed}:{'b' in props}:{props.get('z', 'none')}:{len(own)}"
+
+    payload = {"w": {"value": "x", "props": {"reading": {"b": 2, "a": 3}}}}
+    parser = create_parser(custom_modifiers={"reading": reading})
+    assert parser.resolve("{{w:reading}}", payload, props={"reading": {"a": 1}}) == (
+        "2:a=3,b=2:True:none:3"
+    )
 
 
 _LOCALE = object()
@@ -901,7 +1014,10 @@ def test_a_resolution_begun_by_a_modifier_owns_its_budgets_and_its_id() -> None:
     ]
 
 
-def test_a_chain_of_kept_options_ends_at_the_interpreter_s_limit_contained() -> None:
+def kept_options(
+    message: str, **modifiers: Modifier
+) -> tuple[str, list[tuple[str, str]], list[Option]]:
+    """Resolve over ``k``, which keeps its first option, and ``m``, which reads the last kept."""
     kept: list[Option] = []
 
     def keep(config: ModifierInput) -> str:
@@ -912,17 +1028,156 @@ def test_a_chain_of_kept_options_ends_at_the_interpreter_s_limit_contained() -> 
         return kept.pop().value if kept else "e"
 
     reports: list[Report] = []
-    parser = create_parser(custom_modifiers={"k": keep, "m": pop}, on_report=reports.append)
-    # A report is built on the exhausted stack, where it may be lost, so how
-    # many arrive is not held; the first of a process also builds the escape
-    # table there, so one is made before.
-    parser.resolve("{{x:zz}}", {"x": 1})
-    reports.clear()
-    n = 2000
-    output = parser.resolve("{{x:k; o:{{x:m}}}}" * n + "{{x:m}}", {"x": 1})
-    assert output == "k" * n
-    assert codes(reports)
-    assert set(codes(reports)) == {"failed-modifier"}
+    parser = create_parser(
+        custom_modifiers={"k": keep, "m": pop, **modifiers}, on_report=reports.append
+    )
+    output = parser.resolve(message, {"x": 1})
+    return output, [(report.code, report.text) for report in reports], kept
+
+
+def test_a_chain_of_kept_options_resolves_up_to_the_reentry_bound() -> None:
+    # Each read of a kept option renders at the depth of the placeholder that
+    # wrote it, so the nesting limit never meets the chain: each counts as a
+    # resolution in progress beside the one that was asked for.
+    n = MAX_REENTRY - 1
+    output, reports, kept = kept_options("{{x:k; o:{{x:m}}}}" * n + "{{x:m}}")
+    assert (output, reports, kept) == ("k" * n + "e", [], [])
+
+
+@pytest.mark.parametrize("n", [MAX_REENTRY, 20000])
+def test_a_kept_option_read_past_the_reentry_bound_fails_the_modifier_that_read_it(
+    n: int,
+) -> None:
+    output, reports, kept = kept_options("{{x:k; o:{{x:m}}}}" * n + "{{x:m}}")
+    assert (output, reports) == ("k" * n, [("failed-modifier", "{{x:m}}")])
+    # The read past the bound rendered nothing, so nothing below it was read.
+    assert len(kept) == n - MAX_REENTRY
+    output, reports, _ = kept_options("{{x:k; o:{{x:m; default:D}}}}" * n + "{{x:m}}")
+    assert (output, reports) == ("k" * n + "D", [("failed-modifier", "{{x:m; default:D}}")])
+
+
+def test_a_kept_default_read_past_the_reentry_bound_fails_the_modifier_that_read_it() -> None:
+    kept: list[ModifierInput] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config)
+        return "k"
+
+    def pop(config: ModifierInput) -> str:
+        return kept.pop().default if kept else "e"
+
+    def chain(n: int) -> tuple[str, list[str]]:
+        reports: list[Report] = []
+        parser = create_parser(custom_modifiers={"k": keep, "m": pop}, on_report=reports.append)
+        output = parser.resolve("{{x:k; default:{{x:m}}}}" * n + "{{x:m}}", {"x": 1})
+        kept.clear()
+        return output, codes(reports)
+
+    assert chain(MAX_REENTRY - 1) == ("k" * (MAX_REENTRY - 1) + "e", [])
+    assert chain(MAX_REENTRY) == ("k" * MAX_REENTRY, ["failed-modifier"])
+
+
+def test_kept_options_read_one_after_another_hold_no_place_between_them() -> None:
+    # The bound is on how many are in progress at once, not on how many are
+    # read: each read gives its place back as it answers.
+    n = 4 * MAX_REENTRY
+    kept: list[Option] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config.options[0])
+        return "k"
+
+    def every(config: ModifierInput) -> str:
+        return "".join(option.value for option in kept)
+
+    reports: list[Report] = []
+    parser = create_parser(custom_modifiers={"k": keep, "all": every}, on_report=reports.append)
+    output = parser.resolve("{{x:k; o:<{{x}}>}}" * n + "{{x:all}}{{x:all}}", {"x": 1})
+    assert (output, reports) == ("k" * n + "<1>" * n * 2, [])
+
+
+def test_a_modifier_reading_its_own_options_holds_no_place_at_any_depth() -> None:
+    # A modifier reading what it was handed is the walk, one level deeper,
+    # which the nesting limit bounds and the reentry bound does not count:
+    # options read to the deepest level under a chain that stands exactly at
+    # the bound resolve.
+    def own(config: ModifierInput) -> str:
+        return config.options[0].value or config.default
+
+    def nested(levels: int) -> str:
+        return "{{x:own; a:" * levels + "v" + "; default:D}}" * levels
+
+    # A kept option is written at the second level.
+    deepest = "{{x:k; o:" + nested(MAX_NESTING - 1) + "}}"
+    chain = "{{x:k; o:{{x:m}}}}" * (MAX_REENTRY - 2) + "{{x:m}}"
+    output, reports, _ = kept_options(deepest + chain, own=own)
+    assert (output, reports) == ("k" * (MAX_REENTRY - 1) + "v", [])
+    # Near miss: one level deeper is the nesting limit's to refuse, as ever.
+    too_deep = "{{x:k; o:" + nested(MAX_NESTING) + "}}"
+    output, reports, _ = kept_options(too_deep + chain, own=own)
+    assert output == "k" * (MAX_REENTRY - 1) + "D"
+    assert [code for code, _ in reports] == ["nesting-limit"]
+    # And with nothing kept, nesting alone is as deep as it ever was.
+    output, reports, _ = kept_options(nested(MAX_NESTING), own=own)
+    assert (output, reports) == ("v", [])
+
+
+def test_a_read_refused_at_the_reentry_bound_leaves_the_next_read_to_render() -> None:
+    read: list[tuple[Option, str]] = []
+    kept: list[Option] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config.options[0])
+        return "k"
+
+    def pop(config: ModifierInput) -> str:
+        if not kept:
+            return "e"
+        option = kept.pop()
+        read.append((option, option.value))
+        return read[-1][1]
+
+    def again(config: ModifierInput) -> str:
+        return read[0][0].value
+
+    reports: list[Report] = []
+    parser = create_parser(
+        custom_modifiers={"k": keep, "m": pop, "again": again}, on_report=reports.append
+    )
+    n = MAX_REENTRY
+    message = "{{x:k; o:[{{x:m}}]}}" * n + "{{x:m}}|{{x:again}}"
+    # The deepest read was refused and answered the empty string; read again
+    # where there is room, the same option renders, and what it renders finds
+    # nothing kept.
+    assert parser.resolve(message, {"x": 1}) == "k" * n + "[" * (n - 1) + "]" * (n - 1) + "|[e]"
+    assert read[0][1] == ""
+    assert codes(reports) == ["failed-modifier"]
+
+
+def test_a_read_refused_where_no_modifier_is_asked_fails_nothing_further() -> None:
+    kept: list[Option] = []
+    read: list[str] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config.options[0])
+        return "k"
+
+    class Reader:
+        def __str__(self) -> str:
+            if not kept:
+                return "e"
+            read.append(kept.pop().value)
+            return f"[{read[-1]}]"
+
+    reports: list[Report] = []
+    parser = create_parser(custom_modifiers={"k": keep}, on_report=reports.append)
+    n = MAX_REENTRY
+    output = parser.resolve("{{x:k; o:{{v}}}}" * n + "{{v}}", {"x": 1, "v": Reader()})
+    # The read made by the deepest conversion was refused, and no modifier was
+    # being asked, so the conversion answers over the empty string.
+    assert output == "k" * n + "[" * n + "]" * n
+    assert read[0] == ""
+    assert reports == []
 
 
 def test_a_kept_option_that_reads_itself_takes_its_fallback_chain() -> None:
@@ -932,35 +1187,204 @@ def test_a_kept_option_that_reads_itself_takes_its_fallback_chain() -> None:
         kept.append(config)
         return "k"
 
+    asked: list[None] = []
+
     def reread(config: ModifierInput) -> str:
+        asked.append(None)
         return kept[-1].options[0].value if kept else config.default
 
     reports: list[Report] = []
     parser = create_parser(custom_modifiers={"k": keep, "r": reread}, on_report=reports.append)
-    parser.resolve("{{x:zz}}", {"x": 1})
-    reports.clear()
     output = parser.resolve("{{x:k; o:{{x:r; default:D}}}}{{x:r}}", {"x": 1})
     assert output == "kD"
-    assert codes(reports)
-    assert set(codes(reports)) == {"failed-modifier"}
+    # The read of what is already rendering is refused at once, whatever room
+    # the reentry bound has: the modifier inside it fails, and the option is
+    # rendered once, by the read that began it.
+    assert [(report.code, report.text) for report in reports] == [
+        ("failed-modifier", "{{x:r; default:D}}")
+    ]
+    assert len(asked) == 2
 
 
-def test_a_modifier_that_resolves_itself_until_the_stack_runs_out_takes_its_chain() -> None:
+def test_a_default_read_while_it_renders_is_refused_at_once() -> None:
+    kept: list[ModifierInput] = []
+    asked: list[str] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config)
+        return config.default
+
+    def reread(config: ModifierInput) -> str:
+        asked.append(config.value)
+        return "<" + kept[0].default + ">"
+
+    reports: list[Report] = []
+    parser = create_parser(custom_modifiers={"k": keep, "r": reread}, on_report=reports.append)
+    output = parser.resolve("{{x:k; default:[{{x:r; default:D}}]}}|{{x:r}}", {"x": 1})
+    # Inside the default it reads, `r` is refused and fails; once the default
+    # has rendered, a read of it answers what that render gave.
+    assert output == "[D]|<[D]>"
+    assert [(report.code, report.text) for report in reports] == [
+        ("failed-modifier", "{{x:r; default:D}}")
+    ]
+    assert asked == ["1", "1"]
+
+
+def test_a_refused_read_of_what_is_rendering_leaves_that_render_its_answer() -> None:
+    # Near misses: the refusal fails only the modifier that made the read, a
+    # modifier that reads its own option twice is answered the second time by
+    # the first, and another placeholder that wrote the same text renders its
+    # own.
+    kept: list[Option] = []
+    rendered: list[str] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config.options[0])
+        first = config.options[0].value
+        return first + config.options[0].value
+
+    def count(config: ModifierInput) -> str:
+        rendered.append(config.value)
+        return "c"
+
+    def inside(config: ModifierInput) -> str:
+        return "(" + kept[-1].value + ")"
+
+    reports: list[Report] = []
+    parser = create_parser(
+        custom_modifiers={"k": keep, "c": count, "in": inside}, on_report=reports.append
+    )
+    message = "{{x:k; o:{{x:c}}{{x:in; default:r}}}}|{{x:k; o:{{x:c}}{{x:in; default:r}}}}"
+    assert parser.resolve(message, {"x": 1}) == "crcr|crcr"
+    assert rendered == ["1", "1"]
+    assert codes(reports) == ["failed-modifier", "failed-modifier"]
+
+
+def test_a_read_of_what_another_thread_is_rendering_waits_for_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # The render can finish while the read waits, so the read waits and
+    # answers what it gave: the option is rendered once, and nothing fails.
+    kept: list[Option] = []
+    rendered: list[None] = []
+    answers: list[str] = []
+    waiting = threading.Event()
+    wait = _reads._wait
+
+    def spy(holder: Any, now: Any) -> None:
+        waiting.set()
+        wait(holder, now)
+
+    monkeypatch.setattr(_reads, "_wait", spy)
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config.options[0])
+        return "k"
+
+    def slow(config: ModifierInput) -> str:
+        rendered.append(None)
+        thread = threading.Thread(target=lambda: answers.append(kept[0].value))
+        thread.start()
+        waiting.wait()
+        threads.append(thread)
+        return "s"
+
+    def read(config: ModifierInput) -> str:
+        return kept[0].value
+
+    threads: list[threading.Thread] = []
+    reports: list[Report] = []
+    parser = create_parser(
+        custom_modifiers={"k": keep, "slow": slow, "m": read}, on_report=reports.append
+    )
+    assert parser.resolve("{{x:k; o:<{{x:slow}}>}}{{x:m}}", {"x": 1}) == "k<s>"
+    threads[0].join()
+    assert (answers, len(rendered), reports) == (["<s>"], 1, [])
+
+
+def test_a_modifier_that_resolves_itself_takes_its_chain_at_the_reentry_bound() -> None:
     message = "A{{x:again; default:F}}B"
+    refused: list[ReentryLimitError] = []
+    asked: list[None] = []
 
     def again(config: ModifierInput) -> str:
+        asked.append(None)
+        try:
+            return "<" + parser.resolve(message, {"x": 1}) + ">"
+        except ReentryLimitError as failure:
+            refused.append(failure)
+            raise
+
+    reports: list[Report] = []
+    parser = create_parser(custom_modifiers={"again": again}, on_report=reports.append)
+    held = MAX_REENTRY - 1
+    assert parser.resolve(message, {"x": 1}) == "A<" * held + "AFB" + ">B" * held
+    assert (len(asked), len(refused), codes(reports)) == (MAX_REENTRY, 1, ["failed-modifier"])
+    assert isinstance(refused[0], RecursionError)
+    # The count was given back: the next resolution starts from none in progress.
+    assert parser.resolve("{{x}}", {"x": 1}) == "1"
+
+
+def test_a_resolution_at_the_reentry_bound_that_asks_for_none_is_not_refused() -> None:
+    message = "A{{x:again; default:F}}B"
+    asked: list[None] = []
+
+    def again(config: ModifierInput) -> str:
+        asked.append(None)
+        if len(asked) == MAX_REENTRY:
+            return "x"
         return "<" + parser.resolve(message, {"x": 1}) + ">"
 
     reports: list[Report] = []
     parser = create_parser(custom_modifiers={"again": again}, on_report=reports.append)
-    parser.resolve("{{x:zz}}", {"x": 1})
-    reports.clear()
-    output = parser.resolve(message, {"x": 1})
-    assert (output[:2], output[-2:]) == ("A<", ">B")
-    assert "A<AFB>B" in output
-    assert "<>" not in output
-    assert codes(reports)
-    assert set(codes(reports)) == {"failed-modifier"}
+    held = MAX_REENTRY - 1
+    assert parser.resolve(message, {"x": 1}) == "A<" * held + "AxB" + ">B" * held
+    assert reports == []
+
+
+def test_a_modifier_may_handle_the_refusal_and_answer() -> None:
+    def again(config: ModifierInput) -> str:
+        try:
+            return "<" + parser.resolve("{{x:again}}", {"x": 1}) + ">"
+        except ReentryLimitError:
+            return "refused"
+
+    reports: list[Report] = []
+    parser = create_parser(custom_modifiers={"again": again}, on_report=reports.append)
+    held = MAX_REENTRY - 1
+    assert parser.resolve("{{x:again}}", {"x": 1}) == "<" * held + "refused" + ">" * held
+    assert reports == []
+
+
+def test_a_resolution_on_a_thread_of_its_own_is_never_refused() -> None:
+    # The bound counts what is in progress on one thread: at the bound on the
+    # thread that started it, a thread resolves, and reads what was kept.
+    answers: list[str] = []
+    kept: list[Option] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config.options[0])
+        return "k"
+
+    def deepest(config: ModifierInput) -> str:
+        if len(answers) < MAX_REENTRY - 1:
+            answers.append("")
+            return parser.resolve("{{x:deepest}}", {"x": 1})
+
+        def elsewhere() -> None:
+            answers.append(parser.resolve("{{x}}", {"x": 1}) + kept[0].value)
+
+        thread = threading.Thread(target=elsewhere)
+        thread.start()
+        thread.join()
+        return answers[-1]
+
+    reports: list[Report] = []
+    parser = create_parser(
+        custom_modifiers={"k": keep, "deepest": deepest}, on_report=reports.append
+    )
+    assert parser.resolve("{{x:k; o:{{x}}!}}{{x:deepest}}", {"x": 1}) == "k11!"
+    assert reports == []
 
 
 def test_a_resolution_on_a_thread_a_modifier_starts_answers_where_its_walk_runs_out() -> None:

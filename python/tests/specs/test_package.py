@@ -46,8 +46,12 @@ def test_wheel_carries_no_tests(wheel: zipfile.ZipFile) -> None:
     assert not [name for name in wheel.namelist() if name.startswith("tests/")]
 
 
-def test_wheel_depends_on_nothing(wheel: zipfile.ZipFile) -> None:
+def test_wheel_depends_on_nothing_but_the_intl_extra(wheel: zipfile.ZipFile) -> None:
     metadata = Parser().parsestr(_metadata(wheel))
-    assert metadata.get_all("Requires-Dist") is None
+    assert metadata.get_all("Provides-Extra") == ["intl"]
+    assert sorted(metadata.get_all("Requires-Dist") or []) == [
+        "babel<3,>=2.14; extra == 'intl'",
+        "tzdata>=2024.1; extra == 'intl'",
+    ]
     assert metadata["Name"] == "curly-message"
     assert metadata["Requires-Python"] == ">=3.11"

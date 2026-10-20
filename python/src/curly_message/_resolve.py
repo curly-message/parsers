@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import contextlib
-import threading
-from collections.abc import Callable, Generator
-from types import FrameType
+from collections import ChainMap
+from collections.abc import Callable, Mapping
+from functools import partial
+from types import FrameType, MappingProxyType
 from typing import Any, Final, cast
 
 from . import _utils
 from ._convert import Conversions, WrapperParts, Wrappers, text, wrapper_parts
-from ._modifiers import BUILTINS, SELECTIONS, ModifierFailure
+from ._modifiers import CORE, SELECTIONS, ModifierFailure, builtin
+from ._reads import THREAD, Asked, Job, Now, Text, drive
+from ._reads import text as joined
 from ._types import (
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
@@ -37,10 +40,10 @@ from ._utils import (
     unesc,
 )
 
-_Job = Generator["_Job", "str | _Text", "str | _Text"]
-"""A step of the walk that renders nested text: it yields the job it waits on and gets its text."""
+_Text = Text
+"""What the walk holds nested text as; read off this module where the walk builds one."""
 
-_Result = str | _Job
+_Result = str | Job
 """A placeholder's text, or the job that will produce it."""
 
 _MESSAGES: Final[dict[ReportCode, str]] = {
@@ -71,6 +74,19 @@ _MESSAGES: Final[dict[ReportCode, str]] = {
     ),
 }
 
+SHOWN_DIGITS: Final = (
+    "minimumIntegerDigits",
+    "minimumFractionDigits",
+    "maximumFractionDigits",
+    "minimumSignificantDigits",
+    "maximumSignificantDigits",
+    "roundingIncrement",
+    "roundingMode",
+    "roundingPriority",
+    "trailingZeroDisplay",
+)
+"""The properties that decide which digits a number is shown with."""
+
 _LIMITS: Final[dict[ReportCode, int | None]] = {
     "unknown-modifier": None,
     "failed-modifier": None,
@@ -97,87 +113,13 @@ _ORIGINS: Final[dict[ReportCode, ReportOrigin]] = {
 }
 
 
-class _Text:
-    """Rendered text held as the pieces it is made of, and made a ``str`` where it is read.
-
-    A level that only passes a nested result on would otherwise copy it, so a
-    message nested n levels deep would copy its innermost text n times.
-    """
-
-    __slots__ = ("length", "pieces")
-
-    def __init__(self, pieces: list[str | _Text], length: int) -> None:
-        self.pieces = pieces
-        self.length = length
-
-
-def _drive(top: _Job) -> str | _Text:
-    """Run a job and every job it waits on, on a stack of suspended generators.
-
-    However deep a message nests, the host's call stack holds this loop and
-    the one generator it is resuming: a nested render is a job pushed here,
-    never a call.
-    """
-    stack = [top]
-    sent: Any = None
-    while True:
-        try:
-            job = stack[-1].send(sent)
-        except StopIteration as finished:
-            stack.pop()
-            if not stack:
-                result: str | _Text = finished.value
-                return result
-            sent = finished.value
-            continue
-        stack.append(job)
-        sent = None
-
-
-def _text(found: str | _Text) -> str:
-    """The text as one ``str``, its pieces collected on a stack rather than by recursion."""
-    if isinstance(found, str):
-        return found
-    pieces: list[str] = []
-    stack = [iter(found.pieces)]
-    while stack:
-        piece = next(stack[-1], None)
-        if piece is None:
-            stack.pop()
-        elif isinstance(piece, str):
-            pieces.append(piece)
-        else:
-            stack.append(iter(piece.pieces))
-    return "".join(pieces)
-
-
-def _finish(result: _Result) -> str:
-    return result if isinstance(result, str) else _text(_drive(result))
-
-
-class _Asked:
-    """A modifier the walk is asking, which a read refused at ``MAX_REENTRY`` fails."""
-
-    __slots__ = ("failed",)
-
-    def __init__(self) -> None:
-        self.failed = False
-
-
-class _Thread(threading.local):
-    """What one thread has in progress (section 13).
-
-    ``resolving`` counts the resolutions in progress there, and the reads that
-    count as one. ``asked`` is the modifier being asked there, and nothing
-    while the walk runs: under a modifier, the walk runs again only to render
-    what host code asked it for.
-    """
-
-    resolving = 0
-    asked: _Asked | None = None
-
-
-_THREAD: Final = _Thread()
+_Composed = tuple[
+    Mapping[str, object], int, object, dict[str, object], dict[str, object], dict[str, object]
+]
+"""What layers compose under a name: the mapping a modifier is handed and how
+many lookups failed; the wrapper's props where it composes one, held so its
+identity stays its own; then the composition as one ``dict``, and the entries
+and the digits it is made of."""
 
 
 class _Chain:
@@ -213,6 +155,7 @@ class _Walk:
 
     __slots__ = (
         "closed",
+        "composed",
         "conversions",
         "defaults",
         "locale",
@@ -228,6 +171,9 @@ class _Walk:
         "source",
         "wrappers",
     )
+
+    host: Final = False
+    """The walk reads what it hands a modifier the format defines (``_reads.read``)."""
 
     def __init__(
         self,
@@ -256,6 +202,10 @@ class _Walk:
         self.recognize = recognize
         self.conversions = conversions
         self.wrappers: Wrappers = {}
+        # What the layers compose under a modifier's name: by the name for
+        # the parser's defaults and the call's props, and by the name and the
+        # wrapper's props for what a wrapper lays over that.
+        self.composed: dict[tuple[object, ...], _Composed] = {}
         self.output = MAX_OUTPUT_LENGTH
         self.read = MAX_READ_LENGTH
         # A modifier may keep what it was handed and read it after the
@@ -307,24 +257,102 @@ class _Walk:
         # is host code, so whether it is one is asked of identity, never of its
         # truth.
         registered = self.registry.get(name)
-        return BUILTINS.get(name) if registered is None else registered
+        return builtin(name) if registered is None else registered
 
     def props_for(
-        self, name: str, parts: WrapperParts | None, open_: int, close: int
-    ) -> dict[str, object]:
+        self,
+        name: str,
+        parts: WrapperParts | None,
+        open_: int,
+        close: int,
+        *,
+        shown_digits: bool = False,
+    ) -> Mapping[str, object]:
         """What the layers configure under a modifier's own name, composed per property (11.3).
 
         The defaults, the call's props and the wrapper's props each override
         only the properties they name, and a property holding ``UNDEFINED``
-        names nothing. What leaves is the parser's own copy, so a modifier that
-        writes into it reaches neither the next placeholder nor the caller.
+        names nothing.
+
+        A layer's entries are enumerated once for each name a resolution's
+        placeholders ask under, and every later placeholder that names the
+        same modifier over the same layers is handed that one read-only
+        mapping, so a wide layer costs its width once and not once per
+        placeholder. What a wrapper's props add is laid over the composition
+        beneath them rather than copied with it, so wrappers that each
+        configure a modifier cost what they hold, not that many times what the
+        defaults and the call's props hold. A lookup that failed is reported
+        again at each placeholder.
+
+        ``shown_digits`` puts beneath that composition the digit properties
+        the same layers compose under ``number``, read name by name, for the
+        format's own ``plural``: a count and the word that agrees with it are
+        two placeholders, and the category is asked of the number as ``number``
+        shows it (section 11.5).
         """
-        composed: dict[str, object] = {}
-        for layer in (self.defaults, self.props, MISSING if parts is None else parts[2]):
-            for prop, value in own_items(self.own(layer, name, open_, close)):
+        wrapped = MISSING if parts is None else parts[2]
+        key: tuple[object, ...] = (
+            (name, shown_digits) if wrapped is MISSING else (name, shown_digits, id(wrapped))
+        )
+        known = self.composed.get(key)
+        if known is None:
+            known = self.composed[key] = self._compose(name, wrapped, shown_digits)
+        # A lookup runs host code where a stored key collides with the name,
+        # and an entry that refuses to be read is no entry, but a reported one.
+        for _ in range(known[1]):
+            self.report("unserializable-value", open_, close)
+        return known[0]
+
+    def _compose(self, name: str, wrapped: object, shown_digits: bool) -> _Composed:
+        if wrapped is MISSING:
+            layers: tuple[object, ...] = (self.defaults, self.props)
+            failures = 0
+        else:
+            found = self.composed.get((name, shown_digits))
+            if found is None:
+                found = self.composed[name, shown_digits] = self._compose(
+                    name, MISSING, shown_digits
+                )
+            beneath = found
+            layers = (wrapped,)
+            failures = beneath[1]
+        digits: dict[str, object] = {}
+        entries: dict[str, object] = {}
+        for layer in layers:
+            if shown_digits:
+                try:
+                    entry = own_value(layer, "number")
+                except Exception:
+                    failures += 1
+                else:
+                    for prop in SHOWN_DIGITS:
+                        try:
+                            value = own_value(entry, prop)
+                        except Exception:
+                            failures += 1
+                            continue
+                        if value is not MISSING and value is not UNDEFINED:
+                            digits[prop] = value
+            try:
+                entry = own_value(layer, name)
+            except Exception:
+                failures += 1
+                continue
+            for prop, value in own_items(entry):
                 if value is not UNDEFINED:
-                    composed[prop] = value
-        return composed
+                    entries[prop] = value
+        if wrapped is MISSING:
+            # Every digit lies beneath every entry, in whichever layer either
+            # was named.
+            flat = {**digits, **entries} if digits else entries
+            return MappingProxyType(flat), failures, None, flat, entries, digits
+        if not digits and not entries:
+            return beneath[0], failures, wrapped, beneath[3], entries, digits
+        # The composition beneath is shared by every wrapper, so this one's
+        # entries are laid over it and it is not copied.
+        over = ChainMap(entries, beneath[4], digits, beneath[5]) if digits else None
+        view = ChainMap(entries, beneath[3]) if over is None else over
+        return MappingProxyType(view), failures, wrapped, entries, entries, digits
 
     def _head(self, open_: int, close: int, depth: int) -> _Result:
         """Resolve a placeholder as far as it can without rendering nested text.
@@ -352,12 +380,7 @@ class _Walk:
             return self._fallback(_Chain(open_, close, depth, key, parts, value_text, inline))
         # What the placeholder declares makes this error, so it does not wait
         # on the value; one a host registered under the name is no selection.
-        if (
-            key is not None
-            and not segments
-            and name in SELECTIONS
-            and modifier is BUILTINS.get(name)
-        ):
+        if key is not None and not segments and name in SELECTIONS and modifier is builtin(name):
             self.report("missing-options", open_, close)
             return self._fallback(_Chain(open_, close, depth, key, parts, value_text, inline))
         if value_text is None:
@@ -370,7 +393,7 @@ class _Walk:
             # answers to the name.
             name = "eq"
             registered = self.registry.get(name)
-            modifier = BUILTINS["eq"] if registered is None else registered
+            modifier = CORE["eq"] if registered is None else registered
         return self._tail(chain, (name, modifier), value_text, segments)
 
     def _fallback(self, chain: _Chain) -> _Result:
@@ -399,7 +422,7 @@ class _Walk:
             return unesc(self.source[from_:to])
         return self._render(from_, to, depth, found)
 
-    def _render(self, from_: int, to: int, depth: int, found: tuple[int, int] | None) -> _Job:
+    def _render(self, from_: int, to: int, depth: int, found: tuple[int, int] | None) -> Job:
         parts: list[str | _Text] = []
         length = 0
         nested = False
@@ -439,45 +462,57 @@ class _Walk:
             return "".join(cast("list[str]", parts))
         return _Text(parts, length + len(rest))
 
-    def _rendered(self, from_: int, to: int, depth: int) -> Callable[[], str]:
-        # An option value is rendered where a modifier first reads it, on a
-        # trampoline of its own: a modifier is host code the walk called, so
-        # the render it asks for cannot be a job of the walk around it.
-        def render() -> str:
-            return "" if self.closed else _finish(self._range(from_, to, depth))
-
-        return render
-
     def _tail(
         self,
         chain: _Chain,
         named: tuple[str, Modifier],
         value_text: str,
         segments: list[Segment],
-    ) -> _Job:
+    ) -> Job:
         """Ask the modifier, and take the chain where it answers nothing (section 11)."""
-        read: list[str] = []
-
-        def default() -> str:
-            if self.closed:
-                return ""
-            if not read:
-                read.append(_finish(self._fallback(chain)))
-            return read[0]
-
-        depth = chain.depth + 1
-        options = tuple(Option(k, self._rendered(a, b, depth)) for k, a, b in segments)
         name, modifier = named
+        config: ModifierInput | None = None
         try:
             try:
+                # A host-defined modifier may keep what it is handed, so what
+                # it is handed knows whom it was handed to (section 13); one
+                # the format defines only reads it, as the walk.
+                host = name in self.registry
+                call: Asked | _Walk = Asked(self) if host else self
+                depth = chain.depth + 1
+                render = self._range
+                options = []
+                for key, from_, to in segments:
+                    option = Option(key, partial(render, from_, to, depth))  # type: ignore[arg-type]
+                    option._call = call
+                    options.append(option)
                 config = ModifierInput(
                     value=value_text,
-                    options=options,
-                    props=self.props_for(name, chain.parts, chain.open, chain.close),
+                    options=tuple(options),
+                    props=self.props_for(
+                        name,
+                        chain.parts,
+                        chain.open,
+                        chain.close,
+                        shown_digits=name == "plural" and not host,
+                    ),
                     locale=self.locale,
-                    default=default,
+                    default=partial(self._fallback, chain),  # type: ignore[arg-type]
                 )
-                answer = modifier(config)
+                config._call = call
+                if host:
+                    now = THREAD.now
+                    if now is None:
+                        now = THREAD.now = Now()
+                    now.asked = cast("Asked", call)
+                    try:
+                        answer = modifier(config)
+                    finally:
+                        now.asked = None
+                    if cast("Asked", call).failed:
+                        raise ModifierFailure("failed-modifier")
+                else:
+                    answer = modifier(config)
             except Exception as failure:
                 code: ReportCode = (
                     failure.code if type(failure) is ModifierFailure else "failed-modifier"
@@ -496,8 +531,9 @@ class _Walk:
             return ""
         if answered is not None:
             return answered
-        if read:
-            return read[0]
+        # A chain the modifier read is not walked again.
+        if config is not None and config._text is not None:
+            return config._text
         result = self._fallback(chain)
         return result if isinstance(result, str) else (yield result)
 
@@ -545,16 +581,25 @@ class _Parser:
         locale: object = None,
         message_id: object = None,
     ) -> str:
-        thread = _THREAD
-        if thread.resolving >= MAX_REENTRY:
-            raise ReentryLimitError(
-                f"A resolution was asked for while {MAX_REENTRY} were in progress on its thread."
-            )
-        asked = thread.asked
-        thread.resolving += 1
-        thread.asked = None
+        held: Now | None = None
+        asked: Asked | None = None
         try:
-            return self._resolve(message, payload, props, locale, message_id)
+            # What the thread has in progress is asked for where a stack with
+            # no room left is contained, since asking can itself run out.
+            now = THREAD.now
+            if now is None:
+                now = THREAD.now = Now()
+            if now.resolving < MAX_REENTRY:
+                # Text that holds no placeholder calls no host code, so
+                # nothing can be asked for while it resolves and it takes no
+                # place.
+                if type(message) is str and "{{" not in message:
+                    return unesc(message)
+                asked = now.asked
+                now.resolving += 1
+                now.asked = None
+                held = now
+                return self._resolve(message, payload, props, locale, message_id)
         except UNFINISHED as failure:
             # Every call into host code is contained where it is made, so what
             # reaches here is the interpreter's stack or memory running out in
@@ -576,8 +621,12 @@ class _Parser:
         except Exception:
             return ""
         finally:
-            thread.asked = asked
-            thread.resolving -= 1
+            if held is not None:
+                held.asked = asked
+                held.resolving -= 1
+        raise ReentryLimitError(
+            f"A resolution was asked for while {MAX_REENTRY} were in progress on its thread."
+        )
 
     def _resolve(
         self, message: object, payload: object, props: object, locale: object, message_id: object
@@ -611,9 +660,10 @@ class _Parser:
             conversions=conversions,
         )
         try:
-            return _text(_drive(walk._render(0, len(source), 1, found)))
+            return joined(drive(walk._render(0, len(source), 1, found)))
         finally:
             walk.closed = True
+            walk.composed.clear()
 
 
 _WALK: Final = _Parser._resolve.__code__

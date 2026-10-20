@@ -8,6 +8,7 @@ other one would pass for the wrong artifact.
 
 from __future__ import annotations
 
+import importlib.util
 import os
 import sysconfig
 from pathlib import Path
@@ -19,6 +20,20 @@ import curly_message
 ROOT = Path(__file__).resolve().parents[1]
 
 DIST = os.environ.get("CURLY_MESSAGE_DIST") == "1"
+
+
+@pytest.fixture(scope="session")
+def expect_intl() -> bool:
+    """Whether this installation is meant to satisfy the Intl level.
+
+    Each leg of ``tasks.py`` states it in ``CURLY_MESSAGE_EXPECT_INTL``, so a
+    supplier that failed to install fails the leg rather than skipping its
+    tests. Run any other way, the supplier's presence decides.
+    """
+    stated = os.environ.get("CURLY_MESSAGE_EXPECT_INTL")
+    if stated is not None:
+        return stated == "1"
+    return importlib.util.find_spec("babel") is not None
 
 
 def _expected() -> Path:
