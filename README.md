@@ -27,6 +27,10 @@ The Rust implementation, `curly-message-parser`, implements the same version
 and is not yet released: its first version, `1.0.0-next.0`, is published to
 crates.io by hand.
 
+The Python implementation, `curly-message` on PyPI, implements the same
+version and is not yet released: its first version, `1.0.0rc0`, is published
+by its workflow through a pending trusted publisher.
+
 ## Implementations
 
 | Path | Package | State |
@@ -34,14 +38,15 @@ crates.io by hand.
 | [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
 | [`go/`](./go) | `github.com/curly-message/parsers/go` | Unreleased |
 | [`rust/`](./rust) | `curly-message-parser` | Unreleased |
+| [`python/`](./python) | `curly-message` (PyPI) | Unreleased |
 
 One directory per language, each a standalone package with its own build,
-tests and version line. Release tags are namespaced by directory: `js-v1.0.0`
-or `rust-v1.0.0` for a package a registry addresses by name, so it can leave
-for its own repository without that being a breaking change for the others;
-and `go/v1.0.0` for a Go module, whose version the go command reads only from
-a tag named after the module's directory. A Go module's path is where it
-lives, so moving one changes what every importer writes.
+tests and version line. Release tags are namespaced by directory: `js-v1.0.0`,
+`rust-v1.0.0` or `python-v1.0.0` for a package a registry addresses by name,
+so it can leave for its own repository without that being a breaking change
+for the others; and `go/v1.0.0` for a Go module, whose version the go command
+reads only from a tag named after the module's directory. A Go module's path
+is where it lives, so moving one changes what every importer writes.
 
 ## Pre-commit hook
 
@@ -53,16 +58,18 @@ then runs every hook from `.githooks/`, and none from `.git/hooks/`.
 
 The check of a directory is `.githooks/<dir>.sh`: `npm run lint` for `js/`,
 for `go/` the formatting, vet and ASCII checks of the Lint job of
-`tests-go.yml`, and for `rust/` the format, clippy and harness checks of the
-Lint job of `tests-cargo.yml`.
+`tests-go.yml`, for `rust/` the format, clippy and harness checks of the Lint
+job of `tests-cargo.yml`, and for `python/` the ruff and mypy checks of the
+Lint job of `tests-python.yml`.
 
 ## Benchmarks
 
 Each implementation directory has a benchmark, run by the command its README
 names (`npm run bench` in `js/`, `sh bench/prepare.sh && node
-bench/harness.mjs` in `go/` and in `rust/`), that measures what its build
-costs: counts, such as what checking a call costs a type checker, sizes, and
-times. A PR is benchmarked against its base by `bench.yml`, for each
+bench/harness.mjs` in `go/` and in `rust/`, `uv run --no-project tasks.py
+bench-venv && node bench/harness.mjs` in `python/`), that measures what its
+build costs: counts, such as what checking a call costs a type checker, sizes,
+and times. A PR is benchmarked against its base by `bench.yml`, for each
 implementation it
 touches, which posts a table per implementation on the PR (a PR from a fork
 finds them in the job's summary). An implementation is benchmarked where the
@@ -169,6 +176,39 @@ a crate that exists, so the first version, `1.0.0-next.0`, is published by
 hand from `main` by an owner with an API token
 (`cd rust && cargo publish --locked -p curly-message-parser`); the workflow
 refuses to run for a crate crates.io does not know.
+
+### Python
+
+The Python parser is released by the **Python parser publish** workflow
+(`.github/workflows/publish-python.yml`, started by hand), reading the
+changelog's pending section and the release types as the JavaScript workflow
+does: `patch`, `minor` and `major` cut `### 1.1.0 (Unreleased)` and must
+arrive at the version it names, and `next` publishes a release candidate of
+that version — `1.1.0rc0`, then `rc1`, PEP 440's spelling — and leaves the
+section open. PyPI has no dist-tags: a candidate is a prerelease, which `pip`
+installs only when asked (`pip install --pre curly-message`, or the exact
+version). The workflow runs the test matrix (`tests-python.yml`), writes the
+version into `python/pyproject.toml`, `python/uv.lock` and the benchmark's
+`python/package.json`, builds the sdist and the wheel with the hash-pinned
+build backend, writes the benchmark of that wheel into `BENCH.md`, commits,
+tags (`python-v1.0.0`), pushes, publishes to PyPI with an attestation of each
+file, and publishes a GitHub release carrying the changelog section, never
+marked as the repository's latest, which stays the JavaScript parser's. It runs
+in the same three jobs, with the same App, written out in the workflow rather
+than called from `publish.yml`, because PyPI does not accept a reusable
+workflow as a trusted publisher.
+
+PyPI holds no token: the workflow is the project's
+[trusted publisher](https://docs.pypi.org/trusted-publishers/), with
+`release` as its environment. A trusted publisher can be registered before
+the project exists, as a *pending publisher* in the PyPI account of a
+maintainer, naming the project `curly-message`, the repository
+`curly-message/parsers`, the workflow `publish-python.yml` and the
+environment `release`; the first release, `1.0.0rc0` under `next`, then
+creates the project, so no version is published by hand. Before anything is
+pushed, the release job checks that PyPI does not hold the version and makes
+the OIDC exchange the publish step will make, so a publisher that is missing
+or names something else fails the run before a tag exists.
 
 ## Specification
 
