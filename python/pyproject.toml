@@ -28,6 +28,9 @@ classifiers = [
   "Typing :: Typed",
 ]
 
+[project.optional-dependencies]
+intl = ["babel>=2.14,<3", "tzdata>=2024.1"]
+
 [project.urls]
 Homepage = "https://curlymessage.dev/"
 Repository = "https://github.com/curly-message/parsers"
