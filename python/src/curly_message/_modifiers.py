@@ -100,4 +100,4 @@ SELECTIONS: Final = frozenset(("eq", "ne", "lt", "gt", "lte", "gte", "plural", "
 
 def levels() -> frozenset[Level]:
     """The conformance levels this installation satisfies (section 2)."""
-    return frozenset(("core",))
+    return frozenset(("core", "extensions"))
