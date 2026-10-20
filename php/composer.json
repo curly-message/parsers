@@ -22,6 +22,7 @@
         "ext-intl": "The Intl level: the number, date, ago and currency modifiers and the plural and ordinal selections."
     },
     "require-dev": {
+        "ext-zip": "*",
         "opis/json-schema": "^2.4",
         "phpunit/phpunit": "^11.5"
     },
@@ -32,6 +33,7 @@
     },
     "autoload-dev": {
         "psr-4": {
+            "CurlyMessage\\Conformance\\": "conformance/src/",
             "CurlyMessage\\Tests\\": "tests/"
         }
     },
@@ -51,7 +53,9 @@
         "lint:fix": "tools/qa/vendor/bin/php-cs-fixer fix",
         "unicode": "@php tools/unicode.php",
         "analyse": "tools/qa/vendor/bin/phpstan analyse --no-progress --memory-limit=1G",
+        "fetch-set": "@php conformance/bin/fetch-set.php",
         "test": [
+            "@fetch-set",
             "@lint",
             "@analyse",
             "@php vendor/bin/phpunit"

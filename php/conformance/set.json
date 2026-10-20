@@ -1,0 +1,6 @@
+{
+    "scaffolding": "BRANCH-ONLY: the set as spec's main holds it, ahead of its release; replace with the released archive's address and digest before merge.",
+    "version": "4.1.0",
+    "url": "https://raw.githubusercontent.com/curly-message/parsers/feat/php/php/conformance/scaffold/conformance-4.1.0.zip",
+    "sha256": "9a942d46c37b4f85765ae8a28001c5a6399028ef08c3a29b2f1e682a830b39b6"
+}
