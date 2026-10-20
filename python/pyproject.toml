@@ -49,7 +49,9 @@ packages = ["src/curly_message"]
 include = [
     "/src",
     "/tests",
+    "/bench",
     "/LICENSE",
+    "/package.json",
     "/pyproject.toml",
     "/tasks.py",
 ]
@@ -72,7 +74,7 @@ ignore = ["PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004"]
 strict = true
 warn_unused_ignores = true
 python_version = "3.11"
-files = ["src", "tests", "tasks.py"]
+files = ["src", "tests", "bench", "tasks.py"]
 mypy_path = "src"
 
 [tool.pytest.ini_options]
