@@ -38,8 +38,8 @@ Issues = "https://github.com/curly-message/spec/issues"
 Changelog = "https://github.com/curly-message/parsers/blob/main/python/CHANGELOG.md"
 
 [dependency-groups]
-test = ["pytest"]
-lint = ["ruff", "mypy"]
+test = ["pytest", "jsonschema"]
+lint = ["ruff", "mypy", "types-jsonschema"]
 dev = [{ include-group = "test" }, { include-group = "lint" }]
 
 [tool.hatch.build.targets.wheel]
