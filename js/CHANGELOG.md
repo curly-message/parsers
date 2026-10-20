@@ -1,7 +1,24 @@
 # Changelog
 
-### 3.1.3 (Unreleased)
+### 3.2.0 (Unreleased)
 
+* **A message can be compiled once and resolved many times.** What
+  `createParser()` returns has `compile(message)` beside `resolve`: a compiled
+  message's `resolve(context?)` returns, and reads the context and the
+  options, as `resolve` does for the message's text and the same context, and
+  reports as `resolve` does for the message. It reads its text on its first
+  resolution and keeps what it read for as long as the caller holds it,
+  outside the bounds of what a parser keeps, which it leaves as they were.
+  `compile` converts a message that is not text once, as `resolve` would, and
+  keeps a copy of the text, never the message; it reads no option and no
+  context, reports nothing and never throws. On Node 22 a compiled catalogue
+  message resolves in about the time one the parser keeps does, and 2 000
+  messages, more than a parser keeps, resolve in about half the time compiled
+  as through `resolve`. Its types are `Parser.Compiled`, `Parser.Compile`,
+  `Parser.Full` and `Parser.FullFactory`, which types `createParser`.
+  `Parser.T` and `Parser.Factory` are unchanged, so a parser or a factory a
+  caller writes against them still compiles; one written against
+  `typeof createParser` or its return type now needs a `compile` as well.
 * **Text holding no backslash is not searched for escape sequences.** Every
   span of text a resolution renders, and every key, modifier name and option
   key it reads, went through a regular expression that removes escape

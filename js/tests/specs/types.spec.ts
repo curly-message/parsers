@@ -236,6 +236,60 @@ describe('payload typing', () => {
   });
 });
 
+// A compiled message resolves against the context the parser's `resolve`
+// takes, so it is typed by the same payload and props. `compile` is a member
+// of what `createParser` returns and of no type a consumer writes for a
+// parser of its own: a stand-in typed `Parser.T` still compiles.
+describe('compile typing', () => {
+  type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+
+  it('types a compiled message by the declared payload', () => {
+    const { compile } = createParser<Payload>();
+    const greeting = compile(GREETING);
+    const output = greeting.resolve({ payload: { applicationName: 'App' } });
+    const typed: Equal<typeof output, string> = true;
+
+    expect([output, typed]).toEqual(['Hi App!', true]);
+    // @ts-expect-error the declared payload names `applicationName` a `string`
+    expect(greeting.resolve({ payload: { applicationName: 42 } })).toBe('Hi 42!');
+    // @ts-expect-error `aplicationName` is not a key of the declared payload
+    expect(greeting.resolve({ payload: { aplicationName: 'App' } })).toBe('Hi !');
+    expect(greeting.resolve()).toBe('Hi !');
+  });
+
+  it('types a compiled message by the declared props', () => {
+    const { compile } = createParser<{ v: string }, { 'x-temp'?: { unit: 'C' | 'F' } }, 'x-temp'>({
+      customModifiers: { 'x-temp': ({ value, props }) => `${value}${props.unit}` },
+    });
+    const temperature = compile('{{v:x-temp}}');
+
+    expect(temperature.resolve({ payload: { v: '21' }, props: { 'x-temp': { unit: 'F' } } })).toBe('21F');
+    // @ts-expect-error `x-temp` reads a unit of `C` or `F`
+    expect(temperature.resolve({ payload: { v: '21' }, props: { 'x-temp': { unit: 'K' } } })).toBe('21K');
+  });
+
+  it('types what compile returns as `Parser.Compiled`', () => {
+    const parser: Parser.Full = createParser();
+    const compiled: Parser.Compiled = parser.compile(GREETING);
+    const compile: Parser.Compile = parser.compile;
+    const typed: Equal<ReturnType<typeof parser.compile>, Parser.Compiled> = true;
+
+    expect([compiled.resolve({ payload: { applicationName: 'App' } }), compile('Hi!').resolve(), typed]).toEqual(['Hi App!', 'Hi!', true]);
+  });
+
+  it('leaves `Parser.T` and `Parser.Factory` to what a consumer writes', () => {
+    const mock: Parser.T = { resolve: () => 'mock' };
+    const factory: Parser.Factory = () => ({ resolve: () => 'factory' });
+    const annotated: Parser.T = createParser();
+    const asFactory: Parser.Factory = createParser;
+    const asFull: Parser.FullFactory = createParser;
+
+    expect([mock.resolve('Hi!'), factory().resolve('Hi!'), annotated.resolve('Hi!'), asFactory().resolve('Hi!'), asFull().compile('Hi!').resolve()]).toEqual(['mock', 'factory', 'Hi!', 'Hi!', 'Hi!']);
+    // @ts-expect-error a `Parser.T` promises `resolve` alone
+    expect(annotated.compile).toBeTypeOf('function');
+  });
+});
+
 // `Parser.Options` is published, so it has to read like one a consumer can
 // take apart: indexing it for a single option and taking the bag as a
 // parameter are the ordinary uses.

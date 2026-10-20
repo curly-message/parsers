@@ -537,10 +537,87 @@ const KEPT_LENGTH = 1 << 13;
 // A text the caller cut from a longer one can hold all of that one alive; the
 // copy kept holds its own characters alone. A joined array is laid out in one
 // piece on every engine the package runs on, where a joined template is not
-// on all of them, so what is cut from it is cut from the copy.
-const owned = (text: string) => [text, ' '].join('').slice(0, -1);
+// on all of them, so what is cut from it is cut from the copy. A text at the
+// engine's longest has no room for the character joined to it, and is held as
+// it is.
+const owned = (text: string) => {
+  try {
+    return [text, ' '].join('').slice(0, -1);
+  } catch {
+    return text;
+  }
+};
 
-export const createParser: Parser.Factory = (parserOptions) => {
+// What a compiled message hands a resolution: the structure it holds, read
+// once when it was compiled.
+const compiledStructure = (compiled: Structure | undefined) => compiled;
+
+// One resolution, of a message or of a compiled one: what it reads of the
+// context and the options, and in which order, does not depend on which.
+// What it resolves is `structureFor(source)`, a function the parser holds
+// rather than one made for the call.
+const resolveCall = <Source>(parserOptions: Parser.Options<Modifier.Key, any> | undefined, reported: string, context: Parser.Context<any, any> | undefined, source: Source, structureFor: (source: Source, conversions: Conversions) => Structure | undefined) => {
+  // The context is caller-supplied like the payload inside it, and is read
+  // the same way: own entries only. A prototype somebody else wrote to is
+  // not a context a caller passed, and a caller that passed `null` for one
+  // is a caller that passed none.
+  const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport') ?? undefined;
+  // A context entry or an entry of the option bag that refuses to be read is
+  // the call's own defect rather than a placeholder's, and the id that would
+  // name the message is one of the entries, so the message is what a report
+  // of one carries: `reported`. Both are the call's own structure, read once
+  // for the call: a pass composes over what the call holds rather than
+  // asking the bag again.
+  const id: Parser.Id | undefined = ownValue(context, 'id', () => report('unserializable-value', reported, undefined, onReport));
+  const callRaised = () => report('unserializable-value', reported, id, onReport);
+  const payload: Parser.Payload | undefined = ownValue(context, 'payload', callRaised);
+  const props: Modifier.Props | undefined = ownValue(context, 'props', callRaised);
+  const locale: Locale | undefined = ownValue(context, 'locale', callRaised);
+  const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', callRaised);
+  const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', callRaised);
+  const onSuspectValue: Parser.OnSuspectValue | undefined = ownValue(parserOptions, 'onSuspectValue', callRaised) ?? undefined;
+  // Recognition is on where the caller says nothing (specification, section
+  // 4.1), so an entry that refuses to be read leaves it where it was and is
+  // reported like every other refusal.
+  const recognizeWrappers = !!(ownValue(parserOptions, 'recognizeWrappers', callRaised) ?? true);
+  // Each layer of the registry contributes the modifiers it holds and nothing
+  // else: an entry that cannot be called is not one a message can name and
+  // not one that shadows the name it would replace. Filtered after the
+  // lookup instead, a host's bad entry would take the built-in down with it.
+  // A name is looked up in the host's table and then in the built-in
+  // registry, which nothing writes to, rather than the two merged anew.
+  const registered = customModifiers === undefined ? undefined : ownModifiers(customModifiers, callRaised);
+  const modifierFor = (name: string): Modifier.T<any, any> | undefined => registered?.[name] ?? builtInModifiers[name];
+  // One value converts once, however many placeholders read it: the walk is
+  // the costly step. So is one entry asked once whether it configures its
+  // value, because asking enumerates it. The call is the scope — a payload
+  // the host mutates between two of them must not be answered with the older
+  // text.
+  const conversions: Conversions = new Map();
+  const wrappers: Wrappers = new Map();
+  const value = structureFor(source, conversions);
+
+  if (value === undefined) return '';
+
+  return interpolate({ value, payload, props, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id, conversions, wrappers });
+};
+
+// The message converts once, here, as a resolution would convert it, and only
+// a copy of the text is held: a text cut from a longer one holds nothing of
+// that one alive. It is not put among what the parser keeps, which messages
+// the caller holds itself would only crowd, and it is made outside the
+// parser's scope, so holding it holds nothing the parser keeps. Each
+// resolution converts its payload afresh, as one of the text would, a payload
+// value that is the message included.
+const compiledMessage = (parserOptions: Parser.Options<Modifier.Key, any> | undefined, message: Parser.Value): Parser.Compiled<any> => {
+  const value = text(message, new Map());
+  const compiled = value === undefined ? undefined : structure(owned(value));
+  const reported = typeof message === 'string' ? compiled?.source ?? '' : '';
+
+  return { resolve: (context) => resolveCall(parserOptions, reported, context, compiled, compiledStructure) };
+};
+
+export const createParser: Parser.FullFactory = (parserOptions) => {
   // A message is kept the second time it is seen, so a stream of texts that
   // never come back does not push out the ones that do. What was seen once is
   // two generations, each half the bounds, the older dropped whole when the
@@ -595,59 +672,25 @@ export const createParser: Parser.Factory = (parserOptions) => {
     return fresh;
   };
 
-  return { resolve: (message, context) => {
-    // The context is caller-supplied like the payload inside it, and is read
-    // the same way: own entries only. A prototype somebody else wrote to is
-    // not a context a caller passed, and a caller that passed `null` for one
-    // is a caller that passed none.
-    const onReport: Parser.OnReport | undefined = ownValue(parserOptions, 'onReport') ?? undefined;
-    // A context entry or an entry of the option bag that refuses to be read is
-    // the call's own defect rather than a placeholder's, and the id that would
-    // name the message is one of the entries, so the message is what a report
-    // of one carries — as text where the caller wrote text, because nothing
-    // has converted it yet. Both are the call's own structure, read once for
-    // the call: a pass composes over what the call holds rather than asking
-    // the bag again.
-    const reported = typeof message === 'string' ? message : '';
-    const id: Parser.Id | undefined = ownValue(context, 'id', () => report('unserializable-value', reported, undefined, onReport));
-    const callRaised = () => report('unserializable-value', reported, id, onReport);
-    const payload: Parser.Payload | undefined = ownValue(context, 'payload', callRaised);
-    const props: Modifier.Props | undefined = ownValue(context, 'props', callRaised);
-    const locale: Locale | undefined = ownValue(context, 'locale', callRaised);
-    const customModifiers: Modifier.CustomModifiers | undefined = ownValue(parserOptions, 'customModifiers', callRaised);
-    const modifierDefaults: Modifier.Props | undefined = ownValue(parserOptions, 'modifierDefaults', callRaised);
-    const onSuspectValue: Parser.OnSuspectValue | undefined = ownValue(parserOptions, 'onSuspectValue', callRaised) ?? undefined;
-    // Recognition is on where the caller says nothing (specification, section
-    // 4.1), so an entry that refuses to be read leaves it where it was and is
-    // reported like every other refusal.
-    const recognizeWrappers = !!(ownValue(parserOptions, 'recognizeWrappers', callRaised) ?? true);
-    // Each layer of the registry contributes the modifiers it holds and nothing
-    // else: an entry that cannot be called is not one a message can name and
-    // not one that shadows the name it would replace. Filtered after the
-    // lookup instead, a host's bad entry would take the built-in down with it.
-    // A name is looked up in the host's table and then in the built-in
-    // registry, which nothing writes to, rather than the two merged anew.
-    const registered = customModifiers === undefined ? undefined : ownModifiers(customModifiers, callRaised);
-    const modifierFor = (name: string): Modifier.T<any, any> | undefined => registered?.[name] ?? builtInModifiers[name];
-    // One value converts once, however many placeholders read it: the walk is
-    // the costly step. So is one entry asked once whether it configures its
-    // value, because asking enumerates it. The call is the scope — a payload
-    // the host mutates between two of them must not be answered with the older
-    // text.
-    const conversions: Conversions = new Map();
-    const wrappers: Wrappers = new Map();
-
-    // Everything the format carries is text, and the message becomes text
-    // before anything reads it rather than after everything has: a host that
-    // wrote its message as something else gets it interpolated and unescaped
-    // like any other. A message no conversion can describe is nothing to
-    // resolve, the same way such a value is not a value, and that is not a
-    // condition to report: a message nothing describes is a message nobody
-    // wrote, and nothing behind it is read on its account.
+  // Everything the format carries is text, and the message becomes text
+  // before anything reads it rather than after everything has: a host that
+  // wrote its message as something else gets it interpolated and unescaped
+  // like any other. A message no conversion can describe is nothing to
+  // resolve, the same way such a value is not a value, and that is not a
+  // condition to report: a message nothing describes is a message nobody
+  // wrote, and nothing behind it is read on its account. The conversion is
+  // the resolution's own, so a payload value that is the message converts
+  // once.
+  const messageStructure = (message: Parser.Value, conversions: Conversions) => {
     const value = text(message, conversions);
 
-    if (value === undefined) return '';
+    return value === undefined ? undefined : structureOf(value);
+  };
 
-    return interpolate({ value: structureOf(value), payload, props, parserOptions, modifierFor, modifierDefaults, onReport, onSuspectValue, recognizeWrappers, locale, id, conversions, wrappers });
-  } };
+  return {
+    // A report carries the message as text where the caller wrote text,
+    // because nothing has converted it yet.
+    resolve: (message, context) => resolveCall(parserOptions, typeof message === 'string' ? message : '', context, message, messageStructure),
+    compile: (message) => compiledMessage(parserOptions, message),
+  };
 };

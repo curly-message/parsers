@@ -132,6 +132,30 @@ only remembered, as many again and as long, so a stream of messages that never
 come back pushes out nothing a parser keeps. It keeps a copy of each text, so a
 message cut out of a longer string holds nothing of that string alive.
 
+A caller that holds its messages can hold what is read off them as well.
+`compile(message)` returns a compiled message, whose `resolve(context?)` returns
+what `resolve` returns for the message's text and the same context, byte for
+byte, reads the context and the options as `resolve` does for that text, and
+reports as `resolve` does for the message:
+
+```js
+const { compile } = createParser();
+const greeting = compile('Hello, {{name; default:Guest;}}!');
+
+greeting.resolve({ payload: { name: 'Alice' }, locale: 'en' });
+// -> 'Hello, Alice!'
+```
+
+A compiled message reads its text on its first resolution and keeps what it
+read for every later one, outside what the parser keeps and with no bound of
+its own: it is the caller's to hold and to drop. `compile` reads no option and
+no context, reports nothing and never throws. A message that is not text is
+converted once, by `compile`, as `resolve` would convert it, and a compiled
+message keeps a copy of the text, never the message: it resolves as the text
+the message converted to when it was compiled, and a message cut out of a
+longer string holds nothing of that string alive. A message no conversion
+describes compiles to one that resolves to the empty string.
+
 A caller that supplies no message — `undefined`, or a message no conversion
 describes — has supplied nothing to resolve, and the resolution is the empty
 string. Nothing stands in for it: the payload's `default` is there for the
@@ -739,8 +763,8 @@ parts rather than raising.
 specification states is stable: within that version, what a message resolves to
 does not change.
 
-Nothing here references a host framework: `resolve` takes the format's own
-inputs, and an adapter that presents this parser to a host library belongs in
+Nothing here references a host framework: `resolve` and `compile` take the
+format's own inputs, and an adapter that presents this parser to a host library belongs in
 that host's own repository.
 
 This implementation satisfies every conformance level the specification defines:
