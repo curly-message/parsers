@@ -9,7 +9,7 @@ from typing import Any, Final, cast
 
 from . import _utils
 from ._convert import Conversions, WrapperParts, Wrappers, text, wrapper_parts
-from ._modifiers import BUILTINS, SELECTIONS, ModifierFailure
+from ._modifiers import CORE, INTL, SELECTIONS, ModifierFailure, builtin
 from ._types import (
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
@@ -67,6 +67,19 @@ _MESSAGES: Final[dict[ReportCode, str]] = {
         " placeholder resolved to the empty string."
     ),
 }
+
+SHOWN_DIGITS: Final = (
+    "minimumIntegerDigits",
+    "minimumFractionDigits",
+    "maximumFractionDigits",
+    "minimumSignificantDigits",
+    "maximumSignificantDigits",
+    "roundingIncrement",
+    "roundingMode",
+    "roundingPriority",
+    "trailingZeroDisplay",
+)
+"""The properties that decide which digits a number is shown with."""
 
 _LIMITS: Final[dict[ReportCode, int | None]] = {
     "unknown-modifier": None,
@@ -279,10 +292,16 @@ class _Walk:
         # is host code, so whether it is one is asked of identity, never of its
         # truth.
         registered = self.registry.get(name)
-        return BUILTINS.get(name) if registered is None else registered
+        return builtin(name) if registered is None else registered
 
     def props_for(
-        self, name: str, parts: WrapperParts | None, open_: int, close: int
+        self,
+        name: str,
+        parts: WrapperParts | None,
+        open_: int,
+        close: int,
+        *,
+        shown_digits: bool = False,
     ) -> dict[str, object]:
         """What the layers configure under a modifier's own name, composed per property (11.3).
 
@@ -290,9 +309,23 @@ class _Walk:
         only the properties they name, and a property holding ``UNDEFINED``
         names nothing. What leaves is the parser's own copy, so a modifier that
         writes into it reaches neither the next placeholder nor the caller.
+
+        ``shown_digits`` puts beneath that composition the digit properties
+        the same layers compose under ``number``, read name by name, for the
+        format's own ``plural``: a count and the word that agrees with it are
+        two placeholders, and the category is asked of the number as ``number``
+        shows it (section 11.5).
         """
+        layers = (self.defaults, self.props, MISSING if parts is None else parts[2])
         composed: dict[str, object] = {}
-        for layer in (self.defaults, self.props, MISSING if parts is None else parts[2]):
+        if shown_digits:
+            for layer in layers:
+                entry = self.own(layer, "number", open_, close)
+                for prop in SHOWN_DIGITS:
+                    value = self.own(entry, prop, open_, close)
+                    if value is not MISSING and value is not UNDEFINED:
+                        composed[prop] = value
+        for layer in layers:
             for prop, value in own_items(self.own(layer, name, open_, close)):
                 if value is not UNDEFINED:
                     composed[prop] = value
@@ -324,12 +357,7 @@ class _Walk:
             return self._fallback(_Chain(open_, close, depth, key, parts, value_text, inline))
         # What the placeholder declares makes this error, so it does not wait
         # on the value; one a host registered under the name is no selection.
-        if (
-            key is not None
-            and not segments
-            and name in SELECTIONS
-            and modifier is BUILTINS.get(name)
-        ):
+        if key is not None and not segments and name in SELECTIONS and modifier is builtin(name):
             self.report("missing-options", open_, close)
             return self._fallback(_Chain(open_, close, depth, key, parts, value_text, inline))
         if value_text is None:
@@ -342,7 +370,7 @@ class _Walk:
             # answers to the name.
             name = "eq"
             registered = self.registry.get(name)
-            modifier = BUILTINS["eq"] if registered is None else registered
+            modifier = CORE["eq"] if registered is None else registered
         return self._tail(chain, (name, modifier), value_text, segments)
 
     def _fallback(self, chain: _Chain) -> _Result:
@@ -445,7 +473,13 @@ class _Walk:
                 config = ModifierInput(
                     value=value_text,
                     options=options,
-                    props=self.props_for(name, chain.parts, chain.open, chain.close),
+                    props=self.props_for(
+                        name,
+                        chain.parts,
+                        chain.open,
+                        chain.close,
+                        shown_digits=modifier is INTL["plural"],
+                    ),
                     locale=self.locale,
                     default=default,
                 )

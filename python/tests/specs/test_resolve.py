@@ -24,6 +24,7 @@ from curly_message import (
     ModifierInput,
     Option,
     Report,
+    _modifiers,
     create_parser,
     levels,
 )
@@ -554,12 +555,72 @@ def test_a_handler_that_cannot_be_called_is_no_handler(handler: object) -> None:
     assert create_parser(on_report=handler).resolve("{{v:zz; default:D}}") == "D"  # type: ignore[arg-type]
 
 
-def test_this_installation_satisfies_the_core_and_extensions_levels() -> None:
+def resolve_in(message: str, payload: Any, **options: Any) -> tuple[str, list[Report]]:
+    reports: list[Report] = []
+    output = create_parser(on_report=reports.append, **options).resolve(
+        message, payload, locale="en", message_id="id"
+    )
+    return output, reports
+
+
+def test_this_installation_satisfies_the_levels_its_leg_expects(expect_intl: bool) -> None:
+    expected = {"core", "extensions", "intl"} if expect_intl else {"core", "extensions"}
+    assert levels() == frozenset(expected)
+
+
+def test_the_intl_modifiers_are_defined_exactly_where_the_supplier_is(
+    expect_intl: bool,
+) -> None:
+    output, reports = resolve_in("{{n:number}}", {"n": "5"})
+    if expect_intl:
+        assert (output, reports) == ("5", [])
+    else:
+        assert output == ""
+        assert codes(reports) == ["unknown-modifier"]
+
+
+def test_without_the_supplier_the_intl_names_are_unknown_modifiers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_modifiers, "supplier", lambda: False)
+    for name in ("number", "currency", "date", "ago", "plural", "ordinal"):
+        output, reports = resolve_in("{{n:" + name + "; one: a}}", {"n": "1"})
+        assert codes(reports) == ["unknown-modifier"], name
+        assert output == "", name
     assert levels() == frozenset({"core", "extensions"})
 
 
-def test_importing_the_package_loads_no_optional_dependency() -> None:
-    probe = "import sys, curly_message; print(sorted({'babel', 'dataclasses'} & set(sys.modules)))"
+def test_a_host_modifier_overrides_an_intl_name_either_way(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def number(config: ModifierInput) -> str:
+        return "host"
+
+    for present in (True, False):
+        monkeypatch.setattr(_modifiers, "supplier", lambda present=present: present)
+        output, reports = resolve_in(
+            "{{n:number}}", {"n": "1"}, custom_modifiers={"number": number}
+        )
+        assert (output, reports) == ("host", [])
+
+
+def test_a_supplier_that_fails_to_import_fails_each_intl_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(_modifiers, "supplier", lambda: True)
+    monkeypatch.setattr(_modifiers, "_intl", lambda: None)
+    output, reports = resolve_in("{{n:number}} {{n:plural; one: a}}", {"n": "1"})
+    assert output == " "
+    assert codes(reports) == ["failed-modifier", "failed-modifier"]
+
+
+def test_importing_the_package_loads_nothing_it_does_not_need() -> None:
+    # importlib.metadata as well: it costs more to import than the package,
+    # and only the first question about the supplier reads it.
+    probe = (
+        "import sys, curly_message; "
+        "print(sorted({'babel', 'dataclasses', 'importlib.metadata'} & set(sys.modules)))"
+    )
     loaded = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     ).stdout
