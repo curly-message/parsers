@@ -4,6 +4,7 @@ use std::sync::Arc;
 
 use crate::convert::{Converted, Record, Txt};
 use crate::depth::contained;
+use crate::intl::Intl;
 use crate::modifier::Modifier;
 use crate::report::Report;
 use crate::value::{Object, Value};
@@ -17,6 +18,7 @@ pub(crate) struct Config {
     pub(crate) recognize_wrappers: bool,
     pub(crate) modifiers: Modifiers,
     pub(crate) modifier_defaults: Option<Object>,
+    pub(crate) intl: Option<Box<dyn Intl>>,
 }
 
 /// Resolves messages (section 5). It is cheap to clone and may be shared
@@ -34,6 +36,7 @@ pub struct ParserBuilder {
     recognize_wrappers: bool,
     modifiers: Modifiers,
     modifier_defaults: Option<Object>,
+    intl: Option<Box<dyn Intl>>,
 }
 
 /// What a resolution reads besides its message. Every input is optional.
@@ -92,14 +95,20 @@ impl Parser {
             recognize_wrappers: true,
             modifiers: HashMap::new(),
             modifier_defaults: None,
+            intl: None,
         }
     }
 
-    /// The levels this parser claims (section 2): the Core level, and the
+    /// The levels this parser claims (section 2): the Core level; the Intl
+    /// level where it was configured with a facility to delegate to; and the
     /// Extensions level, since any parser takes the modifiers a host
     /// registers.
     pub fn levels(&self) -> &'static [Level] {
-        &[Level::Core, Level::Extensions]
+        if self.config.intl.is_some() {
+            &[Level::Core, Level::Intl, Level::Extensions]
+        } else {
+            &[Level::Core, Level::Extensions]
+        }
     }
 
     /// Resolves a message against a context. Resolution never fails: what it
@@ -149,6 +158,7 @@ impl fmt::Debug for Parser {
             .field("recognize_wrappers", &self.config.recognize_wrappers)
             .field("on_report", &self.config.on_report.is_some())
             .field("modifiers", &self.config.modifiers.len())
+            .field("intl", &self.config.intl.is_some())
             .finish()
     }
 }
@@ -175,6 +185,18 @@ impl ParserBuilder {
         self
     }
 
+    /// The facility the formatting modifiers and the plural selections
+    /// delegate to (sections 11.2 and 11.5): `number`, `currency`, `date`,
+    /// `ago`, `plural` and `ordinal` are known from then on, and the parser
+    /// claims the Intl level. Without one, each of those names is a modifier
+    /// nobody registered, whatever features the crate was built with. A
+    /// modifier a host registers under one of them still replaces the
+    /// format's.
+    pub fn intl(mut self, supplier: impl Intl + 'static) -> Self {
+        self.intl = Some(Box::new(supplier));
+        self
+    }
+
     /// Where reports go (section 14.2). A handler that panics is contained,
     /// and the resolution carries on.
     pub fn on_report(mut self, handler: impl Fn(&Report) + Send + Sync + 'static) -> Self {
@@ -197,6 +219,7 @@ impl ParserBuilder {
                 recognize_wrappers: self.recognize_wrappers,
                 modifiers: self.modifiers,
                 modifier_defaults: self.modifier_defaults,
+                intl: self.intl,
             }),
         }
     }
@@ -209,6 +232,7 @@ impl fmt::Debug for ParserBuilder {
             .field("recognize_wrappers", &self.recognize_wrappers)
             .field("on_report", &self.on_report.is_some())
             .field("modifiers", &self.modifiers.len())
+            .field("intl", &self.intl.is_some())
             .finish()
     }
 }

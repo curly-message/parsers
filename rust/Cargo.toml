@@ -14,6 +14,35 @@ include = ["src/**", "README.md", "CHANGELOG.md", "LICENSE", "Cargo.toml"]
 
 [features]
 default = []
+intl = [
+    "dep:fixed_decimal",
+    "dep:icu_calendar",
+    "dep:icu_datetime",
+    "dep:icu_decimal",
+    "dep:icu_experimental",
+    "dep:icu_locale_core",
+    "dep:icu_plurals",
+    "dep:icu_provider",
+    "dep:icu_time",
+    "dep:jiff",
+    "dep:writeable",
+]
+
+[dependencies]
+fixed_decimal = { version = "0.7", optional = true }
+icu_calendar = { version = "2.3", optional = true }
+icu_datetime = { version = "2.3", optional = true }
+icu_decimal = { version = "2.3", optional = true }
+icu_experimental = { version = "0.6", optional = true }
+icu_locale_core = { version = "2.3", optional = true }
+icu_plurals = { version = "2.3", optional = true }
+# Its `logging` feature sends what ICU4X has to say about missing data to the
+# `log` facade, which the application routes; without it, a debug build
+# writes it to standard error.
+icu_provider = { version = "2.3", optional = true, default-features = false, features = ["logging"] }
+icu_time = { version = "2.3", optional = true }
+jiff = { version = "0.2", optional = true, default-features = false, features = ["std", "tzdb-bundle-always"] }
+writeable = { version = "0.6", optional = true }
 
 [lints]
 workspace = true

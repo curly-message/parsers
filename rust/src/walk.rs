@@ -4,6 +4,7 @@ use std::cell::{Cell, OnceCell};
 use crate::builtins::{Builtin, Selected};
 use crate::convert::{Converted, Record, Txt};
 use crate::depth::{Activation, host_call};
+use crate::formatting::{Asked, Formatting};
 use crate::modifier::{Modifier, ModifierInput};
 use crate::parser::{Config, Context};
 use crate::props::{Layers, Props};
@@ -41,12 +42,14 @@ enum Outcome<'a> {
     Inline(usize, usize),
 }
 
-/// What reading a placeholder came to: its outcome, or a host's modifier to
-/// call for it. The call is made from the walk's loop, so the frame that read
-/// the placeholder is gone from the stack while the modifier holds it.
+/// What reading a placeholder came to: its outcome, or a host's modifier or
+/// a formatting modifier to call for it. The call is made from the walk's
+/// loop, so the frame that read the placeholder is gone from the stack while
+/// the host's code holds it.
 enum Step<'a> {
     Settled(Outcome<'a>),
     Call(&'a dyn Modifier, Box<Ph<'a>>),
+    Intl(Formatting, Box<Ph<'a>>),
 }
 
 // A span being rendered: the text the walk has made of it so far, and the
@@ -98,6 +101,7 @@ impl<'a> Ph<'a> {
 #[derive(Clone, Copy)]
 enum Resolved<'c> {
     Builtin(Builtin),
+    Intl(Formatting),
     Host(&'c dyn Modifier),
 }
 
@@ -105,6 +109,7 @@ impl Resolved<'_> {
     fn is_selection(self) -> bool {
         match self {
             Self::Builtin(builtin) => builtin.is_selection(),
+            Self::Intl(formatting) => formatting.is_selection(),
             Self::Host(_) => false,
         }
     }
@@ -190,6 +195,7 @@ impl<'a> Walker<'a> {
             let outcome = match self.placeholder(open, close, depth) {
                 Step::Settled(outcome) => outcome,
                 Step::Call(modifier, ph) => self.call(modifier, ph),
+                Step::Intl(formatting, ph) => self.intl(formatting, *ph),
             };
 
             match outcome {
@@ -350,15 +356,90 @@ impl<'a> Walker<'a> {
                     Selected::Default => self.chain(ph),
                 })
             }
+            Resolved::Intl(formatting) => Step::Intl(formatting, Box::new(ph)),
             Resolved::Host(modifier) => Step::Call(modifier, Box::new(ph)),
         }
     }
 
+    // The formatting modifiers are known only where a facility was configured
+    // to delegate them to.
     fn modifier_for(&self, name: &str) -> Option<Resolved<'a>> {
-        match self.config.modifiers.get(name) {
-            Some(modifier) => Some(Resolved::Host(&**modifier)),
-            None => Builtin::named(name).map(Resolved::Builtin),
+        if let Some(modifier) = self.config.modifiers.get(name) {
+            return Some(Resolved::Host(&**modifier));
         }
+
+        if let Some(builtin) = Builtin::named(name) {
+            return Some(Resolved::Builtin(builtin));
+        }
+
+        self.config
+            .intl
+            .as_ref()
+            .and(Formatting::named(name))
+            .map(Resolved::Intl)
+    }
+
+    // The steps of sections 11.2 and 11.5 in their order: the locale, then
+    // what the modifier tests itself, then the request. The facility is host
+    // code, so how it fails and whether it came back are the placeholder's to
+    // settle. A locale nobody supplied is the one failure the chain does not
+    // answer: a default stands in for a value, never for the locale it would
+    // have been formatted in.
+    fn intl(&self, formatting: Formatting, ph: Ph<'a>) -> Outcome<'a> {
+        let Some(facility) = self.config.intl.as_deref() else {
+            return self.chain(ph);
+        };
+        let Some(locale) = self.locale.filter(|locale| !locale.is_empty()) else {
+            self.report(Code::MissingLocale, ph.open, ph.close);
+
+            return Outcome::Done(Txt::Borrowed(""));
+        };
+        let value = ph.value_text.as_deref().unwrap_or_default();
+        let input = match formatting.input(value, &ph.options) {
+            Ok(input) => input,
+            Err(Asked::Option(at)) => return self.option(ph, at),
+            Err(_) => return self.failed(ph),
+        };
+        let mut configured = formatting.configure(&self.layers(&ph));
+        let answer = match formatting.ask(input, &mut configured) {
+            Asked::Format => Some(
+                host_call(|| facility.format(locale, &configured.request))
+                    .and_then(Result::ok)
+                    .map(Ok),
+            ),
+            Asked::Select => Some(
+                host_call(|| facility.select(locale, &configured.request))
+                    .and_then(Result::ok)
+                    .map(Err),
+            ),
+            Asked::Option(_) | Asked::Failed => None,
+        };
+
+        match answer {
+            Some(Some(Ok(text))) => Outcome::Done(Txt::Owned(text)),
+            Some(Some(Err(category))) => {
+                let category = category.as_str();
+
+                match ph.options.iter().position(|option| option.key == category) {
+                    Some(at) => self.option(ph, at),
+                    None => self.chain(ph),
+                }
+            }
+            Some(None) | None => self.failed(ph),
+        }
+    }
+
+    fn option(&self, ph: Ph<'a>, at: usize) -> Outcome<'a> {
+        match ph.options.get(at) {
+            Some(option) => Outcome::Inline(option.value.0, option.value.1),
+            None => self.chain(ph),
+        }
+    }
+
+    fn failed(&self, ph: Ph<'a>) -> Outcome<'a> {
+        self.report(Code::FailedModifier, ph.open, ph.close);
+
+        self.chain(ph)
     }
 
     // A modifier is host code: what it answers, how it fails and whether it

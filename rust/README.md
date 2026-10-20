@@ -16,9 +16,10 @@ assert_eq!(parser.resolve(greeting, &Context::new()), "Hello, Guest!");
 
 The parser claims the Core level of the format, the syntax, the resolution
 and the comparisons `eq`, `ne`, `lt`, `lte`, `gt` and `gte`, and the
-Extensions level: the modifiers a host registers. A placeholder naming a
-modifier nobody registered resolves to its fallback chain and reports
-`unknown-modifier`; it is never run as a comparison instead.
+Extensions level: the modifiers a host registers. It claims the Intl level
+too where it is handed a facility to format with (see [Intl](#intl)). A
+placeholder naming a modifier nobody registered resolves to its fallback chain
+and reports `unknown-modifier`; it is never run as a comparison instead.
 
 ## Resolving a message
 
@@ -92,6 +93,114 @@ panic are failures: the placeholder takes its fallback chain and reports
 `eq` included, replaces the comparison: it is called with whatever options
 the placeholder declares, none included.
 
+## Intl
+
+The formatting modifiers `number`, `currency`, `date` and `ago`, and the
+plural selections `plural` and `ordinal` (sections 11.2 and 11.5), delegate
+to a facility the parser is built with: an [`Intl`], handed a request in the
+vocabulary of ECMA-402, the facility, the options it is constructed with and
+the input. The crate's own is `IcuIntl`, over [ICU4X](https://github.com/unicode-org/icu4x),
+behind the `intl` feature:
+
+```sh
+cargo add curly-message-parser --features intl
+```
+
+```rust
+# #[cfg(feature = "intl")]
+# {
+use curly_message_parser::{Context, IcuIntl, Object, Parser};
+
+let parser = Parser::builder().intl(IcuIntl::new()).build();
+let payload = Object::new().with("n", 1234.5678).with("files", 3);
+let context = Context::new().payload(&payload).locale("en");
+
+assert_eq!(parser.resolve("{{n:number}}", &context), "1,234.57");
+assert_eq!(
+    parser.resolve("{{files:plural; one:# file; other:# files}}", &context),
+    "# files"
+);
+# }
+```
+
+The feature configures nothing. A parser claims the Intl level only where
+its builder is handed a facility, so one crate enabling `intl` never changes
+what another crate's parser resolves: without `.intl(..)`, each of the six
+names is a modifier nobody registered. A host may hand a facility of its own,
+with or without the feature, and a modifier a host registers under one of the
+names still replaces the format's. A facility that refuses a request, or
+panics, is a modifier that could not answer: the placeholder takes its
+fallback chain and reports `failed-modifier`. With no locale, or an empty
+one, a formatting modifier renders the empty string and reports
+`missing-locale`.
+
+`IcuIntl` reads the options as ECMA-402 reads them, coercions included: a
+property ECMA-402 raises a `RangeError` or a `TypeError` for is a refusal,
+and so is a locale ICU4X cannot read (`en_US`). It reads a property as
+ECMAScript's ToNumber and ToString would, except that an array or an object
+reads as no number and as no text, where ECMAScript would read the text its
+`toString` gives.
+
+* **Locale data** is ICU4X 2.3's, compiled into the binary: no file to ship,
+  and the linker drops what is not used. It adds about 7 MB to a stripped
+  release binary (x86_64 Linux: 0.5 MB without the feature, 7.4 MB with every
+  modifier used), most of it time zones and their names. ICU4X 2.3 is a
+  locked dependency: with `intl`, an application's graph must hold ICU4X
+  2.3.x. What ICU4X has to say about data it lacks goes to the
+  [`log`](https://docs.rs/log) facade, which the application routes.
+* **Dates** are read as a timestamp first, as section 11.2 orders it, and
+  otherwise by this grammar: `YYYY[-MM[-DD]]`, or `+YYYYYY[-MM[-DD]]` or
+  `-YYYYYY[-MM[-DD]]`; then optionally `T`, `t` or one space and
+  `HH:mm[:ss[.fraction]]`; then, after at most one space, `Z`, `z`, `UTC`,
+  or an offset of `+` or `-` and `HH:mm`, `HHmm` or `HH:mm:ss`; then any
+  number of bracketed annotations, read and ignored. That reads RFC 3339,
+  `Value::Date`'s own text, jiff's `Timestamp` and `Zoned`, chrono's
+  `DateTime` and `NaiveDateTime` and the `time` crate's `OffsetDateTime` as
+  their `Display` writes them. What names no offset is in UTC.
+* **Time zones.** A request naming no `timeZone` formats in UTC: there is no
+  host zone to read, and reading the system's would make a message's text
+  depend on the machine it is resolved on. `UTC`, `Etc/UTC`, `Etc/GMT` and
+  `GMT` are UTC; `+` or `-` and `HH`, `HHmm` or `HH:mm` is a fixed offset;
+  and an IANA name is read from
+  [jiff](https://github.com/BurntSushi/jiff)'s bundled time zone database at
+  the instant formatted. Past the last instant jiff represents (year 9999),
+  the offset is the one at the instant whole 400-year Gregorian cycles
+  earlier, on which a zone's yearly rule repeats; before the first, it is
+  the one there.
+* **What `IcuIntl` cannot express** is listed in `UNEXPRESSIBLE`. A request
+  naming such a property formats with what is expressed, as section 11.2 has
+  it, and never takes the chain on its account:
+
+  | Request | Properties | When |
+  | --- | --- | --- |
+  | `NumberFormat` | `notation`, `compactDisplay`, `unit`, `unitDisplay`, `localeMatcher` | always |
+  | `NumberFormat` | `minimumIntegerDigits`, `minimumFractionDigits`, `maximumFractionDigits`, `minimumSignificantDigits`, `maximumSignificantDigits`, `roundingIncrement`, `roundingMode`, `roundingPriority`, `trailingZeroDisplay`, `useGrouping` | `style` is `currency`: ICU4X formats an amount with the currency's own digits and the locale's grouping |
+  | `DateTimeFormat` | `weekday`, `era`, `year`, `month`, `day`, `dayPeriod`, `hour`, `minute`, `second`, `fractionalSecondDigits`, `timeZoneName`, `hour12`, `hourCycle`, `formatMatcher`, `localeMatcher` | always |
+  | `RelativeTimeFormat` | `localeMatcher` | always |
+  | `PluralRules` | `localeMatcher` | always |
+
+* **Text that differs from Node's.** Where both express a request, the text
+  is CLDR's through ICU4X's patterns, and a test holds it to Node 22's
+  answers. Those it knows to differ:
+  * a time writes CLDR's narrow no-break space before its day period
+    (`10:00\u{202f}AM`), where V8 writes a space;
+  * with no style, ICU4X pads day and month outside English: `05.03.2024`
+    (de), `05. 03. 2024` (cs), `2024/03/05` (ja), `05-03-2024` (nl),
+    `05.03.2024` (pl), where Node writes `5.3.2024`, `5. 3. 2024`,
+    `2024/3/5`, `5-3-2024`, `5.03.2024`;
+  * before year 1, ICU4X shows the era (`1/1/2 BC`), which Node omits;
+  * with `dateStyle: "short"`, a year outside 1950 to 2049 is written in full
+    (`6/15/2050`, `15.06.2050` in de), where Node writes two digits
+    (`6/15/50`, `15.06.50`);
+  * Czech `timeStyle: "full"` has no comma before the zone name;
+  * English digits of the `arab` numbering system keep the Latin grouping
+    separator.
+
+The ICU4X crates are licensed under
+[Unicode-3.0](https://www.unicode.org/license.txt), and jiff and its time
+zone database under MIT or the Unlicense; enabling `intl` brings their terms
+into the binary.
+
 ## Reports
 
 What a resolution could not resolve leaves through the handler a parser is
@@ -147,9 +256,10 @@ starts. Each holds a walk activation, and one that would take the thread past
 `MAX_HOST_DEPTH` does not start. It answers the empty string, and the call it
 was started from is treated as one that did not come back: a modifier's
 reports `failed-modifier`. A test reaches `MAX_HOST_DEPTH` along each of
-these ways on a thread of 512 KiB, in a debug build: on x86-64 Linux the
-deepest, a value's `Display` inside a structure, takes about 200 KiB there and
-about 55 KiB in a release build.
+these ways on a thread of 512 KiB, in a debug build. On x86-64 Linux the
+deepest takes about 240 KiB there, a `Display` of a date's option that the
+`intl` feature reads, and about 70 KiB in a release build, where the deepest
+is a `Display` of an option of `plural`.
 
 ## Values
 
@@ -234,6 +344,7 @@ resolution resolves.
 
 [MIT](LICENSE)
 
+[`Intl`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/trait.Intl.html
 [`Value`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/enum.Value.html
 [`Object`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/struct.Object.html
 [`Props`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/struct.Props.html

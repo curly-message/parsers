@@ -8,6 +8,12 @@ mod builtins;
 mod convert;
 mod cst;
 mod depth;
+#[cfg(feature = "intl")]
+mod ecma;
+mod formatting;
+#[cfg(feature = "intl")]
+mod icu;
+mod intl;
 mod modifier;
 mod number;
 mod parser;
@@ -19,6 +25,9 @@ mod value;
 mod walk;
 
 pub use cst::{Children, NodeKind, NodeRef, Tree, cst};
+#[cfg(feature = "intl")]
+pub use icu::{IcuIntl, UNEXPRESSIBLE};
+pub use intl::{Api, Category, Input, Intl, Refusal, Request, Unexpressible, Unit};
 pub use modifier::{Modifier, ModifierError, ModifierInput};
 pub use parser::{Context, Level, Message, Parser, ParserBuilder};
 pub use props::Props;
