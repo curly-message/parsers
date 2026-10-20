@@ -8,8 +8,10 @@ mod builtins;
 mod convert;
 mod cst;
 mod depth;
+mod modifier;
 mod number;
 mod parser;
+mod props;
 mod report;
 mod scan;
 mod syntax;
@@ -17,7 +19,9 @@ mod value;
 mod walk;
 
 pub use cst::{Children, NodeKind, NodeRef, Tree, cst};
+pub use modifier::{Modifier, ModifierError, ModifierInput};
 pub use parser::{Context, Level, Message, Parser, ParserBuilder};
+pub use props::Props;
 pub use report::{Code, Origin, Report};
 pub use value::{Array, Object, Value};
 
