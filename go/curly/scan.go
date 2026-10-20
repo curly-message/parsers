@@ -309,3 +309,75 @@ func separated(s string, from, to int, sep byte, sc *scanner) [][2]int {
 
 	return append(parts, [2]int{start, to})
 }
+
+// segment is an option a placeholder declares, its value left as a span to
+// read: a value is message text that may hold a placeholder, and reading it is
+// work a modifier asks for rather than work collecting it does (section 9.4).
+type segment struct {
+	key   string
+	value [2]int
+}
+
+// declaration is what a placeholder declares. Every name arrives unescaped,
+// because a name answers to itself rather than to the spelling a message
+// needed to write it; every value arrives unread.
+type declaration struct {
+	hasKey     bool
+	key        string
+	modifier   string
+	options    []segment
+	hasDefault bool
+	inline     [2]int
+}
+
+func named(s string, from, to int) (string, bool) {
+	start, end := trimmed(s, from, to)
+
+	return unesc(s[start:end]), start == end
+}
+
+func parsePlaceholder(s string, open, close int, sc *scanner) declaration {
+	segments := separated(s, open+2, close-2, ';', sc)
+	selector := segments[0]
+	// The selector's colon is the first one no escape claims, and everything
+	// after it is the modifier name (section 6, note 3).
+	key := separated(s, selector[0], selector[1], ':', nil)[0]
+
+	var d declaration
+
+	name, empty := named(s, key[0], key[1])
+	d.hasKey, d.key = !empty, name
+	d.modifier, _ = named(s, min(key[1]+1, selector[1]), selector[1])
+
+	for _, seg := range segments[1:] {
+		optionKey := separated(s, seg[0], seg[1], ':', sc)[0]
+		k, _ := named(s, optionKey[0], optionKey[1])
+
+		if k == "" {
+			continue
+		}
+
+		// The first colon is the separator and every later one is value. A
+		// segment that names no value stands for itself; one that ends at its
+		// colon declares the empty string.
+		value := optionKey
+
+		if optionKey[1] < seg[1] {
+			value = [2]int{optionKey[1] + 1, seg[1]}
+		}
+
+		start, end := trimmed(s, value[0], value[1])
+
+		if k == "default" {
+			if !d.hasDefault {
+				d.hasDefault, d.inline = true, [2]int{start, end}
+			}
+
+			continue
+		}
+
+		d.options = append(d.options, segment{key: k, value: [2]int{start, end}})
+	}
+
+	return d
+}
