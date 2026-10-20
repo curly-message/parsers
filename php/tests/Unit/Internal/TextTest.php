@@ -78,6 +78,51 @@ final class TextTest extends TestCase
         self::assertSame($expected, Text::trimmed($text, 0, strlen($text)));
     }
 
+    /** @return iterable<string, array{string, string}> */
+    public static function values(): iterable
+    {
+        yield 'no padding' => ['1', '1'];
+        yield 'padding of every member' => [implode('', Text::WHITESPACE) . '1' . implode('', array_reverse(Text::WHITESPACE)), '1'];
+        yield 'blanks inside kept' => ["\u{A0} 1\u{3000}2 \u{A0}", "1\u{3000}2"];
+        yield 'all padding' => ["\u{A0} \u{FEFF}", ''];
+        yield 'the empty text' => ['', ''];
+        yield 'a NUL byte' => ["\0 1 \0", "\0 1 \0"];
+        yield 'a near miss of a blank' => ["\u{85}\u{200B}1\u{180E}\u{2027}", "\u{85}\u{200B}1\u{180E}\u{2027}"];
+        yield 'a blank cut short' => ["\xC2 1 \xE3\x80", "\xC2 1 \xE3\x80"];
+        yield 'a stray lead byte before a blank' => ["\xE2\u{2000}1\xE2\u{2000}", "\xE2\u{2000}1\xE2"];
+    }
+
+    /**
+     * A blank, or a blank cut short, split across each edge at which the
+     * padding is read a slice at a time from either end: slices of 64 bytes,
+     * twice the last up to 64 KiB, then two more of 64 KiB.
+     *
+     * @return iterable<string, array{string, string}>
+     */
+    public static function sliceEdges(): iterable
+    {
+        for ($edge = 0, $size = 64; $edge < 3 * 65536; $size = min($size * 2, 65536)) {
+            $edge += $size;
+
+            foreach (["\u{A0}" => 1, "\u{3000}" => 2, "\u{2028}" => 1] as $blank => $before) {
+                $front = str_repeat(' ', $edge - $before);
+                $name = sprintf('%s at %d bytes', bin2hex($blank), $edge);
+
+                yield "$name, at the front" => [$front . $blank . '1 ', '1'];
+                yield "$name, at the back" => [' 1' . $blank . strrev($front), '1'];
+                yield "$name cut short, at the front" => [$front . substr($blank, 0, -1) . '1', substr($blank, 0, -1) . '1'];
+                yield "$name cut short, at the back" => ['1' . substr($blank, 1) . strrev($front), '1' . substr($blank, 1)];
+            }
+        }
+    }
+
+    #[DataProvider('values')]
+    #[DataProvider('sliceEdges')]
+    public function testDropsTheWhitespaceClassFromAValue(string $text, string $expected): void
+    {
+        self::assertSame($expected, Text::unpadded($text));
+    }
+
     public function testSeparatesPassingOverEscapesAndNestedPlaceholders(): void
     {
         $text = 'a;b\;c;{{x;y}};d';
