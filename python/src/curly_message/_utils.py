@@ -7,7 +7,10 @@ expression touches message text: every scan here is a loop over indices.
 
 from __future__ import annotations
 
-from typing import Final
+import enum
+import functools
+import json
+from typing import Final, cast
 
 LINE_TERM: Final = ("\n", "\r", "\u2028", "\u2029")
 """The format's ``line-term`` production (section 6, note 1).
@@ -61,6 +64,50 @@ _KEY: Final = 0
 _MODIFIER: Final = 1
 _OPTION_KEY: Final = 2
 _OPTION_VALUE: Final = 3
+
+
+class _Missing(enum.Enum):
+    MISSING = "MISSING"
+
+    def __repr__(self) -> str:
+        return "MISSING"
+
+
+MISSING: Final = _Missing.MISSING
+"""No entry at all, which a container answers apart from an entry holding ``UNDEFINED``."""
+
+UNFINISHED: Final = (RecursionError, MemoryError)
+"""What fails to answer a question rather than answering it."""
+
+
+def own_value(container: object, name: str) -> object:
+    """The entry a container holds under ``name``, or ``MISSING``.
+
+    Only ``dict`` storage holds entries, read through ``dict``'s own lookup: a
+    subclass's ``__getitem__``, ``get`` or ``__missing__`` never answers, and a
+    mapping of any other type holds nothing (section 9.2). The lookup itself
+    can still run host code, a colliding stored key's ``__eq__``, so the
+    caller contains it.
+    """
+    if not issubclass(type(container), dict):
+        return MISSING
+    return dict.get(cast(dict[str, object], container), name, MISSING)
+
+
+def own_items(container: object) -> list[tuple[str, object]]:
+    """The entries a container holds under a name, in its order.
+
+    A stored key names an entry when it is a ``str``, read through ``str``'s own
+    storage so no override runs; any other key names nothing. Enumerating
+    ``dict`` storage runs no host code.
+    """
+    if not issubclass(type(container), dict):
+        return []
+    return [
+        (str.__str__(key), value)
+        for key, value in dict.items(cast(dict[object, object], container))
+        if issubclass(type(key), str)
+    ]
 
 
 def is_blank(value: str) -> bool:
@@ -333,3 +380,36 @@ def parse_placeholder(message: str, open_: int, close: int, scan: Scanner) -> Pa
             continue
         options.append((name, value[0], value[1]))
     return None if key_empty else key, modifier, options, inline_default
+
+
+MAX_REPORTED_LENGTH: Final = 120
+
+
+@functools.cache
+def _escape_table() -> dict[int, str]:
+    """Every code point a report must not carry raw, mapped to its ``\\u`` escape.
+
+    The format's own terminators come from ``LINE_TERM``. A consumer that
+    splits a report into lines may use the host's notion instead, so every code
+    point ``str.splitlines`` breaks on is escaped too, read off the host rather
+    than spelled out; a lone surrogate is escaped so that a handler encoding to
+    UTF-8 cannot fail on one.
+    """
+    breaking = [chr(code) for code in range(0x3000) if len(f"a{chr(code)}b".splitlines()) > 1]
+    surrogates = map(chr, range(0xD800, 0xE000))
+    return {ord(c): f"\\u{ord(c):04x}" for c in (*LINE_TERM, *breaking, *surrogates)}
+
+
+def excerpt(source: str, open_: int, close: int) -> str:
+    """The text a report carries for the span ``[open_, close)`` of a message.
+
+    Only as much of the span is copied as the cut keeps: a message nested deep
+    holds every inner placeholder inside each outer one, and copying whole
+    spans would cost the square of its depth. The cut falls at 120 code points,
+    which never splits a character, and the result is escaped so that it holds
+    no line terminator.
+    """
+    span = source[open_ : min(close, open_ + MAX_REPORTED_LENGTH + 1)]
+    if len(span) > MAX_REPORTED_LENGTH:
+        span = span[:MAX_REPORTED_LENGTH] + "..."
+    return json.dumps(span, ensure_ascii=False)[1:-1].translate(_escape_table())
