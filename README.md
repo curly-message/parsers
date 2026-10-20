@@ -31,17 +31,33 @@ tests and version line. Release tags are namespaced by directory
 (`js-v1.0.0`), so an implementation can leave for its own repository without
 that being a breaking change for the others.
 
+## Pre-commit hook
+
+`.githooks/pre-commit` runs the check of each implementation directory a
+commit touches, and skips a directory whose tools are missing, saying which
+and how to install them, rather than failing the commit. `npm ci` in `js/`
+installs it; without Node, `git config core.hooksPath .githooks` does. Git
+then runs every hook from `.githooks/`, and none from `.git/hooks/`.
+
 ## Benchmarks
 
-`npm run bench` in an implementation directory measures what its build costs:
-counts, such as what checking a call costs a type checker, sizes, and times.
-A PR that touches the directory is benchmarked against its base by
-`bench.yml`, which posts the table on the PR (a PR from a fork finds it in the
-job's summary). A count that grew, a row gone missing or changing kind, or a
-row that fails on the base fails the check unless the PR carries the
-`bench-accepted` label; adding or removing the label runs it again.
+Each implementation directory has a benchmark, run by the command its README
+names (`npm run bench` in `js/`), that measures what its build costs: counts,
+such as what checking a call costs a type checker, sizes, and times. A PR is
+benchmarked against its base by `bench.yml`, for each implementation it
+touches, which posts a table per implementation on the PR (a PR from a fork
+finds them in the job's summary). A count that grew, a row gone missing or
+changing kind, or a row that fails on the base fails the check unless the PR
+carries the `bench-accepted` label; adding or removing the label runs it
+again. A base that does not hold the implementation, as on the PR that adds
+it, compares nothing and fails nothing.
 
 ## Releasing
+
+Each implementation is released from `main` by a workflow of its own, with a
+tag namespaced by its directory.
+
+### JavaScript
 
 A release is cut from `main` by the **JavaScript parser publish** workflow
 (`.github/workflows/publish-js.yml`, started by hand). The changelog's pending

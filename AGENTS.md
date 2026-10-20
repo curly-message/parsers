@@ -33,9 +33,35 @@ Official implementations of the
   The publish workflow cuts them (`.github/workflows/publish-js.yml`; the
   README's Releasing section says what it does).
 - The root holds only `README.md`, this file, `CLAUDE.md`, `LICENSE`,
-  `.gitignore`, and `.github/workflows/`.
+  `.gitignore`, `.githooks/` and `.github/workflows/`. An implementation
+  directory may hold a `.gitignore` of its own, for what only its toolchain
+  writes.
+- **One pre-commit hook for every directory.** `.githooks/pre-commit`, POSIX
+  `sh`, runs once `core.hooksPath` is `.githooks` (`npm ci` in `js/` sets it,
+  `git config core.hooksPath .githooks` sets it without Node). For each
+  top-level directory a commit touches, it runs `.githooks/<dir>.sh` from
+  inside that directory, where there is one. A script exits 0 when its check
+  passes; 75 when a tool it needs is missing, having printed which and how to
+  install it, which skips the directory (`<dir>: skipped`) without failing the
+  commit; and anything else to fail the commit. An implementation's check is
+  its script, `.githooks/js.sh` for `js/`.
+- **`bench.yml` reads its packages from the tree**: each directory that holds
+  a `bench/rows.mjs` outside a `bench/check/`, with its own copy of
+  `bench/harness.mjs` and `bench/check/`. On a PR it benchmarks those with a
+  changed file that is neither a `*.md` nor under the package's `tests/`, or
+  all of them where `bench.yml` itself changed. It sets up Node, which the
+  harness runs on, and a toolchain per manifest the package holds: uv for a
+  `pyproject.toml`, Go from a `go.mod`, PHP from the `.php-version` beside a
+  `composer.json` (with `intl` and `opcache`), and the runner's rustup, which
+  reads `rust-toolchain.toml`, for a `Cargo.toml`. Each side is prepared from
+  the package's directory, by `sh bench/prepare.sh` where the package has
+  one, and by `npm ci --ignore-scripts && npm run build` otherwise. A base
+  that does not hold the package is not prepared, and the harness compares
+  nothing against it.
 - Issues live in the family's
   [shared tracker](https://github.com/curly-message/spec/issues).
+
+## js/
 
 Tech stack of `js/` — **ground truth, do not assume otherwise**:
 
@@ -77,7 +103,7 @@ Map of `js/`:
 | `tests/conformance/adapter.ts` | the adapter of the specification's section 14.3 |
 | `bench/rows.mjs` | the rows of the benchmark, each read off the build; `bench/harness.mjs` measures them, `bench/check/` holds the rows it is checked on, and both are the same in every repository of the family |
 
-## Architecture you must respect
+### Architecture you must respect
 
 **The public surface is released.** One entry point carries `createParser`
 for resolution, `createExtractor` for the build-time scanner and `cst` for
@@ -133,7 +159,7 @@ the message rather than a comparison to run.
 **Docs in each implementation directory** are its `README.md` (the npm page),
 its `CHANGELOG.md` and the doc comments in `src/types.ts`.
 
-## Tests
+### Tests
 
 - `js/tests/specs/`: `index.spec.ts` for resolution, `extract.spec.ts` for
   the parameters a message names, `cst.spec.ts` for the tree a message is
