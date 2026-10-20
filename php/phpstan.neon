@@ -10,6 +10,9 @@ parameters:
         - src
         - tests
         - tools
+        - conformance/src
+        - conformance/bin
+        - conformance/bin/curly-message-conformance
     excludePaths:
         - tools/qa
     # A property that exists to be held, and so is never read, says so.

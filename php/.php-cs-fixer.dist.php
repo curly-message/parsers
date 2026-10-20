@@ -22,5 +22,6 @@ return (new PhpCsFixer\Config())
             ->in(__DIR__)
             ->exclude(['vendor', 'tools/qa', 'conformance/.set'])
             ->ignoreDotFiles(false)
-            ->name('*.php'),
+            ->name('*.php')
+            ->append([__DIR__ . '/conformance/bin/curly-message-conformance']),
     );

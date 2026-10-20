@@ -1,0 +1,83 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+// The runner as a command: runs the pinned set, or the fixtures of a
+// directory, against the adapter a PHP file returns, and with --audit runs
+// the catalogue of defects against it. Exits 1 where a case failed or a defect
+// was missed, and 2 where the run could not be made.
+
+use CurlyMessage\Conformance\Adapter;
+use CurlyMessage\Conformance\Options;
+use CurlyMessage\Conformance\Runner;
+
+require dirname(__DIR__, 2) . '/vendor/autoload.php';
+
+const USAGE = 'Usage: curly-message-conformance <adapter.php> [--levels core,intl,extensions] [--fixtures <directory>] [--audit]';
+
+/** @param list<string> $arguments */
+function main(array $arguments): int
+{
+    $path = null;
+    $levels = null;
+    $fixtures = null;
+    $audit = false;
+
+    for ($index = 0; $index < count($arguments); $index += 1) {
+        $argument = $arguments[$index];
+
+        if ($argument === '--audit') {
+            $audit = true;
+        } elseif ($argument === '--levels' || $argument === '--fixtures') {
+            $value = $arguments[$index + 1] ?? throw new RuntimeException(USAGE);
+            $index += 1;
+
+            if ($argument === '--levels') {
+                $levels = explode(',', $value);
+            } else {
+                $fixtures = $value;
+            }
+        } elseif (!str_starts_with($argument, '--') && $path === null) {
+            $path = $argument;
+        } else {
+            throw new RuntimeException(USAGE);
+        }
+    }
+
+    if ($path === null) {
+        throw new RuntimeException(USAGE);
+    }
+
+    $adapter = (static fn(string $file): mixed => require $file)($path);
+
+    if (!$adapter instanceof Adapter) {
+        throw new RuntimeException("{$path} returns no adapter: return a " . Adapter::class . ' from it.');
+    }
+
+    $options = new Options($fixtures === null ? null : Runner::pinned()->load($fixtures), $levels);
+
+    if (!$audit) {
+        $result = Runner::run($adapter, $options);
+        fwrite(STDOUT, Runner::summarize($result) . "\n");
+
+        return $result->failed === [] ? 0 : 1;
+    }
+
+    $missed = 0;
+
+    foreach (Runner::audit($adapter, $options) as $audited) {
+        $missed += $audited->outcome === 'missed' ? 1 : 0;
+        fwrite(STDOUT, strtoupper($audited->outcome) . " {$audited->defect->id}: expected {$audited->defect->expects}, observed {$audited->observed}.\n");
+    }
+
+    return $missed === 0 ? 0 : 1;
+}
+
+try {
+    exit(main(array_slice($argv, 1)));
+} catch (Throwable $error) {
+    fwrite(STDERR, $error->getMessage() . "\n");
+
+    exit(2);
+}
