@@ -18,3 +18,7 @@
   past the bound, and one read while it renders, answers the empty string
   and fails host code of its chain: the code that read it, unless other code
   of the chain running then returns first.
+- The Intl level, delegated to the host's facility through `Options.Intl`:
+  `number`, `currency`, `date`, `ago`, `plural` and `ordinal`, with every
+  rule of the format decided in the parser and only the text and the plural
+  category asked of the supplier.
