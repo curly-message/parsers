@@ -17,7 +17,7 @@ $home = dirname(__DIR__);
 // is one export-ignore missed, and one missing from the second is a release
 // that cannot be installed or read.
 const SHIPPED = ['composer.json', 'README.md', 'CHANGELOG.md', 'LICENSE'];
-const REQUIRED = ['composer.json', 'src/Parser.php'];
+const REQUIRED = ['composer.json', 'README.md', 'CHANGELOG.md', 'LICENSE', 'src/Parser.php'];
 
 /**
  * Runs a command, its output passed through, and stops the script where it
