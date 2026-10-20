@@ -9,7 +9,13 @@ import pytest
 ROOT = Path(__file__).resolve().parents[2]
 
 SOURCES = sorted(
-    [*ROOT.joinpath("src").rglob("*.py"), *ROOT.joinpath("tests").rglob("*.py"), ROOT / "tasks.py"]
+    [
+        *ROOT.joinpath("src").rglob("*.py"),
+        *ROOT.joinpath("tests").rglob("*.py"),
+        *ROOT.joinpath("bench").rglob("*.py"),
+        *ROOT.joinpath("bench").rglob("*.mjs"),
+        ROOT / "tasks.py",
+    ]
 )
 
 
@@ -23,3 +29,4 @@ def test_source_is_ascii(path: Path) -> None:
 def test_sources_are_found() -> None:
     assert ROOT.joinpath("src", "curly_message", "__init__.py") in SOURCES
     assert ROOT.joinpath("tasks.py") in SOURCES
+    assert ROOT.joinpath("bench", "rows.mjs") in SOURCES
