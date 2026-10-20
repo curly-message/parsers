@@ -28,8 +28,9 @@ placeholder it is in, and `Options.OnReport` is told about it.
 
 The parser implements the Core level of the format: substitution, the
 fallback chain, value wrappers (`Options.IgnoreWrappers` turns their
-recognition off) and the comparisons `eq`, `ne`, `lt`, `gt`, `lte` and `gte`.
-Every other modifier name is unknown.
+recognition off) and the comparisons `eq`, `ne`, `lt`, `gt`, `lte` and `gte`;
+and the Extensions level: the modifiers a host registers. Every other
+modifier name is unknown.
 
 ### Values
 
@@ -112,15 +113,21 @@ panics on a nil pointer receiver writes `<nil>`, as fmt does. A pointer that
 fmt writes as an address is written as an address. Each value converts once per resolution however
 many placeholders read it.
 
-Host code the parser calls, a method of a value or the reporting handler,
-must not change the payload while the resolution reads it, and must not
-resolve without end: neither can be contained. Go ends the process when a
-goroutine's stack outgrows its maximum, with no error a program can recover
-from, and the parser sets no bound on the resolutions in progress, on a
-goroutine or in the process. So a method of a value or a reporting handler
-that resolves a message reaching itself again ends the process rather than
-the placeholder taking its fallback chain: this port does not meet section
-13's requirement to contain that failure.
+A method the parser calls must not change the payload while the resolution
+reads it, and must not resolve without end where nothing counts it: neither
+can be contained. Go ends the process when a goroutine's stack outgrows its
+maximum, with no error a program can recover from, so the parser bounds the
+resolutions in progress itself where it can count them: those a modifier
+asks for through an `Input` (see Host modifiers). Go names no goroutine a
+count could be kept for, so a resolution `Parser.Resolve` starts counts as
+the first of a chain of its own wherever it is called from. A method of a
+value, a reporting handler, or a modifier that resolves through
+`Parser.Resolve` rather than an `Input` of its chain, leaves the count, as
+section 13 says a chain leaving a thread of execution leaves its bound; yet
+that chain stays on the goroutine's stack, so one that reaches itself
+without end ends the process rather than the placeholder taking its
+fallback chain. That is the host's to avoid: there this port does not meet
+section 13's requirement to contain the failure.
 
 ### Comparisons
 
@@ -138,13 +145,145 @@ numbers with `strconv.ParseFloat` after trimming the format's whitespace:
 `Inf`, `1e3` and `1_000` are numbers, and `0x10`, blank text and `NaN` are
 not.
 
+### Host modifiers
+
+```go
+p := curly.New(curly.Options{
+	CustomModifiers: map[string]curly.Modifier{
+		"upper": func(in curly.Input) (any, error) {
+			return strings.ToUpper(in.Value), nil
+		},
+	},
+})
+
+p.Resolve("{{name:upper}}", curly.Context{
+	Payload: map[string]any{"name": "Alice"},
+}) // "ALICE"
+```
+
+`Options.CustomModifiers` registers a modifier by name; one named as a
+modifier of the format replaces it, so a host `eq` also answers a placeholder
+that selects without naming a modifier, and over a selection nothing reports
+`missing-options`. A nil entry registers nothing. A modifier is asked only
+about a value: a placeholder naming no key, or a key the payload lacks, takes
+its fallback chain without asking.
+
+A modifier receives an `Input`:
+
+- `Value`, the text the value became.
+- `Options`, in the order the placeholder writes them, duplicates kept.
+  `Option.Value()` renders an option on its first call; one never asked for
+  is never resolved and reports nothing. `Input.Default()` is the fallback
+  chain, walked on its first call.
+- `Props`, the properties written under the modifier's own name, composed
+  property by property from `Options.ModifierDefaults`, then
+  `Context.Props`, then the `props` member of the wrapper the value came in.
+  A layer's entry is read where it is a map keyed by a string type; a
+  property holding `curly.Undefined{}` names nothing, and one holding `nil`
+  names null. The map is the modifier's own, empty where no layer wrote.
+- `Locale`, `Context.Locale` as the caller supplied it: nil where it supplied
+  none, and a copy of its own otherwise.
+
+The answer becomes text as a payload value does, and spends the output but
+none of the read budget. An answer of nil or `curly.Undefined{}` is none, and
+the placeholder takes its fallback chain; so it does, reporting
+`failed-modifier`, where the modifier returns an error or panics, whose value
+is never printed, and reporting `unserializable-value` where nothing
+describes the answer.
+
+A modifier may read its options and its default from goroutines of its own,
+and after it returned. Each resolution holds a lock while parser code runs
+and releases it around every call into host code, so those reads serialize
+on the resolution and never deadlock on it, and a reader arriving while
+another renders the same option, or converts the same value, waits for that
+one: an option is rendered, and its placeholders report, once, and a value
+converts once. `OnReport` is called with the lock released, on the goroutine
+that met the defect, so calls of one resolution can overlap.
+
+A modifier may resolve another message, which spends budgets of its own.
+`Input.Resolve(p, message, context)` resolves it as `p.Resolve` does, with
+any parser, as one more resolution in progress than those of its chain: the
+resolution `Parser.Resolve` started and every one asked for through an
+`Input` of one of them, whichever of their `Input`s it is asked through. One
+that would count past `MaxReentry`, 1000, resolves nothing and returns
+`curly.ErrReentryLimit`. One asked for from a method `encoding/json`
+calls, as it writes a value the asking resolution converts, sits below every
+level above that method on the goroutine's stack, and the parser hands
+`encoding/json` no value nested more than 64 levels deep, so
+it counts as one all the same. The modifier handles the refusal as any
+error; returned as its own, it fails the modifier, whose placeholder reports
+`failed-modifier` and takes its fallback chain, and every resolution around
+it answers. So a message whose modifiers resolve it again through their
+`Input` ends in a fallback chain by the 1000th resolution rather than ending
+the process. Only resolutions count, never the walk of one: the options and
+the default a modifier reads count nothing, so each resolution of the chain
+renders to `MaxNesting`. An `Input` kept from further out counts on all the
+same, the outermost resolution's or one whose own resolution has returned,
+so a chain that resolves through one rather than its own deepens the count
+as it deepens the stack. And an `Input` counts on wherever it is called, on
+a goroutine of the modifier's own as well: there the chain continues on a
+stack of its own, which section 13, counting each thread of execution
+apart, counts from none, and resolutions of one chain in progress at once
+on several goroutines count together, so this port can refuse a resolution
+the section never refuses. An `Input` whose chain has no resolution left in
+progress, and the zero `Input`, count from none, as `Parser.Resolve` does,
+so a chain that leaves them is one the bound does not reach (see Values).
+
+The parser makes `Resolve` wait for a modifier's goroutine in two ways. Each
+time the goroutine that called `Resolve` needs the resolution's lock, it also
+waits for the parser code a read on a modifier's goroutine is running under
+it, each read up to its next call into host code, a whole conversion
+included: work the limits of section 13 bound, never host code. So a
+modifier's goroutine converting a large value holds `Resolve` until that
+conversion ends, even where nothing on the goroutine that called `Resolve`
+reads it. And where code on the goroutine that called `Resolve` reads what a
+read is producing, it waits for that read by the rule above: the walk, which
+reads the fallback chain a placeholder takes after its modifier was asked and
+the values it converts, or any host code the walk calls there. A read that
+finished during the call, and an `Input` kept past `Resolve`, answers the
+text that read produced. A read still producing an option or default when
+`Resolve` returns, in host code or waiting to take the resolution's lock
+back, goes on only to finish: it calls no more host code, reads no more of
+the payload, reports nothing and spends no budget, and it answers the empty
+string. Any other read once `Resolve` has returned, one still waiting for the
+lock or for that producer among them, answers what a read finished during the
+call, or the empty string where none did. Host code still running when
+`Resolve` returns, a method of a value or a modifier's goroutine, can read
+the payload until it returns, so the caller changes the payload only once
+that code has returned.
+
+None of these can be contained, and each is the host's to avoid: a modifier
+that calls `runtime.Goexit` or panics on a goroutine of its own; one that,
+through state it keeps, reads an option or default of a placeholder while
+that option or default is being rendered, or a value from inside a method of
+that value the parser called, which waits for itself; and host code that
+waits for `Resolve` to return while it produces what code on the goroutine
+that called `Resolve` reads. A read waiting for itself on a goroutine of
+the modifier's waits until `Resolve` returns; on the goroutine that called
+`Resolve` it waits forever, and so does `Resolve`.
+
 ### Limits and reports
 
 The limits of section 13 are `MaxOutputLength`, `MaxReadLength`,
 `MaxConversionNodes`, `MaxSerializedLength` and `MaxNesting`, the text
 limits counted in bytes. `MaxSerializedLength`, 10 000 000 bytes, is the
 text one conversion writes, a value's own methods' text included; a value
-it refuses spends none of the read budget. A
+it refuses spends none of the read budget. `MaxReentry`, 1000, is the bound
+section 13 lets the parser set in place of the host's limit, which in Go
+ends the process: a chain of 1000 resolutions, each asked for by a modifier
+that does nothing else from a placeholder at `MaxNesting`, takes about
+9.4 MB of the goroutine's stack on a 64-bit platform, 5.9 MB on a 32-bit
+one and 15.5 MB under the race detector, and where each is asked for from a
+method `encoding/json` calls 64 levels into a value, about 47 MB, 26 MB and
+64 MB with Go 1.26 and 77 MB, 47 MB and 96 MB with Go 1.27, where those
+levels are typed maps, the costliest shape measured. A goroutine's stack
+grows by doubling, up to Go's default limits of 1 GB and 250 MB, so it
+reaches 512 MiB and 128 MiB at most; that leaves each resolution about
+490 KB, or 108 KB, with Go 1.26 and 460 KB, or 87 KB, with Go 1.27, for the
+host's own frames. A host that
+lowers the maximum
+with `debug.SetMaxStack` below what its chain takes ends the process before
+the bound refuses. A
 `Report` carries the code and origin of section 14.2, an English message,
 the `Context.ID`, the limit it reached and the placeholder as the message
 spells it: cut to `MaxReportedLength` bytes and escaped as JSON escapes a
