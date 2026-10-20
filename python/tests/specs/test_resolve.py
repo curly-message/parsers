@@ -18,6 +18,8 @@ from curly_message import (
     MAX_OUTPUT_LENGTH,
     MAX_READ_LENGTH,
     UNDEFINED,
+    Modifier,
+    ModifierInput,
     Report,
     create_parser,
     levels,
@@ -460,8 +462,8 @@ def test_a_handler_that_cannot_be_called_is_no_handler(handler: object) -> None:
     assert create_parser(on_report=handler).resolve("{{v:zz; default:D}}") == "D"  # type: ignore[arg-type]
 
 
-def test_this_installation_satisfies_the_core_level() -> None:
-    assert levels() == frozenset({"core"})
+def test_this_installation_satisfies_the_core_and_extensions_levels() -> None:
+    assert levels() == frozenset({"core", "extensions"})
 
 
 def test_importing_the_package_loads_no_optional_dependency() -> None:
@@ -470,3 +472,308 @@ def test_importing_the_package_loads_no_optional_dependency() -> None:
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     ).stdout
     assert loaded.strip() == "[]"
+
+
+# Host-defined modifiers (section 11.3).
+
+
+def props_of(config: ModifierInput) -> str:
+    return ",".join(f"{name}={config.props[name]!r}" for name in sorted(config.props))
+
+
+def with_modifiers(
+    message: object, payload: Any = None, modifiers: Any = None, **options: Any
+) -> tuple[str, list[Report]]:
+    return resolve(message, payload, custom_modifiers=modifiers, **options)
+
+
+def test_a_host_modifier_is_handed_the_value_the_options_and_the_default() -> None:
+    def show(config: ModifierInput) -> str:
+        options = ",".join(f"{o.key}={o.value}" for o in config.options)
+        return f"{config.value}|{options}|{config.default}"
+
+    message = "{{v:show; a:A{{w}}; b:; a:again; default:D}}"
+    assert with_modifiers(message, {"v": "x", "w": "W"}, {"show": show}) == (
+        "x|a=AW,b=,a=again|D",
+        [],
+    )
+
+
+def test_a_host_modifier_answers_with_a_value_converted_like_a_payload_value() -> None:
+    answers: dict[str, Modifier] = {
+        "number": lambda config: 1,
+        "object": lambda config: {"answer": config.value},
+        "list": lambda config: [config.value, None],
+        "empty": lambda config: "",
+    }
+    message = "{{v:number}} {{v:object}} {{v:list}} [{{v:empty; default:D}}]"
+    assert with_modifiers(message, {"v": "x"}, answers) == (
+        '1 {"answer":"x"} ["x",null] []',
+        [],
+    )
+
+
+@pytest.mark.parametrize("nothing", [None, UNDEFINED])
+def test_a_host_modifier_answering_nothing_takes_the_chain(nothing: object) -> None:
+    assert with_modifiers("{{v:none; default:D}}", {"v": "x"}, {"none": lambda c: nothing}) == (
+        "D",
+        [],
+    )
+
+
+def test_a_host_modifier_answering_what_no_conversion_describes_takes_the_chain() -> None:
+    cycle: dict[str, object] = {}
+    cycle["self"] = cycle
+    modifiers = {"cycle": lambda config: cycle}
+    output, reports = with_modifiers("{{v:cycle; default:D}}", {"v": "x"}, modifiers)
+    assert (output, codes(reports)) == ("D", ["unserializable-value"])
+
+
+def test_a_host_modifier_that_raises_is_contained_and_reported() -> None:
+    def failing(config: ModifierInput) -> str:
+        raise RuntimeError("down")
+
+    output, reports = with_modifiers("{{v:fail; default:D}}!", {"v": "x"}, {"fail": failing})
+    assert (output, codes(reports)) == ("D!", ["failed-modifier"])
+    assert reports[0].origin == "payload"
+    assert reports[0].text == "{{v:fail; default:D}}"
+
+
+def test_a_default_read_before_a_raise_is_read_once() -> None:
+    reads: list[str] = []
+
+    def failing(config: ModifierInput) -> str:
+        reads.append(config.default)
+        raise RuntimeError("down")
+
+    def counted(config: ModifierInput) -> str:
+        reads.append("chain")
+        return "C"
+
+    message = "{{v:fail; default:{{w:count}}}}"
+    output, reports = with_modifiers(
+        message, {"v": "x", "w": "y"}, {"fail": failing, "count": counted}
+    )
+    assert (output, codes(reports), reads) == ("C", ["failed-modifier"], ["chain", "C"])
+
+
+def test_an_interrupt_a_host_modifier_raises_is_not_contained() -> None:
+    def interrupted(config: ModifierInput) -> str:
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        with_modifiers("{{v:stop}}", {"v": "x"}, {"stop": interrupted})
+
+
+def test_a_host_modifier_takes_its_name_from_the_format_s_own() -> None:
+    def echo(config: ModifierInput) -> str:
+        return f"<{config.value}>"
+
+    modifiers = {"eq": echo, "lt": echo}
+    # A placeholder declaring options and naming no modifier asks `eq`, and a
+    # selection a host replaced is no selection, so it needs no options.
+    message = "{{v:eq; x:X}} {{v; x:X}} {{v:lt}} {{v:gt; 1:G; default:D}}"
+    assert with_modifiers(message, {"v": "x"}, modifiers) == ("<x> <x> <x> D", [])
+
+
+@pytest.mark.parametrize("entry", [3, "eq", None, UNDEFINED])
+def test_an_entry_that_cannot_be_called_registers_nothing(entry: object) -> None:
+    output, reports = with_modifiers(
+        "{{v:eq; x:X; default:D}} {{v:own; default:O}}", {"v": "x"}, {"eq": entry, "own": entry}
+    )
+    assert (output, codes(reports)) == ("X O", ["unknown-modifier"])
+
+
+def test_a_registered_modifier_is_called_whatever_it_answers_to_truth() -> None:
+    class Untruthful:
+        def __call__(self, config: ModifierInput) -> str:
+            return "called"
+
+        def __bool__(self) -> bool:
+            raise RuntimeError("asked")
+
+        def __len__(self) -> int:
+            return 0
+
+    modifiers = {"own": Untruthful(), "eq": Untruthful()}
+    assert with_modifiers("{{v:own}} {{v; x:X}}", {"v": "x"}, modifiers) == ("called called", [])
+
+
+def test_a_registry_holds_only_its_own_string_keyed_entries() -> None:
+    class Counting(dict[Any, Any]):
+        reads = 0
+
+        def __getitem__(self, key: object) -> Any:
+            Counting.reads += 1
+            return super().__getitem__(key)
+
+        def get(self, key: object, default: Any = None) -> Any:
+            Counting.reads += 1
+            return super().get(key, default)
+
+    def upper(config: ModifierInput) -> str:
+        return config.value.upper()
+
+    registry = Counting({Name.NAME: upper, 1: upper, "__proto__": upper})
+    message = "{{v:name}} {{v:__proto__}} {{v:1; default:D}}"
+    output, reports = with_modifiers(message, {"v": "x"}, registry)
+    assert (output, codes(reports), Counting.reads) == ("X X D", ["unknown-modifier"], 0)
+    for other in (types.MappingProxyType({"name": upper}), collections.ChainMap({"name": upper})):
+        output, reports = with_modifiers("{{v:name; default:D}}", {"v": "x"}, other)
+        assert (output, codes(reports)) == ("D", ["unknown-modifier"])
+
+
+@pytest.mark.parametrize("name", ["__class__", "__init__", "get", "items", "keys", "__getitem__"])
+def test_a_class_member_is_no_registered_modifier(name: str) -> None:
+    output, reports = with_modifiers(f"{{{{v:{name}; default:D}}}}", {"v": "x"}, {})
+    assert (output, codes(reports)) == ("D", ["unknown-modifier"])
+
+
+def test_the_registry_and_the_defaults_are_read_again_on_each_resolution() -> None:
+    registry: dict[str, Modifier] = {}
+    defaults: dict[str, dict[str, Any]] = {}
+    parser = create_parser(custom_modifiers=registry, modifier_defaults=defaults)
+    message = "{{v:show; default:D}}"
+    assert parser.resolve(message, {"v": "x"}) == "D"
+    registry["show"] = props_of
+    defaults["show"] = {"k": 1}
+    assert parser.resolve(message, {"v": "x"}) == "k=1"
+
+
+def test_props_compose_per_property_under_the_modifier_s_own_name() -> None:
+    def show(config: ModifierInput) -> str:
+        return f"{config.value}|{props_of(config)}"
+
+    defaults: dict[str, dict[str, Any]] = {
+        "show": {"a": "default", "b": "default", "c": "default"},
+        "other": {"z": 1},
+    }
+    props: dict[str, dict[str, Any]] = {"show": {"b": "call", "c": "call"}, "other": {"y": 1}}
+    payload = {"v": {"value": "x", "props": {"show": {"c": "wrapper"}, "other": {"x": 1}}}}
+    parser = create_parser(custom_modifiers={"show": show}, modifier_defaults=defaults)
+    assert parser.resolve("{{v:show}}", payload, props=props) == (
+        "x|a='default',b='call',c='wrapper'"
+    )
+    # An entry read as a value configures nothing.
+    off = create_parser(
+        custom_modifiers={"show": show}, modifier_defaults=defaults, recognize_wrappers=False
+    )
+    assert off.resolve("{{v:show}}", {"v": {"value": "x"}}, props=props) == (
+        """{"value":"x"}|a='default',b='call',c='call'"""
+    )
+
+
+def test_a_property_holding_undefined_names_nothing_and_none_is_named() -> None:
+    parser = create_parser(
+        custom_modifiers={"show": props_of}, modifier_defaults={"show": {"a": 1, "b": 1}}
+    )
+    props = {"show": {"a": UNDEFINED, "b": None, "c": UNDEFINED}}
+    assert parser.resolve("{{v:show}}", {"v": "x"}, props=props) == "a=1,b=None"
+
+
+@pytest.mark.parametrize(
+    "layer", ["text", 1, None, UNDEFINED, ["a"], types.MappingProxyType({"a": 1})]
+)
+def test_an_entry_that_is_no_layer_configures_nothing(layer: object) -> None:
+    parser = create_parser(
+        custom_modifiers={"show": props_of}, modifier_defaults={"show": {"a": 1}}
+    )
+    payload = {"v": {"value": "x", "props": {"show": layer}}}
+    assert parser.resolve("{{v:show}}", payload, props={"show": layer}) == "a=1"  # type: ignore[dict-item]
+    assert parser.resolve("{{v:show}}", payload, props=layer) == "a=1"  # type: ignore[arg-type]
+
+
+def test_props_layers_read_their_own_string_keyed_entries() -> None:
+    class Overriding(dict[Any, Any]):
+        def __getitem__(self, key: object) -> Any:
+            raise AssertionError("read through an override")
+
+        def items(self) -> Any:
+            raise AssertionError("read through an override")
+
+    parser = create_parser(custom_modifiers={"show": props_of})
+    props = Overriding({Name.NAME: "ignored", "show": Overriding({Name.VALUE: 1, 2: 2})})
+    assert parser.resolve("{{v:show}}", {"v": "x"}, props=props) == "value=1"
+
+
+def test_a_layer_lookup_that_raises_is_reported_and_names_nothing() -> None:
+    class Colliding(str):
+        __slots__ = ()
+
+        def __hash__(self) -> int:
+            return hash("show")
+
+        def __eq__(self, other: object) -> bool:
+            raise RuntimeError("compared")
+
+    parser_reports: list[Report] = []
+    parser = create_parser(
+        custom_modifiers={"show": props_of},
+        modifier_defaults={"show": {"a": 1}},
+        on_report=parser_reports.append,
+    )
+    props: Any = {Colliding("other"): {"b": 2}}
+    assert parser.resolve("{{v:show}}|{{w}}", {"v": "x", "w": "W"}, props=props) == "a=1|W"
+    assert codes(parser_reports) == ["unserializable-value"]
+
+
+def test_the_props_a_modifier_is_handed_are_its_own_copy() -> None:
+    def scribble(config: ModifierInput) -> str:
+        shown = props_of(config)
+        config.props["a"] = "written"
+        config.props["new"] = 1
+        return shown
+
+    props = {"scribble": {"a": 1}}
+    parser = create_parser(custom_modifiers={"scribble": scribble})
+    assert parser.resolve("{{v:scribble}} {{v:scribble}}", {"v": "x"}, props=props) == "a=1 a=1"
+    assert props == {"scribble": {"a": 1}}
+
+
+_LOCALE = object()
+
+
+@pytest.mark.parametrize(
+    ("locale", "expected"),
+    [(None, None), (UNDEFINED, None), ("", ""), ("cs-CZ", "cs-CZ"), (_LOCALE, _LOCALE)],
+)
+def test_a_host_modifier_is_handed_the_locale_as_the_caller_passed_it(
+    locale: object, expected: object
+) -> None:
+    seen: list[object] = []
+
+    def record(config: ModifierInput) -> str:
+        seen.append(config.locale)
+        return "ok"
+
+    parser = create_parser(custom_modifiers={"record": record})
+    assert parser.resolve("{{v:record}}", {"v": "x"}, locale=locale) == "ok"
+    assert seen == [expected]
+
+
+def test_what_a_modifier_keeps_answers_nothing_after_the_resolution() -> None:
+    kept: list[ModifierInput] = []
+
+    def keep(config: ModifierInput) -> str:
+        kept.append(config)
+        return "now"
+
+    reports: list[Report] = []
+    parser = create_parser(custom_modifiers={"keep": keep}, on_report=reports.append)
+    assert parser.resolve("{{v:keep; a:{{w:zz}}; default:{{w:zz}}}}", {"v": "x"}) == "now"
+    assert (kept[0].options[0].value, kept[0].default, reports) == ("", "", [])
+
+
+def test_a_resolution_begun_by_a_modifier_owns_its_budgets_and_its_id() -> None:
+    reports: list[Report] = []
+
+    def nested(config: ModifierInput) -> str:
+        return parser.resolve("{{w:zz; default:in}}", {"w": "y"}, message_id="inner")
+
+    parser = create_parser(custom_modifiers={"nested": nested}, on_report=reports.append)
+    output = parser.resolve("{{v:nested}}|{{w:zz; default:out}}", {"v": "x"}, message_id="outer")
+    assert output == "in|out"
+    assert [(r.code, r.message_id) for r in reports] == [
+        ("unknown-modifier", "inner"),
+        ("unknown-modifier", "outer"),
+    ]
