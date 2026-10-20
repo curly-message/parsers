@@ -8,7 +8,9 @@ use crate::MAX_REENTRY;
 // Stack exhaustion is no panic: it aborts the process. So the resolutions in
 // progress on a thread are counted, across every parser running on it, and
 // one asked for past the bound is refused (section 13). One resolution's own
-// walk is no part of the count: it renders what nests on a stack of its own.
+// walk is no part of the count: it reaches the thread's stack only through
+// the options and defaults its modifiers read, and the nesting limit bounds
+// those.
 thread_local! {
     static IN_PROGRESS: Cell<usize> = const { Cell::new(0) };
     static REFUSED_UNWINDING: Cell<bool> = const { Cell::new(false) };
@@ -17,14 +19,14 @@ thread_local! {
 /// What [`Parser::resolve`](crate::Parser::resolve) unwinds with where it
 /// refuses a resolution, before reading anything: [`MAX_REENTRY`] were in
 /// progress on its thread. It unwinds into the host code that asked, a
-/// value's `Display` or a report handler, without running the panic hook.
-/// That code may catch it, as it may any panic; one it lets pass is contained
-/// as any panic of host code is, so the resolution around it carries on. One
-/// refused while the thread already unwinds, from a `Drop` say, starts no
-/// unwind of its own, since one leaving a `Drop` there would abort the
-/// process: `resolve` answers the empty string to its caller instead, and the
-/// host code the parser called that asked for it counts as failed, as one
-/// that let the refusal pass does.
+/// modifier, a value's `Display` or a report handler, without running the
+/// panic hook. That code may catch it, as it may any panic; one it lets pass
+/// is contained as any panic of host code is, so the resolution around it
+/// carries on. One refused while the thread already unwinds, from a `Drop`
+/// say, starts no unwind of its own, since one leaving a `Drop` there would
+/// abort the process: `resolve` answers the empty string to its caller
+/// instead, and the host code the parser called that asked for it counts as
+/// failed, as one that let the refusal pass does.
 ///
 /// Its thread is the operating-system thread, so stackful fibers that share
 /// one share its count, whether it unwinds, and the mark of a refusal made

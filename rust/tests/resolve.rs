@@ -529,13 +529,13 @@ fn a_parser_is_shared_across_threads() {
 }
 
 #[test]
-fn a_parser_claims_the_core_level() {
-    assert_eq!(Parser::new().levels(), [Level::Core]);
+fn a_parser_claims_the_core_and_extensions_levels() {
+    assert_eq!(Parser::new().levels(), [Level::Core, Level::Extensions]);
     assert_eq!(Level::Core.as_str(), "core");
     assert_eq!(Level::Intl.as_str(), "intl");
     assert_eq!(Level::Extensions.as_str(), "extensions");
     assert_eq!(
         format!("{:?}", Parser::default()),
-        "Parser { levels: [Core], recognize_wrappers: true, on_report: false }"
+        "Parser { levels: [Core, Extensions], recognize_wrappers: true, on_report: false, modifiers: 0 }"
     );
 }

@@ -14,16 +14,17 @@ assert_eq!(parser.resolve(greeting, &Context::new().payload(&payload)), "Hello, 
 assert_eq!(parser.resolve(greeting, &Context::new()), "Hello, Guest!");
 ```
 
-The parser claims the Core level of the format: the syntax, the resolution
-and the comparisons `eq`, `ne`, `lt`, `lte`, `gt` and `gte`. A placeholder
-naming any other modifier resolves to its fallback chain and reports
+The parser claims the Core level of the format, the syntax, the resolution
+and the comparisons `eq`, `ne`, `lt`, `lte`, `gt` and `gte`, and the
+Extensions level: the modifiers a host registers. A placeholder naming a
+modifier nobody registered resolves to its fallback chain and reports
 `unknown-modifier`; it is never run as a comparison instead.
 
 ## Resolving a message
 
 `Parser::resolve` takes a message and a `Context` holding what the
-resolution reads besides it: the payload and the id the caller knows the
-message by. Both are optional. A message is text, or a [`Value`] that
+resolution reads besides it: the payload, the props and the locale handed to
+modifiers, and the id the caller knows the message by. Each is optional. A message is text, or a [`Value`] that
 converts to text before anything reads it; an absent message, or one no
 conversion describes, resolves to the empty string.
 
@@ -42,6 +43,58 @@ numbers the way ECMAScript reads text as a number, so ` 12 ` and `0x10` are
 numbers and `12px` and `inf` are not. A comparison that selects nothing takes
 the fallback chain. One that declares no options was asked to select from
 nothing, and reports `missing-options`.
+
+## Modifiers
+
+A modifier is a function of what a placeholder hands it, registered under the
+name placeholders spell it with:
+
+```rust
+use curly_message_parser::{Context, ModifierError, ModifierInput, Object, Parser, Value};
+
+let parser = Parser::builder()
+    .modifier("initial", |input: &ModifierInput<'_>| {
+        match input.value().chars().next() {
+            Some(first) => Ok(Some(Value::from(first.to_string()))),
+            None => Err(ModifierError::new("nothing to take an initial of")),
+        }
+    })
+    .build();
+let payload = Object::new().with("name", "Ada").with("empty", "");
+let context = Context::new().payload(&payload);
+
+assert_eq!(parser.resolve("{{name:initial}}.", &context), "A.");
+assert_eq!(parser.resolve("{{empty:initial; default:?}}", &context), "?");
+```
+
+A modifier is called only for a value the payload holds, and is handed it as
+text, with:
+
+* the options in the order the placeholder writes them, a key written twice
+  kept twice and the inline default none of them. An option's value is
+  message text, rendered when the modifier first asks for it and not again;
+  one it never asks for is never rendered.
+* the default: the placeholder's fallback chain, walked when the modifier
+  first asks for it. A link it never asks for is never read, and never
+  reported.
+* the props composed under its own name (section 11.2): those the parser was
+  built with by `modifier_defaults`, then the context's, then the wrapper's,
+  each overriding the properties it names. `Undefined` names nothing, and
+  `Null` is a property like any other. They are a [`Props`], read where the
+  layers hold them and never copied, so what they hold costs a placeholder
+  nothing; `to_object` makes an object of them.
+* the locale, as the caller wrote it.
+
+Every accessor borrows the input alone, so a modifier may hold any number of
+their answers at once.
+
+`Ok(Some(value))` is the answer, and converts to text as a payload value
+does, a structure included. `Ok(None)`, or `Undefined`, is no answer: the
+placeholder takes its fallback chain and nothing is reported. `Err(_)` and a
+panic are failures: the placeholder takes its fallback chain and reports
+`failed-modifier`. A modifier registered under a name the format defines,
+`eq` included, replaces the comparison: it is called with whatever options
+the placeholder declares, none included.
 
 ## Reports
 
@@ -71,7 +124,8 @@ contents of a JSON string, every line terminator included, so a message
 cannot forge a line wherever a report is written. Reports are emitted in walk
 order. A handler that panics is contained, and the resolution carries on.
 
-Containment catches a panic as it unwinds, so it needs the default
+Containment catches a panic as it unwinds, a modifier's or a `Display`'s as
+much as a handler's, so it needs the default
 `panic = "unwind"`; under `panic = "abort"` a panic ends the process wherever
 it happens, and so does the refusal of a resolution past `MAX_REENTRY`
 (below). The process's panic hook still runs for a contained panic, and
@@ -91,9 +145,11 @@ prints what it prints for any other; that refusal runs none.
 A placeholder nested past `MAX_NESTING` takes its fallback chain and reports
 `nesting-limit`. The walk keeps what it nests on a stack of its own, so a
 message nested any depth resolves without a call per level, and so does a
-value nested any depth convert. What does reach the thread's stack is a
-resolution a report handler or a value's `Display` starts from inside
-another.
+value nested any depth convert. What does reach the thread's stack is host
+code the parser calls: a modifier, and the option or default it asks for,
+each rendered by a call of its own and so at most `MAX_NESTING` deep; and a
+resolution a modifier, a report handler or a value's `Display` starts from
+inside another.
 
 A thread that runs out of stack aborts the process, which nothing can
 contain, so `MAX_REENTRY` is the bound that stands in for the host's own
@@ -104,16 +160,17 @@ the ones around it. A resolution asked for while `MAX_REENTRY` are in
 progress on its thread is refused before anything is read: `resolve` unwinds
 with [`ReentryLimit`] into the host code that asked, without running the
 panic hook. That code may catch it, as it may any panic. One it lets pass is
-contained as a panic of host code is: a value's `Display` describes nothing,
-and a handler's report goes undelivered. One asked for while the thread
-already unwinds, by a `Drop` that resolves, is refused without unwinding,
-since an unwind leaving a `Drop` there would abort the process: `resolve`
-answers the empty string to its caller, and the host code the parser called
-that asked for it counts as failed all the same, as one that lets the
-refusal pass does. A resolution asked for where none is in progress on its
-thread is never refused, the one a host hands to a thread of its own
-included, so a chain that goes on from thread to thread is the host's to
-bound.
+contained as a panic of host code is: a modifier's placeholder takes its
+fallback chain and reports `failed-modifier`, a value's `Display` describes
+nothing, and a handler's report goes undelivered. One asked for while the
+thread already unwinds, by a `Drop` that resolves, is refused without
+unwinding, since an unwind leaving a `Drop` there would abort the process:
+`resolve` answers the empty string to its caller, and the host code the
+parser called that asked for it counts as failed all the same, as one that
+lets the refusal pass does. A resolution asked for where none is in
+progress on its thread is never refused, the one a host hands to a thread of
+its own included, so a chain that goes on from thread to thread is the
+host's to bound.
 
 What the crate keeps for this bound is the operating-system thread's, and
 that is where it falls short of section 13 for a host that runs stackful
@@ -139,7 +196,10 @@ whatever that thread holds. A thread's count can so stand above or below the
 number of resolutions in progress on it.
 
 Tests start resolutions inside one another along each of these ways until
-one is refused, on a thread of 512 KiB, in a debug build.
+one is refused, and the worst cases hold `MAX_REENTRY` resolutions at once,
+each as deep into its options as a placeholder resolves, on a thread of
+512 KiB, in a debug build. On x86-64 Linux the deepest takes about 305 KiB
+there, and about 95 KiB in a release build.
 
 ## Values
 
@@ -226,4 +286,5 @@ resolution resolves.
 
 [`Value`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/enum.Value.html
 [`Object`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/struct.Object.html
+[`Props`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/struct.Props.html
 [`ReentryLimit`]: https://docs.rs/curly-message-parser/latest/curly_message_parser/struct.ReentryLimit.html
