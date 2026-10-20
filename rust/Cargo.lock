@@ -190,6 +190,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "curly-message-bench"
+version = "0.0.0"
+dependencies = [
+ "curly-message-parser",
+]
+
+[[package]]
 name = "curly-message-conformance"
 version = "0.0.0"
 dependencies = [
