@@ -115,7 +115,29 @@ def _wheel_venv(venv: Path, *, intl: bool) -> None:
     _run("uv", "pip", "install", "--python", python, "--no-deps", _wheel())
 
 
-def _suite(venv: Path, wheel_venv: Path, *, intl: bool, lowest: bool = False) -> None:
+def typecheck_wheel(wheel_venv: Path = WHEEL_VENV) -> None:
+    """The type surface checked against the wheel's own ``py.typed``, as a consumer checks it.
+
+    No configuration is read, so ``src/`` is not on the checker's path: the
+    package it finds is the one installed in ``wheel_venv``.
+    """
+    _tool(
+        "mypy",
+        "--config-file",
+        "",
+        "--strict",
+        "--warn-unused-ignores",
+        "--python-version",
+        "3.11",
+        "--python-executable",
+        str(_python(wheel_venv)),
+        "tests/types/surface.py",
+    )
+
+
+def _suite(
+    venv: Path, wheel_venv: Path, *, intl: bool, lowest: bool = False, surface: bool = False
+) -> None:
     # Each leg states whether it expects Intl, so a supplier that failed to
     # install cannot pass as a leg that never asked for one.
     expect = {
@@ -130,6 +152,8 @@ def _suite(venv: Path, wheel_venv: Path, *, intl: bool, lowest: bool = False) ->
     _wheel_venv(wheel_venv, intl=intl)
     if lowest:
         _run("uv", "pip", "install", "--python", _python(wheel_venv), LOWEST_BABEL)
+    if surface:
+        typecheck_wheel(wheel_venv)
     _run(
         _python(wheel_venv),
         "-m",
@@ -139,11 +163,14 @@ def _suite(venv: Path, wheel_venv: Path, *, intl: bool, lowest: bool = False) ->
 
 
 def test() -> None:
-    """What CI runs: build, lint, typecheck, then the suite on the source and on the wheel."""
+    """What CI runs: build, lint, typecheck, then the suite on the source and on the wheel.
+
+    The type surface is checked against the wheel before the suite runs on it.
+    """
     build()
     lint()
     typecheck()
-    _suite(VENV, WHEEL_VENV, intl=True)
+    _suite(VENV, WHEEL_VENV, intl=True, surface=True)
 
 
 def test_core() -> None:
