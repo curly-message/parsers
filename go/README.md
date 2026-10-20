@@ -294,6 +294,40 @@ that answers at once, so they measure what the parser does around a
 request. `package.json` is private and carries only the name and version
 the harness's table is headed with.
 
+## Releasing
+
+A Go module has no registry: a version is the tag `go/vX.Y.Z` on the
+repository, which the module proxy and the checksum database record, with
+the hash of what it holds, the first time anyone asks for it, and keep for
+good. A version published by mistake cannot be withdrawn; the remedy is a
+later version whose `go.mod` retracts it.
+
+A release is cut from `main` by the **Go parser release** workflow
+(`.github/workflows/publish-go.yml`, started by hand, with the module
+directory to release). The changelog's pending section names the version it
+will be released as, `### 1.0.0 (Unreleased)`, and the release types read it
+as the JavaScript parser's workflow does: `patch`, `minor` and `major` must
+arrive at that version and cut the section, and `next` tags a prerelease of
+it, `v1.0.0-next.0` and then `.1`, and leaves the section open. The version
+line the bump starts from is `package.json`'s, since the version is not
+tagged until the release exists, and the workflow refuses a version already
+tagged, and from version 2 on, a module path that does not end in its major
+version.
+
+After the test matrix, three jobs run: one settles the version; one, with
+no credential, benchmarks the module into `BENCH.md`, makes the release
+commit locally and computes, from that commit, the `h1:` hash the proxy
+will record (`dev/pack`); and the last, in the `release` environment,
+makes the release commit again, refuses to push unless its tree is the one
+the build hashed, then tags it, pushes the commit and the tag in one atomic
+push, asks the module proxy for the version and fails the run on a hash
+other than the build's, and publishes a GitHub release carrying the
+changelog section. The commit, the tag and the release are made as the
+GitHub App whose client ID and private key the repository holds as the
+`APP_CLIENT_ID` variable and the `APP_PRIVATE_KEY` secret of that
+environment. No token publishes anything and nothing is published by hand:
+the first version is a tag like every other.
+
 ## License
 
 [MIT](./LICENSE)
