@@ -23,15 +23,15 @@ checked out beside this repository on an up-to-date `main`, otherwise
 Official implementations of the
 [Curly Message Format](https://github.com/curly-message/spec).
 
-- **One directory per language** — `js/` today. Each is a fully standalone
-  package with its own build, tests, configs, README, CHANGELOG and version
-  line. There is no root package manifest and no workspace: run every command
-  from inside the implementation directory, for every directory a change
-  touches.
+- **One directory per language** — `js/` and `rust/` today. Each is a fully
+  standalone package with its own build, tests, configs, README, CHANGELOG
+  and version line. There is no root package manifest and no workspace: run
+  every command from inside the implementation directory, for every
+  directory a change touches.
 - **Release tags are namespaced by directory** — `js-v1.0.0`, `py-v0.9.0` — so
   moving an implementation to its own repository later is not a breaking event.
-  The publish workflow cuts them (`.github/workflows/publish-js.yml`; the
-  README's Releasing section says what it does).
+  The publish workflows cut them (`.github/workflows/publish-js.yml`,
+  `publish-rust.yml`; the README's Releasing section says what they do).
 - The root holds only `README.md`, this file, `CLAUDE.md`, `LICENSE`,
   `.gitignore`, `.githooks/` and `.github/workflows/`. An implementation
   directory may hold a `.gitignore` of its own, for what only its toolchain
@@ -44,7 +44,8 @@ Official implementations of the
   passes; 75 when a tool it needs is missing, having printed which and how to
   install it, which skips the directory (`<dir>: skipped`) without failing the
   commit; and anything else to fail the commit. An implementation's check is
-  its script, `.githooks/js.sh` for `js/`.
+  its script, `.githooks/js.sh` for `js/` and `.githooks/rust.sh` for
+  `rust/`.
 - **`bench.yml` reads its packages from the tree**: each directory that holds
   a `bench/rows.mjs` outside a `bench/check/`, with its own copy of
   `bench/harness.mjs` and `bench/check/`. On a PR it benchmarks those with a
@@ -181,3 +182,161 @@ its `CHANGELOG.md` and the doc comments in `src/types.ts`.
 - What a message resolves to is the conformance set's to pin: a case the
   suite adds beyond it is either an implementation detail or a gap in the set
   (§ Architecture of `spec`'s AGENTS.md).
+
+## rust/
+
+Tech stack of `rust/` — **ground truth, do not assume otherwise**:
+
+| | |
+|---|---|
+| Crate | `curly-message-parser`, library `curly_message_parser`, unreleased; the first version, `1.0.0-next.0`, is published by hand |
+| Language | Rust, edition 2024, MSRV 1.88 |
+| Package manager | cargo, one workspace rooted at `rust/` (the parser, `conformance/`, `bench/`), `Cargo.lock` committed and every command `--locked` |
+| Build | `cargo build`; `cargo package` builds the `.crate` from the files it ships |
+| Tests | `cargo test`, with and without the `intl` feature; the conformance set vendored and checked by its sha256 (`conformance/set/`) |
+| Lint | `rustfmt` (`rustfmt.toml`) and clippy at `-D warnings` under the `[workspace.lints]` table of `rust/Cargo.toml`, both run by `tests-cargo.yml`'s Lint job and by `.githooks/rust.sh` |
+| Runtime dependencies | none; the `intl` feature brings ICU4X 2.3, `icu_experimental` 0.6 and `jiff` 0.2 |
+| Supported toolchains | Rust 1.88 and the latest stable, on Linux, macOS and Windows |
+| CI | `tests-rust.yml` (calls `tests-cargo.yml`; weekly, resolves the newest ICU4X beside the crate), `bench.yml` and `bench-label.yml`, `publish-rust.yml` (calls `publish-cargo.yml`) |
+
+Commands, run from `rust/`:
+
+| Command | What it does |
+|---------|--------------|
+| `cargo test -p curly-message-parser --locked` | the suite, the conformance set and the audit at Core and Extensions, the README's examples and the doc comments' |
+| `CURLY_EXPECT_INTL=1 cargo test -p curly-message-parser --locked --features intl` | the same with the Intl level, on both readings of the set |
+| `cargo test -p curly-message-conformance --locked` | the runner's own tests |
+| `cargo fmt --all --check` | the formatting contract (`cargo fmt --all` fixes it) |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings`, and again with `--all-features` | the lint contract, tests included |
+| `RUSTDOCFLAGS=-Dwarnings cargo doc -p curly-message-parser --no-deps --all-features --locked` | the docs, every public item documented |
+| `sh bench/prepare.sh && node bench/harness.mjs` | build the release build into `bench/dist/`, then the benchmark (`bench/rows.mjs`) |
+| `node bench/harness.mjs --compare <dir>` | the same, beside the crate checked out at `<dir>` and prepared by its `bench/prepare.sh` — what `bench.yml` runs on a PR |
+
+Map of `rust/`:
+
+| Path | Role |
+|------|------|
+| `src/lib.rs` | the public surface and the limits |
+| `src/parser.rs` | `Parser`, its builder, `Context` and `Message`; the backstop of `resolve` |
+| `src/walk.rs` | one resolution: the walk on an explicit stack, the fallback chain, the modifier call |
+| `src/depth.rs` | containment of host code and the per-thread count of resolutions in progress |
+| `src/scan.rs`, `src/syntax.rs` | the placeholder scanner, `LINE_TERM` among its classes, which the walk and the tree both read; what a placeholder declares, and unescaping |
+| `src/cst.rs` | `cst`: the tree, an arena with byte spans |
+| `src/value.rs`, `src/convert.rs`, `src/number.rs` | the value model of section 4, its conversion to text, and ECMAScript's numbers and dates |
+| `src/modifier.rs`, `src/props.rs`, `src/builtins.rs` | `Modifier` and its input, the property layers as a borrowed view, the comparisons of section 11.1 |
+| `src/intl.rs`, `src/formatting.rs` | the `Intl` interface the Intl modifiers delegate to, and the modifiers' requests |
+| `src/ecma.rs`, `src/icu.rs` | with `intl`: ECMA-402's reading of a request's options, and `IcuIntl`, with `UNEXPRESSIBLE` |
+| `src/report.rs` | `Report`, `Code`, `Origin` and the escaped excerpt |
+| `tests/` | the suite, linked against the crate as a consumer links it; `tests/conformance/adapter.rs` is the adapter of section 14.3 |
+| `conformance/` | `curly-message-conformance`, `publish = false`: the runner of the set, the vendored release and Node's answers to its requests |
+| `bench/` | `curly-message-bench`, `publish = false`: the programs the rows run; `bench/rows.mjs`, `bench/prepare.sh`; `bench/harness.mjs` and `bench/check/` are the family's copies |
+
+### Architecture you must respect
+
+The rules of `js/` above hold here, in their Rust form:
+
+- **The public surface** is the crate's public items. Until the first
+  release it is a prerelease's and promises nothing; from then on, the Lint
+  job of `tests-cargo.yml` holds it to the newest version on crates.io with
+  `cargo semver-checks`.
+- **Diagnostics leave through `ParserBuilder::on_report`** and nowhere
+  else; the lints deny `print_stdout` and `print_stderr`, and ICU4X's own
+  messages go to the `log` facade.
+- **The value model is the crate's.** Rust has no dynamic value, so `Value`
+  is the host type section 4 reads: an `Object` holds its own entries in
+  insertion order, every key a name (`__proto__` included), and a `Host`
+  value is read through its `Display` alone.
+- **The limits** are `MAX_OUTPUT_LENGTH`, `MAX_READ_LENGTH`,
+  `MAX_CONVERSION_NODES` and `MAX_NESTING`, as in `js/`, the text ones in
+  bytes of UTF-8, the unit a `str` is indexed by; plus
+  `MAX_SERIALIZED_LENGTH`, the most one serialization writes, in code units
+  of UTF-16 as V8 counts a string, and `MAX_REENTRY`. Each is
+  load-bearing.
+- **The walk keeps its own stack.** A message, a value and a tree of any
+  depth are walked, converted and dropped without a call per level. The
+  host's stack is reached only through host code (a modifier, an `Intl`
+  facility, a `Display`, a report handler), every call of which goes through
+  `depth::host_call`, contained, with no borrow of the walker's state held
+  across it.
+- **`MAX_REENTRY` counts resolutions, and its cost is measured.** It
+  bounds the resolutions in progress on one thread, across parsers, and
+  nothing of one resolution's walk: the nesting limit bounds what a walk
+  puts on the thread's stack, the options and defaults its modifiers read,
+  so no resolution is cut short by the ones around it. A refusal unwinds
+  with `ReentryLimit` from `Parser::resolve`, outside its backstop, so it
+  reaches the host code that asked, and `std::panic::resume_unwind` keeps
+  the panic hook out of it; one refused while the thread already unwinds
+  answers the empty string instead, since an unwind leaving a `Drop` would
+  abort the process, and `depth::contained` fails the host call that asked
+  for it all the same. Its worst cases, `MAX_REENTRY` resolutions each as
+  deep into its options as a placeholder resolves, one of them for each
+  request of the Intl facility, run on a 512 KiB thread in a debug build on
+  every OS leg; the one whose innermost formats a date in a zone name the
+  process has not used yet runs on a 1 MiB thread, in a binary of its own,
+  since jiff reads a zone's rules the first time the process formats in each
+  of its names, an alias being a name of its own, and each read costs a
+  debug build about 230 KiB. A change that grows what
+  a resolution costs the stack, or raises the bound, is checked there.
+  Stack exhaustion aborts the process rather than panicking, so this bound
+  is the only containment there is. The count, and the flag
+  `depth::contained` reads for a refusal made while the thread unwinds, are
+  `thread_local!`s, and whether the thread unwinds is
+  `std::thread::panicking`'s, all the OS thread's: stackful fibers that share
+  an OS thread share them, so while one is suspended in a `Drop` mid-unwind a
+  refusal on any of them answers the empty string and can fail another
+  fiber's host call in place of the one that asked, and the resolution of one
+  moved to another OS thread in its middle stays counted on the thread it
+  left and lowers the count of the thread it finishes on: the guard of a
+  resolution in progress, `depth::InProgress`, is not `Send`, so the fiber is
+  moved only under a `Send` claimed for a stack that does not have it, by a
+  host's `unsafe impl Send` or a coroutine library's own.
+  That is where the port falls short of section 13, which counts per thread
+  of execution, and the README's Limits and the docs of `MAX_REENTRY` and
+  `ReentryLimit` say so.
+- **A report carries message text, escaped.** `LINE_TERM` (`src/scan.rs`)
+  plays its role in `js/`: the scanner and the report escaping both read it.
+- **The scan is a hand-written walk** that records each opening pair's
+  verdict once, as `js/`'s memo does, and `src/` holds no regular
+  expression.
+- **Numbers are ECMAScript's.** What text a number reads as and how a number
+  is written follow ECMAScript's `StringToNumber` and `Number::toString`, not
+  Rust's `parse` and `Display`.
+- **Resolving a message must not panic**: the lints deny `unwrap`, `expect`,
+  `panic`, unchecked indexing and arithmetic in `src/`, a panicking modifier,
+  `Intl` facility, `Display` or report handler is contained, and
+  `tests/fuzz.rs` fails on any panic raised from `src/`. The one unwind
+  `src/` starts is the refusal of a resolution past `MAX_REENTRY`, into host
+  code the parser called. `unsafe` is forbidden in `src/`.
+- **The `intl` feature configures nothing.** It makes `IcuIntl` available;
+  a parser claims the Intl level only when its builder is handed a supplier,
+  so cargo's feature unification never changes what another crate's parser
+  resolves.
+- **Generated files**: `target/` and `bench/dist/` are never committed, and
+  the golden files of Node's answers are written by their `golden.mjs`, never
+  by hand.
+- **Docs** are `rust/README.md` (the crates.io page, its examples run as
+  doc tests), `rust/CHANGELOG.md` and the doc comments of the public items.
+
+### Tests
+
+- `rust/tests/`: `resolve.rs` for resolution, `modifiers.rs` for the
+  Extensions level, `limits.rs` for the limits and the stack-independence
+  tests, `panics.rs` (its own binary, with a silent panic hook) for
+  containment, the refusal past `MAX_REENTRY` and its worst case, `cost.rs`
+  and `allocations.rs` for cost by count, `cst.rs` for the tree, `value.rs`
+  for the value model, `fuzz.rs` for messages written at random, `intl.rs`
+  (with the facility's worst cases of `MAX_REENTRY`), `intl_supplier.rs`
+  and `intl_parity.rs` for the Intl level, `intl_stack.rs` (its own binary,
+  so no zone is used before it) for its worst case in a zone name, and
+  `conformance.rs` for the set and the audit.
+- With `intl`, the set and the audit run twice: on the requests the parser
+  exposes, and on the text, against Node's answers recorded in
+  `conformance/set/golden-4.1.0.json`. `CURLY_EXPECT_INTL` holds a leg to the
+  level it means to test.
+- The Packaged job of `tests-cargo.yml` tests the `.crate` a release ships:
+  its own tests from the unpacked archive, and `tests/` in a project that
+  depends on it. This stands in for `--mode dist`.
+- Drive behavior through the public API; a table of pure helpers (the number
+  conversions) is a unit test inside the crate. Cost is asserted by count,
+  with a counting allocator and call counters, never by time, and no test
+  assumes more stack than the thread it spawns.
