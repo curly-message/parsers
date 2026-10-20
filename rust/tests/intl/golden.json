@@ -1,0 +1,3274 @@
+{
+  "node": "22.22.0",
+  "icu": "77.1",
+  "answers": [
+    {
+      "name": "date -/- UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/2024"
+      }
+    },
+    {
+      "name": "date -/short UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00 AM"
+      }
+    },
+    {
+      "name": "date -/medium UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM"
+      }
+    },
+    {
+      "name": "date -/long UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM UTC"
+      }
+    },
+    {
+      "name": "date -/full UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date short/- UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24"
+      }
+    },
+    {
+      "name": "date short/short UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 10:00 AM"
+      }
+    },
+    {
+      "name": "date short/medium UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 10:00:00 AM"
+      }
+    },
+    {
+      "name": "date short/long UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 10:00:00 AM UTC"
+      }
+    },
+    {
+      "name": "date short/full UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date medium/- UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024"
+      }
+    },
+    {
+      "name": "date medium/short UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "medium",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 10:00 AM"
+      }
+    },
+    {
+      "name": "date medium/medium UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "medium",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 10:00:00 AM"
+      }
+    },
+    {
+      "name": "date medium/long UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "medium",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 10:00:00 AM UTC"
+      }
+    },
+    {
+      "name": "date medium/full UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "medium",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date long/- UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024"
+      }
+    },
+    {
+      "name": "date long/short UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "long",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 10:00 AM"
+      }
+    },
+    {
+      "name": "date long/medium UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "long",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 10:00:00 AM"
+      }
+    },
+    {
+      "name": "date long/long UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "long",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 10:00:00 AM UTC"
+      }
+    },
+    {
+      "name": "date long/full UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "long",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date full/- UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024"
+      }
+    },
+    {
+      "name": "date full/short UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "full",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 10:00 AM"
+      }
+    },
+    {
+      "name": "date full/medium UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "full",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 10:00:00 AM"
+      }
+    },
+    {
+      "name": "date full/long UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "full",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 10:00:00 AM UTC"
+      }
+    },
+    {
+      "name": "date full/full UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "full",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date -/- Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/2024"
+      }
+    },
+    {
+      "name": "date -/short Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "11:00 AM"
+      }
+    },
+    {
+      "name": "date -/medium Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "11:00:00 AM"
+      }
+    },
+    {
+      "name": "date -/long Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "11:00:00 AM GMT+1"
+      }
+    },
+    {
+      "name": "date -/full Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "11:00:00 AM Central European Standard Time"
+      }
+    },
+    {
+      "name": "date short/- Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24"
+      }
+    },
+    {
+      "name": "date short/short Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "short",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 11:00 AM"
+      }
+    },
+    {
+      "name": "date short/medium Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "short",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 11:00:00 AM"
+      }
+    },
+    {
+      "name": "date short/long Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "short",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 11:00:00 AM GMT+1"
+      }
+    },
+    {
+      "name": "date short/full Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "short",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "3/5/24, 11:00:00 AM Central European Standard Time"
+      }
+    },
+    {
+      "name": "date medium/- Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024"
+      }
+    },
+    {
+      "name": "date medium/short Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "medium",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 11:00 AM"
+      }
+    },
+    {
+      "name": "date medium/medium Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "medium",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 11:00:00 AM"
+      }
+    },
+    {
+      "name": "date medium/long Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "medium",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 11:00:00 AM GMT+1"
+      }
+    },
+    {
+      "name": "date medium/full Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "medium",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Mar 5, 2024, 11:00:00 AM Central European Standard Time"
+      }
+    },
+    {
+      "name": "date long/- Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024"
+      }
+    },
+    {
+      "name": "date long/short Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "long",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 11:00 AM"
+      }
+    },
+    {
+      "name": "date long/medium Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "long",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 11:00:00 AM"
+      }
+    },
+    {
+      "name": "date long/long Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "long",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 11:00:00 AM GMT+1"
+      }
+    },
+    {
+      "name": "date long/full Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "long",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "March 5, 2024 at 11:00:00 AM Central European Standard Time"
+      }
+    },
+    {
+      "name": "date full/- Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024"
+      }
+    },
+    {
+      "name": "date full/short Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "full",
+        "timeStyle": "short"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 11:00 AM"
+      }
+    },
+    {
+      "name": "date full/medium Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "full",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 11:00:00 AM"
+      }
+    },
+    {
+      "name": "date full/long Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "full",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 11:00:00 AM GMT+1"
+      }
+    },
+    {
+      "name": "date full/full Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "full",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "Tuesday, March 5, 2024 at 11:00:00 AM Central European Standard Time"
+      }
+    },
+    {
+      "name": "date long time summer Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "timeStyle": "long"
+      },
+      "input": 1720173600000,
+      "answer": {
+        "text": "12:00:00 PM GMT+2"
+      }
+    },
+    {
+      "name": "date full time summer Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "timeStyle": "full"
+      },
+      "input": 1720173600000,
+      "answer": {
+        "text": "12:00:00 PM Central European Summer Time"
+      }
+    },
+    {
+      "name": "date full time America/New_York",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "America/New_York",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "5:00:00 AM Eastern Standard Time"
+      }
+    },
+    {
+      "name": "date no zone is UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM UTC"
+      }
+    },
+    {
+      "name": "date zone GMT",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "GMT",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM UTC"
+      }
+    },
+    {
+      "name": "date zone Etc/UTC",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Etc/UTC",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date zone Etc/GMT",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Etc/GMT",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date zone utc",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "utc",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date zone Zulu",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Zulu",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM Coordinated Universal Time"
+      }
+    },
+    {
+      "name": "date zone Greenwich",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Greenwich",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "10:00:00 AM Greenwich Mean Time"
+      }
+    },
+    {
+      "name": "date zone Etc/GMT+1",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Etc/GMT+1",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "9:00:00 AM GMT-01:00"
+      }
+    },
+    {
+      "name": "date zone europe/prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "europe/prague",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "11:00:00 AM Central European Standard Time"
+      }
+    },
+    {
+      "name": "date zone offset +01:00",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "+01:00",
+        "timeStyle": "long"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "11:00:00 AM GMT+1"
+      }
+    },
+    {
+      "name": "date zone offset -0530",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "-0530",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "4:30:00 AM"
+      }
+    },
+    {
+      "name": "date zone offset +02",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "+02",
+        "timeStyle": "medium"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "12:00:00 PM"
+      }
+    },
+    {
+      "name": "date unknown zone",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Mars/Olympus"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "date style with a component",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "dateStyle": "short",
+        "year": "numeric"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "date no style de",
+      "locale": "de",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "5.3.2024"
+      }
+    },
+    {
+      "name": "date no style cs",
+      "locale": "cs",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "5. 3. 2024"
+      }
+    },
+    {
+      "name": "date no style ja",
+      "locale": "ja",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "2024/3/5"
+      }
+    },
+    {
+      "name": "date no style nl",
+      "locale": "nl",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "5-3-2024"
+      }
+    },
+    {
+      "name": "date no style pl",
+      "locale": "pl",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "5.03.2024"
+      }
+    },
+    {
+      "name": "date no style fr",
+      "locale": "fr",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "05/03/2024"
+      }
+    },
+    {
+      "name": "date no style th",
+      "locale": "th",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "5/3/2567"
+      }
+    },
+    {
+      "name": "date before year 1",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": -62198755200000,
+      "answer": {
+        "text": "1/1/2"
+      }
+    },
+    {
+      "name": "date short year 1949",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short"
+      },
+      "input": -648432000000,
+      "answer": {
+        "text": "6/15/49"
+      }
+    },
+    {
+      "name": "date short year 1950",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short"
+      },
+      "input": -616896000000,
+      "answer": {
+        "text": "6/15/50"
+      }
+    },
+    {
+      "name": "date short year 2049",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short"
+      },
+      "input": 2507328000000,
+      "answer": {
+        "text": "6/15/49"
+      }
+    },
+    {
+      "name": "date short year 2050",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short"
+      },
+      "input": 2538864000000,
+      "answer": {
+        "text": "6/15/50"
+      }
+    },
+    {
+      "name": "date short year 2050 de",
+      "locale": "de",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "dateStyle": "short"
+      },
+      "input": 2538864000000,
+      "answer": {
+        "text": "15.06.50"
+      }
+    },
+    {
+      "name": "date full time cs",
+      "locale": "cs",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "timeStyle": "full"
+      },
+      "input": 1709632800000,
+      "answer": {
+        "text": "11:00:00, st\u0159edoevropsk\u00fd standardn\u00ed \u010das"
+      }
+    },
+    {
+      "name": "date past jiff Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "medium",
+        "timeStyle": "short"
+      },
+      "input": 8640000000000000,
+      "answer": {
+        "text": "Sep 13, 275760, 2:00 AM"
+      }
+    },
+    {
+      "name": "date before jiff Europe/Prague",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "Europe/Prague",
+        "dateStyle": "medium",
+        "timeStyle": "short"
+      },
+      "input": -8640000000000000,
+      "answer": {
+        "text": "Apr 20, 271822, 12:57 AM"
+      }
+    },
+    {
+      "name": "date past time clip",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC"
+      },
+      "input": 8640000000000001,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "number useGrouping false",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": false,
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1234.5"
+      }
+    },
+    {
+      "name": "number useGrouping true",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": true,
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1,234.5"
+      }
+    },
+    {
+      "name": "number useGrouping \"always\"",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": "always",
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1,234.5"
+      }
+    },
+    {
+      "name": "number useGrouping \"auto\"",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": "auto",
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1,234.5"
+      }
+    },
+    {
+      "name": "number useGrouping \"min2\"",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": "min2",
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1234.5"
+      }
+    },
+    {
+      "name": "number useGrouping \"false\"",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": "false",
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1,234.5"
+      }
+    },
+    {
+      "name": "number useGrouping \"true\"",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": "true",
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1,234.5"
+      }
+    },
+    {
+      "name": "number useGrouping null",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": null,
+        "maximumFractionDigits": 2
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1234.5"
+      }
+    },
+    {
+      "name": "number useGrouping min2 over five digits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": "min2"
+      },
+      "input": 12345,
+      "answer": {
+        "text": "12,345"
+      }
+    },
+    {
+      "name": "number useGrouping 1",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "useGrouping": 1
+      },
+      "input": 1234,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "number percent",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "percent",
+        "maximumFractionDigits": 2
+      },
+      "input": 0.256,
+      "answer": {
+        "text": "25.6%"
+      }
+    },
+    {
+      "name": "number percent sign",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "percent",
+        "signDisplay": "always"
+      },
+      "input": 0.25,
+      "answer": {
+        "text": "+25%"
+      }
+    },
+    {
+      "name": "number signDisplay auto -1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "auto"
+      },
+      "input": -1.5,
+      "answer": {
+        "text": "-1.5"
+      }
+    },
+    {
+      "name": "number signDisplay auto 0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "auto"
+      },
+      "input": 0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "number signDisplay auto -0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "auto"
+      },
+      "input": -0,
+      "answer": {
+        "text": "-0"
+      }
+    },
+    {
+      "name": "number signDisplay auto 1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "auto"
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "1.5"
+      }
+    },
+    {
+      "name": "number signDisplay never -1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "never"
+      },
+      "input": -1.5,
+      "answer": {
+        "text": "1.5"
+      }
+    },
+    {
+      "name": "number signDisplay never 0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "never"
+      },
+      "input": 0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "number signDisplay never -0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "never"
+      },
+      "input": -0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "number signDisplay never 1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "never"
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "1.5"
+      }
+    },
+    {
+      "name": "number signDisplay always -1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "always"
+      },
+      "input": -1.5,
+      "answer": {
+        "text": "-1.5"
+      }
+    },
+    {
+      "name": "number signDisplay always 0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "always"
+      },
+      "input": 0,
+      "answer": {
+        "text": "+0"
+      }
+    },
+    {
+      "name": "number signDisplay always -0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "always"
+      },
+      "input": -0,
+      "answer": {
+        "text": "-0"
+      }
+    },
+    {
+      "name": "number signDisplay always 1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "always"
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "+1.5"
+      }
+    },
+    {
+      "name": "number signDisplay exceptZero -1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "exceptZero"
+      },
+      "input": -1.5,
+      "answer": {
+        "text": "-1.5"
+      }
+    },
+    {
+      "name": "number signDisplay exceptZero 0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "exceptZero"
+      },
+      "input": 0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "number signDisplay exceptZero -0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "exceptZero"
+      },
+      "input": -0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "number signDisplay exceptZero 1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "exceptZero"
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "+1.5"
+      }
+    },
+    {
+      "name": "number signDisplay negative -1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "negative"
+      },
+      "input": -1.5,
+      "answer": {
+        "text": "-1.5"
+      }
+    },
+    {
+      "name": "number signDisplay negative 0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "negative"
+      },
+      "input": 0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "number signDisplay negative -0",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "negative"
+      },
+      "input": -0,
+      "answer": {
+        "text": "0"
+      }
+    },
+    {
+      "name": "number signDisplay negative 1.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "signDisplay": "negative"
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "1.5"
+      }
+    },
+    {
+      "name": "number roundingMode ceil 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "ceil",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "3"
+      }
+    },
+    {
+      "name": "number roundingMode ceil -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "ceil",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-2"
+      }
+    },
+    {
+      "name": "number roundingMode ceil 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "ceil",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.6"
+      }
+    },
+    {
+      "name": "number roundingMode floor 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "floor",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "2"
+      }
+    },
+    {
+      "name": "number roundingMode floor -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "floor",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-3"
+      }
+    },
+    {
+      "name": "number roundingMode floor 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "floor",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.5"
+      }
+    },
+    {
+      "name": "number roundingMode expand 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "expand",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "3"
+      }
+    },
+    {
+      "name": "number roundingMode expand -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "expand",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-3"
+      }
+    },
+    {
+      "name": "number roundingMode expand 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "expand",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.6"
+      }
+    },
+    {
+      "name": "number roundingMode trunc 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "trunc",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "2"
+      }
+    },
+    {
+      "name": "number roundingMode trunc -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "trunc",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-2"
+      }
+    },
+    {
+      "name": "number roundingMode trunc 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "trunc",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.5"
+      }
+    },
+    {
+      "name": "number roundingMode halfCeil 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfCeil",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "3"
+      }
+    },
+    {
+      "name": "number roundingMode halfCeil -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfCeil",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-2"
+      }
+    },
+    {
+      "name": "number roundingMode halfCeil 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfCeil",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.6"
+      }
+    },
+    {
+      "name": "number roundingMode halfFloor 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfFloor",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "2"
+      }
+    },
+    {
+      "name": "number roundingMode halfFloor -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfFloor",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-3"
+      }
+    },
+    {
+      "name": "number roundingMode halfFloor 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfFloor",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.5"
+      }
+    },
+    {
+      "name": "number roundingMode halfExpand 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfExpand",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "3"
+      }
+    },
+    {
+      "name": "number roundingMode halfExpand -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfExpand",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-3"
+      }
+    },
+    {
+      "name": "number roundingMode halfExpand 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfExpand",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.6"
+      }
+    },
+    {
+      "name": "number roundingMode halfTrunc 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfTrunc",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "2"
+      }
+    },
+    {
+      "name": "number roundingMode halfTrunc -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfTrunc",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-2"
+      }
+    },
+    {
+      "name": "number roundingMode halfTrunc 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfTrunc",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.5"
+      }
+    },
+    {
+      "name": "number roundingMode halfEven 2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfEven",
+        "maximumFractionDigits": 0
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "2"
+      }
+    },
+    {
+      "name": "number roundingMode halfEven -2.5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfEven",
+        "maximumFractionDigits": 0
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "-2"
+      }
+    },
+    {
+      "name": "number roundingMode halfEven 2.55",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingMode": "halfEven",
+        "maximumFractionDigits": 1
+      },
+      "input": 2.55,
+      "answer": {
+        "text": "2.6"
+      }
+    },
+    {
+      "name": "number roundingIncrement 1",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 1,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.23"
+      }
+    },
+    {
+      "name": "number roundingIncrement 2",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 2,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.24"
+      }
+    },
+    {
+      "name": "number roundingIncrement 5",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 5,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.25"
+      }
+    },
+    {
+      "name": "number roundingIncrement 10",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 10,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.20"
+      }
+    },
+    {
+      "name": "number roundingIncrement 20",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 20,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.20"
+      }
+    },
+    {
+      "name": "number roundingIncrement 25",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 25,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.25"
+      }
+    },
+    {
+      "name": "number roundingIncrement 50",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 50,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 100",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 100,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "1.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 200",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 200,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "2.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 250",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 250,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "0.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 500",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 500,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "0.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 1000",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 1000,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "0.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 2000",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 2000,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "0.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 2500",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 2500,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "0.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 5000",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 5000,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "text": "0.00"
+      }
+    },
+    {
+      "name": "number roundingIncrement 3",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 3,
+        "maximumFractionDigits": 2,
+        "minimumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "number roundingIncrement without equal digits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "roundingIncrement": 5,
+        "maximumFractionDigits": 2
+      },
+      "input": 1.2345,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "number significant digits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumSignificantDigits": 3
+      },
+      "input": 123456.789,
+      "answer": {
+        "text": "123,000"
+      }
+    },
+    {
+      "name": "number minimum significant digits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumSignificantDigits": 5
+      },
+      "input": 1.5,
+      "answer": {
+        "text": "1.5000"
+      }
+    },
+    {
+      "name": "number roundingPriority morePrecision",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumSignificantDigits": 2,
+        "maximumFractionDigits": 3,
+        "roundingPriority": "morePrecision"
+      },
+      "input": 1.23456,
+      "answer": {
+        "text": "1.235"
+      }
+    },
+    {
+      "name": "number roundingPriority lessPrecision",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumSignificantDigits": 2,
+        "maximumFractionDigits": 3,
+        "roundingPriority": "lessPrecision"
+      },
+      "input": 1.23456,
+      "answer": {
+        "text": "1.2"
+      }
+    },
+    {
+      "name": "number trailingZeroDisplay stripIfInteger",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 2,
+        "trailingZeroDisplay": "stripIfInteger"
+      },
+      "input": 2,
+      "answer": {
+        "text": "2"
+      }
+    },
+    {
+      "name": "number trailingZeroDisplay stripIfInteger fraction",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 2,
+        "trailingZeroDisplay": "stripIfInteger"
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "2.50"
+      }
+    },
+    {
+      "name": "number minimumIntegerDigits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumIntegerDigits": 4
+      },
+      "input": 12.5,
+      "answer": {
+        "text": "0,012.5"
+      }
+    },
+    {
+      "name": "number maximum under minimum",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "minimumFractionDigits": 3,
+        "maximumFractionDigits": 1
+      },
+      "input": 1,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "number maximumFractionDigits null",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": null
+      },
+      "input": 1.75,
+      "answer": {
+        "text": "2"
+      }
+    },
+    {
+      "name": "number maximumFractionDigits text",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": "1"
+      },
+      "input": 1.75,
+      "answer": {
+        "text": "1.8"
+      }
+    },
+    {
+      "name": "number maximumFractionDigits 101",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 101
+      },
+      "input": 1.75,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "number numberingSystem arab",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "numberingSystem": "arab"
+      },
+      "input": 1234,
+      "answer": {
+        "text": "\u0661\u066c\u0662\u0663\u0664"
+      }
+    },
+    {
+      "name": "number ar",
+      "locale": "ar",
+      "api": "NumberFormat",
+      "options": {},
+      "input": 1234.5,
+      "answer": {
+        "text": "1,234.5"
+      }
+    },
+    {
+      "name": "number shortest digits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "maximumFractionDigits": 2
+      },
+      "input": 1.005,
+      "answer": {
+        "text": "1.01"
+      }
+    },
+    {
+      "name": "number large",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {},
+      "input": 1e+21,
+      "answer": {
+        "text": "1,000,000,000,000,000,000,000"
+      }
+    },
+    {
+      "name": "number locale with underscore",
+      "locale": "en_US",
+      "api": "NumberFormat",
+      "options": {},
+      "input": 1,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "number unknown style",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "loud"
+      },
+      "input": 1,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "currency currencyDisplay symbol",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "CAD",
+        "currencyDisplay": "symbol"
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "CA$2.50"
+      }
+    },
+    {
+      "name": "currency currencyDisplay narrowSymbol",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "CAD",
+        "currencyDisplay": "narrowSymbol"
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "$2.50"
+      }
+    },
+    {
+      "name": "currency currencyDisplay code",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "CAD",
+        "currencyDisplay": "code"
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "CAD\u00a02.50"
+      }
+    },
+    {
+      "name": "currency currencyDisplay name",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "CAD",
+        "currencyDisplay": "name"
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "2.50 Canadian dollars"
+      }
+    },
+    {
+      "name": "currency currencySign accounting",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "currencySign": "accounting"
+      },
+      "input": -2.5,
+      "answer": {
+        "text": "($2.50)"
+      }
+    },
+    {
+      "name": "currency unknown code",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "XYZ"
+      },
+      "input": 2,
+      "answer": {
+        "text": "XYZ\u00a02.00"
+      }
+    },
+    {
+      "name": "currency missing code",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency"
+      },
+      "input": 2,
+      "answer": {
+        "error": "TypeError"
+      }
+    },
+    {
+      "name": "currency malformed code",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "US"
+      },
+      "input": 2,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "currency cs",
+      "locale": "cs",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "CZK"
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "1\u00a0234,50\u00a0K\u010d"
+      }
+    },
+    {
+      "name": "currency JPY",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "JPY"
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "\u00a51,235"
+      }
+    },
+    {
+      "name": "currency minimumIntegerDigits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "minimumIntegerDigits": 3
+      },
+      "input": 2,
+      "answer": {
+        "text": "$002.00"
+      }
+    },
+    {
+      "name": "currency minimumFractionDigits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "minimumFractionDigits": 4
+      },
+      "input": 2.3456,
+      "answer": {
+        "text": "$2.3456"
+      }
+    },
+    {
+      "name": "currency maximumFractionDigits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "maximumFractionDigits": 0
+      },
+      "input": 2,
+      "answer": {
+        "text": "$2"
+      }
+    },
+    {
+      "name": "currency minimumSignificantDigits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "minimumSignificantDigits": 4
+      },
+      "input": 2,
+      "answer": {
+        "text": "$2.000"
+      }
+    },
+    {
+      "name": "currency maximumSignificantDigits",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "maximumSignificantDigits": 1
+      },
+      "input": 2.5,
+      "answer": {
+        "text": "$3"
+      }
+    },
+    {
+      "name": "currency roundingIncrement",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "roundingIncrement": 5
+      },
+      "input": 2.37,
+      "answer": {
+        "text": "$2.35"
+      }
+    },
+    {
+      "name": "currency roundingMode",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "roundingMode": "floor"
+      },
+      "input": 2.379,
+      "answer": {
+        "text": "$2.37"
+      }
+    },
+    {
+      "name": "currency roundingPriority",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "maximumSignificantDigits": 2,
+        "roundingPriority": "lessPrecision"
+      },
+      "input": 2.379,
+      "answer": {
+        "text": "$2.4"
+      }
+    },
+    {
+      "name": "currency trailingZeroDisplay",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "trailingZeroDisplay": "stripIfInteger"
+      },
+      "input": 2,
+      "answer": {
+        "text": "$2"
+      }
+    },
+    {
+      "name": "currency useGrouping",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "useGrouping": false
+      },
+      "input": 1234.5,
+      "answer": {
+        "text": "$1234.50"
+      }
+    },
+    {
+      "name": "currency signDisplay",
+      "locale": "en",
+      "api": "NumberFormat",
+      "options": {
+        "style": "currency",
+        "currency": "USD",
+        "signDisplay": "always"
+      },
+      "input": 2,
+      "answer": {
+        "text": "+$2.00"
+      }
+    },
+    {
+      "name": "ago long second",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "long",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "second"
+      ],
+      "answer": {
+        "text": "3 seconds ago"
+      }
+    },
+    {
+      "name": "ago long minute",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "long",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "minute"
+      ],
+      "answer": {
+        "text": "3 minutes ago"
+      }
+    },
+    {
+      "name": "ago long hour",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "long",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "hour"
+      ],
+      "answer": {
+        "text": "3 hours ago"
+      }
+    },
+    {
+      "name": "ago long day",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "long",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "day"
+      ],
+      "answer": {
+        "text": "3 days ago"
+      }
+    },
+    {
+      "name": "ago long week",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "long",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "week"
+      ],
+      "answer": {
+        "text": "3 weeks ago"
+      }
+    },
+    {
+      "name": "ago long month",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "long",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "month"
+      ],
+      "answer": {
+        "text": "3 months ago"
+      }
+    },
+    {
+      "name": "ago long year",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "long",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "year"
+      ],
+      "answer": {
+        "text": "3 years ago"
+      }
+    },
+    {
+      "name": "ago short second",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "short",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "second"
+      ],
+      "answer": {
+        "text": "3 sec. ago"
+      }
+    },
+    {
+      "name": "ago short minute",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "short",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "minute"
+      ],
+      "answer": {
+        "text": "3 min. ago"
+      }
+    },
+    {
+      "name": "ago short hour",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "short",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "hour"
+      ],
+      "answer": {
+        "text": "3 hr. ago"
+      }
+    },
+    {
+      "name": "ago short day",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "short",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "day"
+      ],
+      "answer": {
+        "text": "3 days ago"
+      }
+    },
+    {
+      "name": "ago short week",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "short",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "week"
+      ],
+      "answer": {
+        "text": "3 wk. ago"
+      }
+    },
+    {
+      "name": "ago short month",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "short",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "month"
+      ],
+      "answer": {
+        "text": "3 mo. ago"
+      }
+    },
+    {
+      "name": "ago short year",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "short",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "year"
+      ],
+      "answer": {
+        "text": "3 yr. ago"
+      }
+    },
+    {
+      "name": "ago narrow second",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "narrow",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "second"
+      ],
+      "answer": {
+        "text": "3s ago"
+      }
+    },
+    {
+      "name": "ago narrow minute",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "narrow",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "minute"
+      ],
+      "answer": {
+        "text": "3m ago"
+      }
+    },
+    {
+      "name": "ago narrow hour",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "narrow",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "hour"
+      ],
+      "answer": {
+        "text": "3h ago"
+      }
+    },
+    {
+      "name": "ago narrow day",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "narrow",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "day"
+      ],
+      "answer": {
+        "text": "3d ago"
+      }
+    },
+    {
+      "name": "ago narrow week",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "narrow",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "week"
+      ],
+      "answer": {
+        "text": "3w ago"
+      }
+    },
+    {
+      "name": "ago narrow month",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "narrow",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "month"
+      ],
+      "answer": {
+        "text": "3mo ago"
+      }
+    },
+    {
+      "name": "ago narrow year",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "narrow",
+        "numeric": "always"
+      },
+      "input": [
+        -3,
+        "year"
+      ],
+      "answer": {
+        "text": "3y ago"
+      }
+    },
+    {
+      "name": "ago auto yesterday",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -1,
+        "day"
+      ],
+      "answer": {
+        "text": "yesterday"
+      }
+    },
+    {
+      "name": "ago auto next week",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        1,
+        "week"
+      ],
+      "answer": {
+        "text": "next week"
+      }
+    },
+    {
+      "name": "ago auto now",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        0,
+        "second"
+      ],
+      "answer": {
+        "text": "now"
+      }
+    },
+    {
+      "name": "ago auto -0",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -0,
+        "second"
+      ],
+      "answer": {
+        "text": "now"
+      }
+    },
+    {
+      "name": "ago always -0",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "always"
+      },
+      "input": [
+        -0,
+        "second"
+      ],
+      "answer": {
+        "text": "0 seconds ago"
+      }
+    },
+    {
+      "name": "ago fraction",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "always"
+      },
+      "input": [
+        1.5,
+        "day"
+      ],
+      "answer": {
+        "text": "in 1.5 days"
+      }
+    },
+    {
+      "name": "ago cs",
+      "locale": "cs",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "auto"
+      },
+      "input": [
+        -20,
+        "minute"
+      ],
+      "answer": {
+        "text": "p\u0159ed 20 minutami"
+      }
+    },
+    {
+      "name": "ago unknown style",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "style": "tiny"
+      },
+      "input": [
+        1,
+        "day"
+      ],
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "plural cs 1",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "type": "cardinal",
+        "maximumFractionDigits": 2
+      },
+      "input": 1,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural cs 1.0",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "type": "cardinal",
+        "minimumFractionDigits": 1,
+        "maximumFractionDigits": 2
+      },
+      "input": 1,
+      "answer": {
+        "category": "many"
+      }
+    },
+    {
+      "name": "plural cs 1.999 at two digits",
+      "locale": "cs",
+      "api": "PluralRules",
+      "options": {
+        "type": "cardinal",
+        "maximumFractionDigits": 2
+      },
+      "input": 1.999,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "plural en significant",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "cardinal",
+        "maximumSignificantDigits": 1,
+        "maximumFractionDigits": 2
+      },
+      "input": 1.2,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "plural ar 0",
+      "locale": "ar",
+      "api": "PluralRules",
+      "options": {
+        "type": "cardinal",
+        "maximumFractionDigits": 2
+      },
+      "input": 0,
+      "answer": {
+        "category": "zero"
+      }
+    },
+    {
+      "name": "plural unknown type",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "many"
+      },
+      "input": 1,
+      "answer": {
+        "error": "RangeError"
+      }
+    },
+    {
+      "name": "ordinal en 1",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 1,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "ordinal en 2",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 2,
+      "answer": {
+        "category": "two"
+      }
+    },
+    {
+      "name": "ordinal en 3",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 3,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "ordinal en 4",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 4,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "ordinal en 11",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 11,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "ordinal en 12",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 12,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "ordinal en 13",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 13,
+      "answer": {
+        "category": "other"
+      }
+    },
+    {
+      "name": "ordinal en 21",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 21,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "ordinal en 22",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 22,
+      "answer": {
+        "category": "two"
+      }
+    },
+    {
+      "name": "ordinal en 23",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 23,
+      "answer": {
+        "category": "few"
+      }
+    },
+    {
+      "name": "ordinal en 101",
+      "locale": "en",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 101,
+      "answer": {
+        "category": "one"
+      }
+    },
+    {
+      "name": "ordinal cy 3",
+      "locale": "cy",
+      "api": "PluralRules",
+      "options": {
+        "type": "ordinal"
+      },
+      "input": 3,
+      "answer": {
+        "category": "few"
+      }
+    }
+  ]
+}

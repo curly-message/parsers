@@ -1,0 +1,82 @@
+{
+  "format": "curly-message-3",
+  "kind": "tree",
+  "section": "6",
+  "cases": [
+    {
+      "id": "mini/text-around-placeholder",
+      "description": "The text on either side of a placeholder is a node of its own.",
+      "section": "6.1",
+      "message": "Hi {{name}}!",
+      "expected": [
+        { "type": "text", "text": "Hi " },
+        {
+          "type": "placeholder",
+          "text": "{{name}}",
+          "nodes": [
+            { "type": "open", "text": "{{" },
+            { "type": "key", "text": "name", "name": "name", "nodes": [{ "type": "text", "text": "name" }] },
+            { "type": "close", "text": "}}" }
+          ]
+        },
+        { "type": "text", "text": "!" }
+      ],
+      "resolves": "Hi !"
+    },
+    {
+      "id": "mini/segment-with-value",
+      "description": "A segment that states a value carries an option key, a separator and an option value.",
+      "section": "6.2",
+      "message": "{{a; x:y}}",
+      "expected": [
+        {
+          "type": "placeholder",
+          "text": "{{a; x:y}}",
+          "nodes": [
+            { "type": "open", "text": "{{" },
+            { "type": "key", "text": "a", "name": "a", "nodes": [{ "type": "text", "text": "a" }] },
+            { "type": "separator", "text": ";" },
+            { "type": "space", "text": " " },
+            { "type": "option-key", "text": "x", "name": "x", "nodes": [{ "type": "text", "text": "x" }] },
+            { "type": "separator", "text": ":" },
+            { "type": "option-value", "text": "y", "nodes": [{ "type": "text", "text": "y" }] },
+            { "type": "close", "text": "}}" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mini/name-with-escape",
+      "description": "A name carries the span unescaped beside the nodes the message spells it with.",
+      "section": "7",
+      "message": "{{my\\;key}}",
+      "expected": [
+        {
+          "type": "placeholder",
+          "text": "{{my\\;key}}",
+          "nodes": [
+            { "type": "open", "text": "{{" },
+            {
+              "type": "key",
+              "text": "my\\;key",
+              "name": "my;key",
+              "nodes": [
+                { "type": "text", "text": "my" },
+                { "type": "escape", "text": "\\;", "cancels": true },
+                { "type": "text", "text": "key" }
+              ]
+            },
+            { "type": "close", "text": "}}" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "mini/astral-escape",
+      "description": "A backslash consumes a code point, outside the basic plane too.",
+      "section": "7",
+      "message": "\\\ud83d\ude00",
+      "expected": [{ "type": "escape", "text": "\\\ud83d\ude00", "cancels": false }]
+    }
+  ]
+}

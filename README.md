@@ -20,16 +20,21 @@ format, which the specification states is stable.
 
 It resolves over the format's own inputs and depends on no host library.
 
+The Rust implementation, `curly-message-parser`, implements the same version
+and is not yet released: its first version, `1.0.0-next.0`, is published to
+crates.io by hand.
+
 ## Implementations
 
 | Path | Package | State |
 | --- | --- | --- |
 | [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
+| [`rust/`](./rust) | `curly-message-parser` | Unreleased |
 
 One directory per language, each a standalone package with its own build,
 tests and version line. Release tags are namespaced by directory
-(`js-v1.0.0`), so an implementation can leave for its own repository without
-that being a breaking change for the others.
+(`js-v1.0.0`, `rust-v1.0.0`), so an implementation can leave for its own
+repository without that being a breaking change for the others.
 
 ## Pre-commit hook
 
@@ -39,10 +44,15 @@ and how to install them, rather than failing the commit. `npm ci` in `js/`
 installs it; without Node, `git config core.hooksPath .githooks` does. Git
 then runs every hook from `.githooks/`, and none from `.git/hooks/`.
 
+The check of a directory is `.githooks/<dir>.sh`: `npm run lint` for `js/`,
+and for `rust/` the format, clippy and harness checks of the Lint job of
+`tests-cargo.yml`.
+
 ## Benchmarks
 
 Each implementation directory has a benchmark, run by the command its README
-names (`npm run bench` in `js/`), that measures what its build costs: counts,
+names (`npm run bench` in `js/`, `sh bench/prepare.sh && node
+bench/harness.mjs` in `rust/`), that measures what its build costs: counts,
 such as what checking a call costs a type checker, sizes, and times. A PR is
 benchmarked against its base by `bench.yml`, for each implementation it
 touches, which posts a table per implementation on the PR (a PR from a fork
@@ -97,6 +107,34 @@ registered only for a package that exists, so the first version,
 `1.0.0-next.0`, was published by hand from `main` by a maintainer of the scope
 (`cd js && npm ci && npm publish --access public --tag next`); the workflow
 refuses to run for a package the registry does not know.
+
+### Rust
+
+The Rust parser is released by the **Rust parser publish** workflow
+(`.github/workflows/publish-rust.yml`, started by hand, calling
+`publish-cargo.yml`), reading the changelog's pending section and the release
+types as the JavaScript workflow does. crates.io has no dist-tags: `next`
+publishes a prerelease version (`1.1.0-next.0`, then `.1`), which Cargo
+resolves only for a requirement that names a prerelease, as npm installs a
+`next` version only when asked for it. The workflow runs the test matrix,
+bumps `version` in `rust/Cargo.toml` and the crate's entry in
+`rust/Cargo.lock`, writes the benchmark into `BENCH.md`, verifies the package
+(`cargo package` builds the crate from the files it ships), commits, tags
+(`rust-v1.0.0`), pushes, publishes to crates.io and publishes a GitHub
+release carrying the changelog section. It runs in the same three jobs, and
+the release job publishes only a crate whose files hash as the verified one's
+did.
+
+crates.io holds no token: the workflow is the crate's
+[trusted publisher](https://rust-lang.github.io/rfcs/3691-trusted-publishing-cratesio.html),
+registered in the crate's settings on crates.io (repository
+`curly-message/parsers`, workflow `publish-rust.yml`, environment
+`release`), and `rust-lang/crates-io-auth-action` exchanges the job's OIDC
+token for a token it revokes when the job ends. A trusted publisher can be registered only for
+a crate that exists, so the first version, `1.0.0-next.0`, is published by
+hand from `main` by an owner with an API token
+(`cd rust && cargo publish --locked -p curly-message-parser`); the workflow
+refuses to run for a crate crates.io does not know.
 
 ## Specification
 

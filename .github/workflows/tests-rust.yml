@@ -1,0 +1,75 @@
+name: Rust parser tests
+
+on:
+  # A pull request from a fork pushes nothing here, so the tests run on the
+  # pull request, whatever its base, which tests a stacked one too. A rebase
+  # merge and a release commit land commits no pull request ran, so main is
+  # tested again on a push. A tag is left out: it names a tree the publish
+  # workflow has just tested. A branch with no pull request runs by hand.
+  # The harness is read from js/ too, since rust/ holds a copy of it.
+  push:
+    branches: [main]
+    paths: &paths
+      - rust/**
+      - js/bench/harness.mjs
+      - js/bench/check/**
+      - .github/workflows/tests-rust.yml
+      - .github/workflows/tests-cargo.yml
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+  # Weekly, for the job below.
+  schedule:
+    - cron: '17 5 * * 1'
+
+jobs:
+  tests:
+    if: github.event_name != 'schedule'
+    uses: ./.github/workflows/tests-cargo.yml
+    with:
+      package: rust
+
+  # `icu_experimental` requires the ICU4X minor it was released with, so with
+  # `intl` an application's graph holds ICU4X 2.3.x and nothing newer. This
+  # fails once a newer ICU4X minor no longer resolves beside the crate: the
+  # signal for the release that moves `intl` to it. Never on a pull request,
+  # which it would block for a reason no pull request causes.
+  ICU4X:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Pinned exactly: a range would let the resolver fall back to the
+      # ICU4X the crate already resolves with.
+      - name: Resolve the newest ICU4X beside the crate
+        env:
+          SOURCE: ${{ github.workspace }}/rust
+        run: |
+          newest=$(curl -fsS -A curly-message-ci https://crates.io/api/v1/crates/icu | jq -r .crate.max_stable_version)
+          probe="$RUNNER_TEMP/probe"
+          mkdir -p "$probe/src"
+          echo 'fn main() {}' > "$probe/src/main.rs"
+          cat > "$probe/Cargo.toml" <<EOF
+          [package]
+          name = "probe"
+          version = "0.0.0"
+          edition = "2024"
+          publish = false
+
+          [dependencies]
+          curly-message-parser = { path = "$SOURCE", features = ["intl"] }
+          icu = "=$newest"
+
+          [workspace]
+          EOF
+          cd "$probe"
+          cargo generate-lockfile || { echo "::error::ICU4X $newest does not resolve beside curly-message-parser with intl. Release a version of the crate whose intl moves to it."; exit 1; }
