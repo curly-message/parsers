@@ -17,6 +17,7 @@ export type Surface = [
   Assert<Equal<typeof Shipped.createParser<Payload, Props, 'shout'>, typeof Source.createParser<Payload, Props, 'shout'>>>,
   Assert<Equal<typeof Shipped.createExtractor<Props>, typeof Source.createExtractor<Props>>>,
   Assert<Equal<typeof Shipped.createExtractor<Props, 'shout'>, typeof Source.createExtractor<Props, 'shout'>>>,
+  Assert<Equal<Shipped.Parser.Compiled<Shipped.Parser.Context<Payload>>, Source.Parser.Compiled<Source.Parser.Context<Payload>>>>,
   Assert<Equal<typeof Shipped.cst, typeof Source.cst>>,
   Assert<Equal<Shipped.Report, Source.Report>>,
   Assert<Equal<Shipped.Locale, Source.Locale>>,

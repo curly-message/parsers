@@ -16,7 +16,7 @@ const ts = createRequire(join(process.cwd(), 'package.json'))('typescript');
 const probe = fileURLToPath(new URL('../probe.ts', import.meta.url)).replaceAll('\\', '/');
 const bundle = () => readFileSync(new URL('../dist/index.js', import.meta.url));
 
-const { resolve } = createParser();
+const { resolve, compile } = createParser();
 const { resolve: resolveWrapped } = createParser({ customModifiers: { test: ({ value }) => value } });
 const extract = createExtractor();
 
@@ -40,6 +40,9 @@ const PLAIN = [
 ];
 
 const PAYLOAD = { name: 'Ada', count: 3, gender: 'female', thread: 'Plans', folder: 'docs', amount: 1234.5, due: new Date(Date.UTC(2026, 0, 31)) };
+
+// A catalogue of 2 000 distinct messages, more than a parser keeps.
+const CATALOGUE = Array.from({ length: 2000 }, (_, index) => `${MESSAGES[index % MESSAGES.length]} (${index})`);
 
 const nested = (depth) => `${'{{v; a:'.repeat(depth)}x${'}}'.repeat(depth)}`;
 const flat = (count) => Array.from({ length: count }, (_, index) => `{{p${index}}}`).join(' ');
@@ -114,6 +117,28 @@ export default [
   } },
   { name: 'resolve: five catalogue messages of plain text', kind: 'time', run: () => () => {
     for (const message of PLAIN) resolve(message, { payload: PAYLOAD, locale: 'en' });
+  } },
+  { name: 'resolve: five catalogue messages, compiled', kind: 'time', run: () => {
+    const compiled = MESSAGES.map((message) => compile(message));
+
+    return () => {
+      for (const message of compiled) message.resolve({ payload: PAYLOAD, locale: 'en' });
+    };
+  } },
+  { name: 'resolve: 2 000 catalogue messages, more than a parser keeps', kind: 'time', run: () => {
+    const parser = createParser();
+
+    return () => {
+      for (const message of CATALOGUE) parser.resolve(message, { payload: PAYLOAD, locale: 'en' });
+    };
+  } },
+  { name: 'resolve: 2 000 catalogue messages, compiled', kind: 'time', run: () => {
+    const parser = createParser();
+    const compiled = CATALOGUE.map((message) => parser.compile(message));
+
+    return () => {
+      for (const message of compiled) message.resolve({ payload: PAYLOAD, locale: 'en' });
+    };
   } },
   { name: 'resolve: five catalogue messages, each new to the parser', kind: 'time', run: () => () => {
     const parser = createParser();

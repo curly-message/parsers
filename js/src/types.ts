@@ -378,6 +378,53 @@ export module Parser {
   export type Factory = <Payload = {}, Props = {}, Key extends string = Modifier.Key>(options?: Parser.Options<Key, Props>) => Parser.T<Parser.Context<Payload & PayloadDefault, Props & Modifier.DefaultProps>>;
 
   /**
+   * A compiled message, for the caller to hold and release: the text it was
+   * compiled from, and what its first resolution read off that text, kept
+   * for every later one.
+   */
+  export type Compiled<C extends Parser.Context = Parser.Context> = {
+    /**
+     * What the parser's `resolve` returns for the text the message was
+     * compiled from and the same context, byte for byte, with the reads of
+     * the context and of the options it makes for that text, the reports it
+     * makes for the message itself, and the limits counted per call. Nothing
+     * read from the context is kept between calls.
+     */
+    resolve: (context?: C) => string;
+  };
+
+  /**
+   * Converts the message to text once, as `resolve` would convert it, and
+   * returns a `Compiled` holding a copy of that text, never the message
+   * itself. It reads no option and nothing of a context, reports nothing and
+   * never throws; a message no conversion describes compiles to one that
+   * resolves to the empty string.
+   */
+  export type Compile<C extends Parser.Context = Parser.Context> = (message: Value) => Compiled<C>;
+
+  /** What `createParser` returns: `resolve`, and `compile` beside it. */
+  export type Full<C extends Parser.Context = Parser.Context> = {
+    /**
+     * Interpolates the message against the given context and returns the result.
+     * What the parser read off a message's text is kept once it has resolved
+     * that text twice, within bounds the README states; nothing read from the
+     * context is.
+     */
+    resolve: Resolve<C>;
+    /**
+     * Compiles a message once, to be resolved against many contexts. What it
+     * keeps is the caller's to hold, outside what the parser keeps.
+     */
+    compile: Compile<C>;
+  };
+
+  /**
+   * `createParser`'s own type: a `Factory` whose parser compiles a message
+   * too. A `Full` is a `Parser.T`, so a `FullFactory` is a `Factory`.
+   */
+  export type FullFactory = <Payload = {}, Props = {}, Key extends string = Modifier.Key>(options?: Parser.Options<Key, Props>) => Parser.Full<Parser.Context<Payload & PayloadDefault, Props & Modifier.DefaultProps>>;
+
+  /**
    * What a parameter accepts, as far as the message says. `'unknown'` is the
    * top of this lattice rather than a conflict marker: a parameter every value
    * satisfies is one the message narrows not at all, and merging it with any
