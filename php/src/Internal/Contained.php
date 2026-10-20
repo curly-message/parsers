@@ -7,7 +7,7 @@ namespace CurlyMessage\Internal;
 /**
  * Runs what can run host code, so that nothing it raises leaves the
  * resolution. Host code runs where the parser asks it something
- * (`__toString`, `jsonSerialize`, a handler) and also where the
+ * (`__toString`, `jsonSerialize`, a modifier, a handler) and also where the
  * parser lets go of what it answered, since a `__destruct` runs there. So the
  * work answers only text or a flag, and everything else it held is let go as
  * its frame ends, which is inside the `try` here. A raise is host code as it

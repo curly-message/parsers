@@ -27,6 +27,15 @@ use CurlyMessage\Parser;
  * past their first level, and what fibers left suspended in such
  * resolutions hold.
  *
+ * A text host code reads from outside the call it was handed to is rendered
+ * as a resolution begun there is, a walk of message text beneath whatever
+ * walk reached the read, so it takes the same places while it renders. To
+ * tell such a read, each thread of execution knows the host modifier being
+ * asked on it: the one whose call is the innermost the parser made into
+ * host code there and has not returned from, which is none beneath a text
+ * host code asked for or a resolution it began, until a modifier is called
+ * there. A read refused while one is being asked fails it.
+ *
  * @internal
  */
 final class Guard
@@ -37,6 +46,57 @@ final class Guard
 
     /** @var \WeakMap<object, int>|null */
     private static ?\WeakMap $fibers = null;
+
+    private static ?Asked $asked = null;
+
+    /** @var \WeakMap<object, Asked>|null */
+    private static ?\WeakMap $askeds = null;
+
+    /**
+     * Makes `$call` the host modifier being asked on this thread of
+     * execution, null being none, and answers the one it stands in front
+     * of, which the caller puts back the same way.
+     */
+    public static function asks(?Asked $call): ?Asked
+    {
+        $fiber = \Fiber::getCurrent();
+
+        if ($fiber === null) {
+            $outer = self::$asked;
+            self::$asked = $call;
+
+            return $outer;
+        }
+
+        $askeds = self::$askeds ??= new \WeakMap();
+        $outer = $askeds[$fiber] ?? null;
+
+        if ($call === null) {
+            unset($askeds[$fiber]);
+        } else {
+            $askeds[$fiber] = $call;
+        }
+
+        return $outer;
+    }
+
+    /** The host modifier being asked on this thread of execution, null where none is. */
+    public static function asked(): ?Asked
+    {
+        $fiber = \Fiber::getCurrent();
+
+        return $fiber === null ? self::$asked : (self::$askeds ??= new \WeakMap())[$fiber] ?? null;
+    }
+
+    /** Records a refused read against the host modifier being asked on this thread of execution, where one is. */
+    public static function refuse(): void
+    {
+        $asked = self::asked();
+
+        if ($asked !== null) {
+            $asked->refused = true;
+        }
+    }
 
     /**
      * Takes a place on this thread of execution, and one in the process too

@@ -29,7 +29,23 @@ final class ModifierInput
     /**
      * The fallback chain (SPEC.md section 10), walked on the first call and
      * not before: a modifier that never asks leaves it unread, so a link
-     * nobody consulted is never reported as missing.
+     * nobody consulted is never reported as missing. Every call after that
+     * walk finished answers its text. Once the input's resolution returned,
+     * a call answers the text a call during the resolution walked, and the
+     * empty string where none finished one: nothing is walked, reported or
+     * run then (SPEC.md section 11.3).
+     *
+     * A call the parser refuses walks nothing and answers the empty string,
+     * and the host modifier being asked on that thread of execution then
+     * fails whatever it answers (SPEC.md section 13). One is refused at once
+     * where, while the input's resolution is in progress, a walk of the
+     * chain began and has not finished, whether it is in progress or a
+     * fiber was let go in the middle of it. One made by anything but the
+     * modifier the input was handed to, while that modifier is being asked,
+     * takes a place among the resolutions in progress while it walks
+     * (`Parser::MAX_REENTRY`, `Parser::MAX_IN_PROGRESS`), and is refused
+     * where there is none, which leaves the chain to be walked by a later
+     * call.
      */
     public function default(): string
     {

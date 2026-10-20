@@ -40,7 +40,14 @@ final class Parser
     /**
      * Resolutions in progress on one thread of execution, past which
      * `resolve` throws `ReentryLimit`. A fiber is a thread of execution of
-     * its own.
+     * its own. An option or a fallback chain read by the call of the host
+     * modifier it was handed to renders where the message nests it, which
+     * `MAX_NESTING` bounds, and takes no place. One host code reads from
+     * anywhere else, a modifier that kept it from another placeholder say,
+     * renders outside where the message nests the read: it takes a place
+     * while it renders, as a resolution begun there does, and where there
+     * is none to take the read answers the empty string and the modifier
+     * that made it fails.
      */
     public const MAX_REENTRY = 32;
 
@@ -58,11 +65,13 @@ final class Parser
     public const MAX_IN_PROGRESS = 512;
 
     /**
+     * @param array<array-key, mixed>|\stdClass $customModifiers the modifiers the host defines, by name, each a `\Closure` or an object with `__invoke`; an entry of any other kind registers nothing and shadows nothing
      * @param array<array-key, mixed>|\stdClass $modifierDefaults the props each modifier is configured with, by its name
      * @param (\Closure(Report): mixed)|null $onReport called with each report, in walk order
      * @param bool $recognizeWrappers whether an entry holding only `value`, `default` and `props` configures its value (section 4.1)
      */
     public function __construct(
+        private readonly array|\stdClass $customModifiers = [],
         private readonly array|\stdClass $modifierDefaults = [],
         private readonly ?\Closure $onReport = null,
         private readonly bool $recognizeWrappers = true,
@@ -107,9 +116,11 @@ final class Parser
 
         $conversion = null;
         $resolution = null;
+        // Host code this resolution calls stands inside whichever modifier
+        // began it, which is asked no longer until it has returned.
+        $asked = $entered ? Guard::asks(null) : null;
 
         try {
-
             // One record for the resolution, which the message's own
             // conversion enters first: a value the payload holds as well
             // converts once.
@@ -128,6 +139,7 @@ final class Parser
                 $props,
                 is_string($locale) ? $locale : null,
                 $id === Undefined::Value ? null : $id,
+                $this->customModifiers,
                 $this->modifierDefaults,
                 $this->onReport,
                 $this->recognizeWrappers,
@@ -140,6 +152,11 @@ final class Parser
             // hold the last reference to what the caller handed over, which
             // is let go where nothing it runs leaves the call.
             Contained::release($message, $payload, $props, $locale, $id, $resolution, $conversion);
+
+            if ($entered) {
+                Guard::asks($asked);
+            }
+
             Guard::leave($entered);
         }
     }
