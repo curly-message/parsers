@@ -919,3 +919,41 @@ func TestHostMapKeysOfEveryKind(t *testing.T) {
 		}
 	}
 }
+
+// Props that alternate between two wrappers are composed again at each
+// placeholder, and a property's text converts once in the resolution
+// however many of those compositions read it. Once the text has converted,
+// the number kept for it is replaced by one no conversion of the text gives,
+// so each composition that reads 3 is one that converted the text.
+func TestPropertyTextConvertsOnce(t *testing.T) {
+	const text, kept = "\u00a03\u00a0", 7.0
+
+	w := lockedWalk()
+	w.props = map[string]any{"number": map[string]any{"minimumFractionDigits": text}}
+	wrappers := []any{
+		map[string]any{"value": 1.0, "props": map[string]any{"number": map[string]any{"useGrouping": true}}},
+		map[string]any{"value": 2.0, "props": map[string]any{"number": map[string]any{"useGrouping": false}}},
+	}
+	composed, converted := map[uintptr]bool{}, 0
+
+	for i := range 10 {
+		c := w.composition("number", wrappers[i%2], false, func(c *composition) { w.widened(c.props) })
+		composed[reflect.ValueOf(c.props).Pointer()] = true
+
+		switch c.props["maximumFractionDigits"] {
+		case 3.0:
+			converted++
+		case kept:
+		default:
+			t.Errorf("composition %d: maximumFractionDigits %v", i, c.props["maximumFractionDigits"])
+		}
+
+		if _, ok := w.composing.numbers[text]; ok {
+			w.composing.numbers[text] = kept
+		}
+	}
+
+	if len(composed) != 10 || converted != 1 {
+		t.Errorf("%d compositions converted the text %d times, want 10 and 1", len(composed), converted)
+	}
+}

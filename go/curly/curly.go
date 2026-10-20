@@ -122,6 +122,11 @@ type Options struct {
 	// IgnoreWrappers turns off the recognition of value wrappers (section
 	// 4.1): every payload entry is a value, whatever its shape.
 	IgnoreWrappers bool
+	// Intl is the facility the modifiers of the Intl level delegate to:
+	// number, currency, date, ago, plural and ordinal. Nil leaves the level
+	// unclaimed, and each of those names is unknown unless the host
+	// registers a modifier under it.
+	Intl Intl
 }
 
 // Context is what one resolution reads besides the message.
@@ -145,6 +150,7 @@ type Parser struct {
 	defaults       map[string]map[string]any
 	onReport       func(Report, Resolver)
 	ignoreWrappers bool
+	intl           Intl
 }
 
 // New returns a Parser configured by options.
@@ -152,6 +158,7 @@ func New(options Options) *Parser {
 	p := &Parser{
 		onReport:       options.OnReport,
 		ignoreWrappers: options.IgnoreWrappers,
+		intl:           options.Intl,
 	}
 
 	for name, m := range options.CustomModifiers {
@@ -217,13 +224,14 @@ func New(options Options) *Parser {
 // Go names no goroutine, so the parser counts along what it hands out, not by
 // where code runs. A lineage is the resolution Parser.Resolve started and
 // every resolution asked for through a means handed out in a resolution of
-// the lineage: a modifier's Input, or the Resolver a Texter and an OnReport
-// handler are handed. MaxReentry bounds the resolutions and counted reads of
-// one lineage in progress at once, on whatever goroutines, so host code that
-// resolves asks through its means. Parser.Resolve starts a lineage of its own
-// wherever it is called: host code that calls it beneath a resolution, when
-// it was handed a means, is counted nowhere, and bounds its own recursion,
-// which otherwise ends at the goroutine's stack, and with it the process.
+// the lineage: a modifier's Input, or the Resolver a Texter, an OnReport
+// handler and an IntlResolving are handed. MaxReentry bounds the resolutions
+// and counted reads of one lineage in progress at once, on whatever
+// goroutines, so host code that resolves asks through its means.
+// Parser.Resolve starts a lineage of its own wherever it is called: host code
+// that calls it beneath a resolution, when it was handed a means, is counted
+// nowhere, and bounds its own recursion, which otherwise ends at the
+// goroutine's stack, and with it the process.
 type Modifier func(Input) (any, error)
 
 // Input is what a modifier receives (section 11).
@@ -318,8 +326,8 @@ func (o Option) Value() string {
 
 // Resolver is the means the parser hands host code to ask for a resolution
 // counted with the lineage of the resolution that called it: a modifier has
-// its Input's, and a Texter and an OnReport handler are each handed one.
-// The zero Resolver resolves nothing and returns an error.
+// its Input's, and a Texter, an OnReport handler and an IntlResolving are
+// each handed one. The zero Resolver resolves nothing and returns an error.
 type Resolver struct {
 	w *walk
 	p *Parser
