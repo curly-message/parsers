@@ -31,10 +31,10 @@ func builtin(name string) (run func(*slot) (string, Code), selection, known bool
 // only one that matched nothing reads the fallback chain.
 func selected(s *slot, i int, ok bool) (string, Code) {
 	if ok {
-		return s.option(i), ""
+		return s.option(i, false), ""
 	}
 
-	return s.chain(), ""
+	return s.chain(false), ""
 }
 
 // equal is the first option whose key equals the value as text,
@@ -123,7 +123,7 @@ func gt(s *slot) (string, Code) {
 // numeric order only where that selects nothing.
 func lte(s *slot) (string, Code) {
 	if i, ok := equal(s, false); ok {
-		return s.option(i), ""
+		return s.option(i, false), ""
 	}
 
 	return lt(s)
@@ -131,7 +131,7 @@ func lte(s *slot) (string, Code) {
 
 func gte(s *slot) (string, Code) {
 	if i, ok := equal(s, false); ok {
-		return s.option(i), ""
+		return s.option(i, false), ""
 	}
 
 	return gt(s)

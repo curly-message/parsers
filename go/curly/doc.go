@@ -3,9 +3,10 @@
 //
 // New returns a Parser, and Parser.Resolve resolves a message against a
 // payload at the Core level of the format: substitution, the fallback chain,
-// value wrappers and the comparison modifiers. A payload value becomes text
-// by its own type: a plain object or array as JSON, a number as ECMAScript
-// writes it, anything else as fmt prints it.
+// value wrappers and the comparison modifiers, and at the Extensions level:
+// the modifiers a host registers through Options.CustomModifiers. A payload
+// value becomes text by its own type: a plain object or array as JSON, a
+// number as ECMAScript writes it, anything else as fmt prints it.
 //
 // CST describes a message as it is written: its placeholders, what each is
 // made of, and where every escape sequence falls, as the concrete syntax tree
@@ -20,7 +21,10 @@
 // its own: the scan, the tree and its encoding, the resolution past
 // MaxNesting and the conversion of a value. So a message or a value nested
 // to any depth costs the goroutine's stack no more than those two bounds
-// allow. Built on encoding/json/v2, from Go 1.27, encoding/json also
+// allow. A resolution a host modifier asks for, and an option or default
+// host code reads off the walk, each recurse a resolution's levels again, as
+// many times as MaxReentry allows a chain to hold them in progress.
+// Built on encoding/json/v2, from Go 1.27, encoding/json also
 // re-formats what a MarshalJSON method writes, recursively and up to its own
 // limit of 10 000 levels, once the method has returned: that cost is
 // encoding/json's bound, not the parser's.

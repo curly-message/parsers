@@ -170,17 +170,17 @@ func (c *conversion) pop(stack *[]printFrame, path map[pathID]bool) {
 func (c *conversion) methods(arg any) (handled, ok bool) {
 	var text string
 
-	var completed bool
+	var completed, returned bool
 
 	switch m := arg.(type) {
 	case fmt.Formatter:
 		s := &state{}
-		completed = c.w.host(func() { m.Format(s, 'v') })
+		completed = c.w.host(func() { m.Format(s, 'v'); returned = true })
 		text = string(s.buf)
 	case error:
-		completed = c.w.host(func() { text = m.Error() })
+		completed = c.w.host(func() { text = m.Error(); returned = true })
 	case fmt.Stringer:
-		completed = c.w.host(func() { text = m.String() })
+		completed = c.w.host(func() { text = m.String(); returned = true })
 	default:
 		return false, true
 	}
@@ -188,6 +188,10 @@ func (c *conversion) methods(arg any) (handled, ok bool) {
 	c.buf = append(c.buf, text...)
 
 	if !completed {
+		if c.w.closed || returned {
+			return true, false
+		}
+
 		if v := reflect.ValueOf(arg); v.Kind() != reflect.Pointer || !v.IsNil() {
 			return true, false
 		}
