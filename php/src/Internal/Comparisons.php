@@ -36,7 +36,8 @@ final class Comparisons
      * The number a text is, by PHP's numeric strings: the whitespace class
      * of section 6 removed from both ends, since `is_numeric` skips only
      * ASCII whitespace, then `is_numeric` and the number it reads as. A text
-     * that is none compares false, never as zero.
+     * that is none compares false, never as zero. The unary plus keeps the
+     * sign of `-0.0`, which adding to zero drops.
      */
     public static function number(string $text): int|float|null
     {
@@ -48,7 +49,7 @@ final class Comparisons
 
         $body = Text::unpadded($text);
 
-        return is_numeric($body) ? 0 + $body : null;
+        return is_numeric($body) ? +$body : null;
     }
 
     private static function selected(?Option $option, ModifierInput $input): string

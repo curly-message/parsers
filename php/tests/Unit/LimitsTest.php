@@ -187,6 +187,38 @@ final class LimitsTest extends TestCase
         self::assertSame(['output' => 'D', 'enumerated' => 10000], $answered);
     }
 
+    /** @return iterable<string, array{string, int}> */
+    public static function composings(): iterable
+    {
+        yield 'two placeholders, one wrapped key' => ['2x500x1x500', 3 * 500];
+        yield 'two thousand placeholders, one wrapped key' => ['2000x500x1x500', 3 * 500];
+        // The near miss: a wrapper's own properties are the payload's too,
+        // and each wrapper's are enumerated, once.
+        yield 'two thousand placeholders, a thousand wrapped keys' => ['2000x500x1000x3', 2 * 500 + 1000 * 3];
+        yield 'two thousand placeholders, ten wrapped keys of wide props' => ['2000x500x10x500', 2 * 500 + 10 * 500];
+        // Arrays are handed on as they are, so nothing is enumerated, and
+        // nothing is kept for a key that grows with what the shared layers
+        // hold: a copy of them for each key would not fit the limit.
+        yield 'a thousand placeholders, five hundred wrapped keys, over arrays' => ['1000x5000x500x1x1', 0];
+    }
+
+    // The props a modifier is handed are composed of every property each
+    // layer holds under its name, and how many those are is the payload's to
+    // say. One resolution composes the two layers every placeholder shares
+    // once, and lays a wrapper's own over them without copying either, so
+    // what it enumerates is what the layers hold, however many placeholders
+    // ask and however many keys they name.
+    // Run apart, since what is counted is PHP's own function, shadowed in
+    // the package's namespace there.
+    #[DataProvider('composings')]
+    public function testComposesTheLayersOfPropsOnceForTheModifiersAMessageNames(string $shape, int $enumerated): void
+    {
+        $answered = self::apart('composing', $shape, '128M');
+        $placeholders = (int) explode('x', $shape)[0];
+
+        self::assertSame(['output' => str_repeat('ab', intdiv($placeholders, 2)), 'enumerated' => $enumerated], $answered);
+    }
+
     // A refused placeholder renders none of its options, so the levels an
     // option value nests past the limit are never walked.
     public function testWalksNoOptionValueNestedPastTheLimit(): void

@@ -4,6 +4,10 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Internal;
 
+use CurlyMessage\FormatRequest;
+use CurlyMessage\Internal\Intl\Available;
+use CurlyMessage\Internal\Intl\Modifiers;
+use CurlyMessage\Internal\Intl\Numbers;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Option;
 use CurlyMessage\Parser;
@@ -32,6 +36,8 @@ final class Resolution
 
     private readonly Layers $layers;
 
+    private readonly Numbers $numbers;
+
     // What the output carries and what the payload is read for are budgets of
     // the resolution rather than of a placeholder: what one placeholder spends
     // is gone for every placeholder after it (section 13).
@@ -57,11 +63,13 @@ final class Resolution
         private readonly mixed $customModifiers,
         private readonly mixed $modifierDefaults,
         private readonly ?\Closure $onReport,
+        private readonly ?\Closure $onRequest,
         private readonly bool $recognizeWrappers,
         private readonly Conversion $conversion,
     ) {
         $this->scanner = new Scanner($message);
-        $this->layers = new Layers();
+        $this->layers = new Layers([$modifierDefaults, $props]);
+        $this->numbers = new Numbers();
     }
 
     public function run(): string
@@ -244,11 +252,14 @@ final class Resolution
         $modifier = $placeholder->modifier;
         $name = $modifier === '' ? 'eq' : $modifier;
         $hosted = $this->hosted($name);
+        // The Intl level's modifiers are the format's only where the host
+        // satisfies it; elsewhere nobody registered them.
+        $intl = $hosted === null && in_array($name, Modifiers::NAMES, true) && Available::satisfied();
 
         // A modifier nobody registered is a defect in the message, not a
         // selection: running `eq` in its place would answer a question the
         // message never asked.
-        if ($modifier !== '' && $hosted === null && !in_array($modifier, Comparisons::NAMES, true)) {
+        if ($modifier !== '' && $hosted === null && !$intl && !in_array($modifier, Comparisons::NAMES, true)) {
             $this->report(ReportCode::UnknownModifier, $open, $close);
 
             return $default();
@@ -282,7 +293,14 @@ final class Resolution
             $options[] = $this->option($optionKey, $from, $to, $depth + 1, $call);
         }
 
-        $props = $this->layers->compose([$this->modifierDefaults, $this->props, $declared->wrapper === null ? null : $this->layers->own($declared->wrapper, 'props')], $name);
+        // The format's own `plural` takes its category from the number
+        // `number` shows, so the digits composed under `number` lie beneath
+        // its own.
+        $props = $this->layers->props(
+            $declared->wrapper === null ? null : $this->layers->own($declared->wrapper, 'props'),
+            $name,
+            $intl && $name === 'plural' ? ['number', Modifiers::SHOWN_DIGITS] : null,
+        );
 
         if ($hosted === null || $call === null) {
             $input = new ModifierInput($declared->valueText, $options, $props, $this->locale, $default);
@@ -291,13 +309,54 @@ final class Resolution
             $outer = Guard::asks(null);
 
             try {
-                return Comparisons::call($name, $input);
+                return $intl ? $this->intl($name, $input, $declared, $default) : Comparisons::call($name, $input);
             } finally {
                 Guard::asks($outer);
             }
         }
 
         return $this->call($hosted, fn(): ModifierInput => new ModifierInput($declared->valueText, $options, $props, $this->locale, fn(): string => $default(true)), $declared, $default, $call);
+    }
+
+    /**
+     * An Intl modifier's answer. One that could not answer reports why, and
+     * takes the fallback chain, but for a missing locale: a declared default
+     * stands in for a value the modifier cannot read, never for the locale
+     * it would have formatted in.
+     *
+     * @param \Closure(): string $default
+     */
+    private function intl(string $name, ModifierInput $input, Declared $declared, \Closure $default): string
+    {
+        $answer = Modifiers::call($name, $input, $this->observe(...), $this->numbers);
+
+        if (!$answer instanceof ReportCode) {
+            return $answer;
+        }
+
+        $this->report($answer, $declared->open, $declared->close);
+
+        return $answer === ReportCode::MissingLocale ? '' : $default();
+    }
+
+    /**
+     * Hands a request to the caller's observer. Observing is not a step of
+     * the resolution: a handler that fails, or answers what fails as it is
+     * let go, changes nothing it resolves to.
+     */
+    private function observe(FormatRequest $request): void
+    {
+        $onRequest = $this->onRequest;
+
+        if ($onRequest === null || $this->closed) {
+            return;
+        }
+
+        Contained::run(static function () use ($onRequest, $request): null {
+            $onRequest($request);
+
+            return null;
+        }, null);
     }
 
     /**

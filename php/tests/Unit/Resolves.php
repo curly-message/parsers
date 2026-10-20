@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Tests\Unit;
 
+use CurlyMessage\FormatRequest;
 use CurlyMessage\Parser;
 use CurlyMessage\Report;
 
@@ -13,6 +14,9 @@ trait Resolves
     /** @var list<Report> */
     private array $reports = [];
 
+    /** @var list<FormatRequest> */
+    private array $requests = [];
+
     /**
      * @param array<array-key, mixed>|\stdClass $customModifiers
      * @param array<array-key, mixed>|\stdClass $modifierDefaults
@@ -20,10 +24,19 @@ trait Resolves
     private function parser(bool $recognizeWrappers = true, array|\stdClass $customModifiers = [], array|\stdClass $modifierDefaults = []): Parser
     {
         $this->reports = [];
+        $this->requests = [];
 
-        return new Parser($customModifiers, $modifierDefaults, function (Report $report): void {
-            $this->reports[] = $report;
-        }, $recognizeWrappers);
+        return new Parser(
+            $customModifiers,
+            $modifierDefaults,
+            onReport: function (Report $report): void {
+                $this->reports[] = $report;
+            },
+            onRequest: function (FormatRequest $request): void {
+                $this->requests[] = $request;
+            },
+            recognizeWrappers: $recognizeWrappers,
+        );
     }
 
     private function resolve(mixed $message, mixed $payload = null, mixed $id = null): string
