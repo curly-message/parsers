@@ -174,11 +174,17 @@ func sharedNamed(levels int) any {
 // serialization may visit, and such a value is refused once its text is
 // longer than MaxSerializedLength.
 func TestLimitsPrintedValues(t *testing.T) {
+	length := map[string]curly.Modifier{"len": func(in curly.Input) (any, error) { return len(in.Value), nil }}
+
 	for _, levels := range []int{16, 20} {
-		expect(t, fmt.Sprint(levels, " levels past the output"), resolve("{{v; default:D}}", map[string]any{"v": sharedNamed(levels)}), "", curly.OutputLimit)
+		v := map[string]any{"v": sharedNamed(levels)}
+		want := fmt.Sprint(5<<levels - 3)
+
+		expect(t, fmt.Sprint(levels, " levels read"), host(length, "{{v:len; default:D}}", v), want)
+		expect(t, fmt.Sprint(levels, " levels past the output"), resolve("{{v; default:D}}", v), "", curly.OutputLimit)
 	}
 
-	expect(t, "near miss: 21 levels write more than MaxSerializedLength", resolve("{{v; default:D}}", map[string]any{"v": sharedNamed(21)}), "D", curly.UnserializableValue)
+	expect(t, "near miss: 21 levels write more than MaxSerializedLength", host(length, "{{v:len; default:D}}", map[string]any{"v": sharedNamed(21)}), "D", curly.UnserializableValue)
 	expect(t, "near miss: a plain array of shared references is serialized", resolve("{{v; default:D}}", map[string]any{"v": tree(1 << 17)}), "D", curly.UnserializableValue)
 }
 
@@ -189,6 +195,7 @@ func TestLimitsPrintedValues(t *testing.T) {
 // past the text bound: keys a String method prints in less, a million
 // elements or a long string each, are refused at the count.
 func TestLimitsPrintedMaps(t *testing.T) {
+	length := map[string]curly.Modifier{"len": func(in curly.Input) (any, error) { return len(in.Value), nil }}
 	m := make(map[[256]int]int, 10000)
 
 	for i := range 10000 {
@@ -197,6 +204,7 @@ func TestLimitsPrintedMaps(t *testing.T) {
 
 	v := map[string]any{"v": m}
 
+	expect(t, "10 000 keys read", host(length, "{{v:len; default:D}}", v), fmt.Sprint(len(fmt.Sprint(m))))
 	expect(t, "10 000 keys past the output", resolve("{{v; default:D}}", v), "", curly.OutputLimit)
 
 	numbers := make(map[int]int, 1000000)
@@ -207,6 +215,7 @@ func TestLimitsPrintedMaps(t *testing.T) {
 
 	v = map[string]any{"v": numbers}
 
+	expect(t, "1 000 000 numbers read", host(length, "{{v:len; default:D}}", v), "8888894")
 	expect(t, "1 000 000 numbers past the output", resolve("{{v; default:D}}", v), "", curly.OutputLimit)
 
 	pairs := make(map[[2]int]int, 300000)
@@ -223,6 +232,7 @@ func TestLimitsPrintedMaps(t *testing.T) {
 
 	v = map[string]any{"v": named{pairs, empty}}
 
+	expect(t, "a sorted map beside 3 000 000 values read", host(length, "{{v:len; default:D}}", v), "6788898")
 	expect(t, "a sorted map beside 3 000 000 values past the output", resolve("{{v; default:D}}", v), "", curly.OutputLimit)
 
 	expect(t, "19 keys of a million elements", resolve("{{v; default:D}}", millionKeys(19)), fmt.Sprint(millionKeys(19)["v"]))

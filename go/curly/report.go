@@ -164,5 +164,7 @@ func (w *walk) report(code Code, spelling string) {
 		Text:    excerpt(spelling),
 	}
 
-	w.host(func() { w.p.onReport(r) })
+	means := w.resolver()
+
+	w.host(func() { w.p.onReport(r, means) })
 }

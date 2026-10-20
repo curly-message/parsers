@@ -80,11 +80,13 @@ type recordKey struct {
 }
 
 // recorded keeps the value it describes, so that the identity it is
-// recorded under stays the value's for as long as the record lives.
+// recorded under stays the value's for as long as the record lives, and how
+// far its conversion is, which a reader on another goroutine waits for.
 type recorded struct {
 	value any
 	text  string
 	ok    bool
+	state settling
 }
 
 // recordKeyOf is what a value is recorded under: a map, a pointer or a
@@ -134,8 +136,40 @@ func (w *walk) convert(v any, s site) (string, bool) {
 	key, keyed := recordKeyOf(rv, s)
 
 	if keyed {
-		if r, ok := w.record[key]; ok {
-			return r.text, r.ok
+		if w.record == nil {
+			w.record = map[recordKey]recorded{}
+		}
+
+		// A value converts once. The walk, arriving while a read made on
+		// another goroutine converts it, waits for that text. A read host
+		// code made cannot tell a conversion beside it from one it is
+		// inside, so it does not wait: the read is refused, and the walk
+		// produces nothing more until it returns. Once the walk is closed
+		// nobody waits or converts.
+		for {
+			if w.stopped() {
+				return "", false
+			}
+
+			r, found := w.record[key]
+
+			if !found {
+				w.record[key] = recorded{value: v, state: producing}
+
+				break
+			}
+
+			if r.state == produced {
+				return r.text, r.ok
+			}
+
+			if w.reading {
+				w.refused = true
+
+				return "", false
+			}
+
+			w.wait()
 		}
 	}
 
@@ -157,11 +191,8 @@ func (w *walk) convert(v any, s site) (string, bool) {
 	}
 
 	if keyed {
-		if w.record == nil {
-			w.record = map[recordKey]recorded{}
-		}
-
-		w.record[key] = recorded{v, text, ok}
+		w.record[key] = recorded{v, text, ok, produced}
+		w.wake()
 	}
 
 	return text, ok
