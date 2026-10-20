@@ -1,0 +1,35 @@
+name: Rust parser publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'next cuts a prerelease of the pending version; patch, minor and major cut a release'
+        required: true
+        default: next
+        type: choice
+        options:
+          - next
+          - patch
+          - minor
+          - major
+
+jobs:
+  tests:
+    uses: ./.github/workflows/tests-cargo.yml
+    with:
+      package: rust
+
+  # crates.io's trusted publisher names this file, the workflow dispatched,
+  # rather than the reusable one its jobs run in.
+  publish:
+    needs: tests
+    uses: ./.github/workflows/publish-cargo.yml
+    permissions:
+      contents: read
+      id-token: write
+    with:
+      package: rust
+      release: ${{ inputs.release }}
+    secrets:
+      APP_PRIVATE_KEY: ${{ secrets.APP_PRIVATE_KEY }}
