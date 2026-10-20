@@ -244,6 +244,12 @@ Run from `go/`:
 | `go run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...` | lint |
 | `node dev/vectors.mjs` | rewrite `curly/testdata/floats.json`, Node's text for each float the suite checks |
 | `go mod tidy -diff` | module hygiene |
+| `sh bench/prepare.sh && node bench/harness.mjs` | build, then the benchmark (`bench/rows.mjs`) |
+| `node bench/harness.mjs --compare <dir>` | the same, beside the module checked out at `<dir>` and built there by its `bench/prepare.sh` |
+
+`dev/` is a module of its own, never tagged, holding the programs the
+repository's tooling runs; a command for it names it from `go/`, as
+`go -C dev vet ./...` does, since the core module does not contain it.
 
 Every `.go` file is ASCII: a character outside ASCII is written as an escape.
 
@@ -257,6 +263,23 @@ stand-in supplier with each formatting request exposed, which measures the
 request the parser makes rather than a host's locale data.
 `internal/adapter/testdata/failing.txt` lists the cases of the vendored set
 the parser is known to fail, and why.
+
+## Benchmarks
+
+The benchmark is the family's: `bench/harness.mjs`, on Node, measures the
+rows `bench/rows.mjs` lists, and `bench/check/` holds the rows the harness is
+checked on; both are copies of the ones in every package of the family.
+`bench/prepare.sh` builds the two programs the rows read, into `dist/`:
+`dist/size`, a program resolving one message, whose stripped binary the size
+rows weigh, and `dist/bench` (from `dev/bench`), which counts the counts and
+runs the times. A time row starts `dist/bench` once in each process that
+measures it and asks it for one batch of a fixed number of iterations at a
+time, the number named in the row, so the round trip over the pipe, tens of
+microseconds, is the same on both sides of a comparison and inside the
+spread. The rows that ask for a locale's text do so of a stand-in supplier
+that answers at once, so they measure what the parser does around a
+request. `package.json` is private and carries only the name and version
+the harness's table is headed with.
 
 ## License
 
