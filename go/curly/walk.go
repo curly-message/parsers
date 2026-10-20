@@ -909,6 +909,10 @@ func (p *Parser) lookup(name string) (custom Modifier, run func(*slot) (string, 
 
 	run, selection, known = builtin(name)
 
+	if !known && p.intl != nil {
+		run, selection, known = intlBuiltin(name)
+	}
+
 	return nil, run, selection, known
 }
 
@@ -916,7 +920,7 @@ func (p *Parser) lookup(name string) (custom Modifier, run func(*slot) (string, 
 // payload value converts, charged to the output and not to the read budget:
 // it is the placeholder's result rather than text it read.
 func (w *walk) call(s *slot, name string, m Modifier) string {
-	in := Input{Value: s.value, Props: w.composition(name, s.wrapper).props, s: s}
+	in := Input{Value: s.value, Props: w.composition(name, s.wrapper, false, nil).props, s: s}
 
 	if w.locale != nil {
 		locale := *w.locale

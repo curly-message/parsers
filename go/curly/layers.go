@@ -5,18 +5,27 @@ import "reflect"
 // composition is the properties the layers hold under a modifier's name
 // (section 11.2), composed property by property: the parser's defaults,
 // then the caller's props, then the props of the wrapper the value came in,
-// each overriding only the properties it names. Nothing writes to one once
-// it is composed.
+// each overriding only the properties it names. For the modifiers of the
+// Intl level it is the request made of them, with what the format itself
+// reads out of them set apart. Nothing writes to one once it is composed.
 type composition struct {
 	key   composed
 	props map[string]any
+	// ratio is what currency multiplies its value by, where scaled is set.
+	ratio float64
+	// unit is the unit ago counts in, and failed is set where its format
+	// property names none.
+	unit   string
+	scaled bool
+	failed bool
 }
 
 // composed names what a wrapper adds to a modifier's composition: its layer
-// under the modifier's name, by the map it is. The zero value is a wrapper
-// adding nothing, or no wrapper.
+// under the modifier's name, by the map it is, and, for plural, its layer
+// under number, whose digit properties plural reads. The zero value is a
+// wrapper adding nothing, or no wrapper.
 type composed struct {
-	layer uintptr
+	layer, digits uintptr
 }
 
 // composing is the compositions a resolution keeps, by the modifier they
@@ -41,22 +50,30 @@ type kept struct {
 	last   *composition
 }
 
-// nothing is what composes where no layer holds anything under a name: no
-// properties, and no map to hold them.
+// nothing is what composes where no layer holds anything under a name and
+// the modifier pins nothing: no properties, and no map to hold them.
 var nothing composition
 
 // composition is the properties composed under name for a value that came
-// in wrapper. It is composed once in a resolution for the layers every
-// placeholder shares, and once more for each run of a
+// in wrapper, with number's digit properties beneath them where digits is
+// set, and finish applied. It is composed once in a resolution for the
+// layers every placeholder shares, and once more for each run of a
 // modifier's placeholders whose wrappers hold one layer, and every
 // placeholder it serves is handed the same one: what composing costs grows
 // with the layers and with the wrappers that name properties, never with
 // the placeholders times a layer's width. Nothing of it outlives the walk.
-func (w *walk) composition(name string, wrapper any) *composition {
+func (w *walk) composition(name string, wrapper any, digits bool, finish func(*composition)) *composition {
 	own := w.entries(name, wrapper)
 	key := composed{layer: layerID(own[2])}
 
-	if own[0] == nil && own[1] == nil && own[2] == nil {
+	var shown [3]any
+
+	if digits {
+		shown = w.entries("number", wrapper)
+		key.digits = layerID(shown[2])
+	}
+
+	if finish == nil && own[0] == nil && own[1] == nil && own[2] == nil {
 		return &nothing
 	}
 
@@ -77,8 +94,16 @@ func (w *walk) composition(name string, wrapper any) *composition {
 	c.key = key
 	c.props = make(map[string]any, len(w.p.defaults[name]))
 
+	if digits {
+		shownDigits(c.props, shown)
+	}
+
 	for _, entry := range own {
 		mergeLayer(c.props, entry)
+	}
+
+	if finish != nil {
+		finish(c)
 	}
 
 	return c
@@ -131,6 +156,24 @@ func layerID(entry any) uintptr {
 	}
 
 	return rv.Pointer()
+}
+
+// shownDigits writes over out the properties deciding which digits a number
+// is shown with, from the layers under number and read name by name, so
+// nothing else number is configured with is read on plural's account
+// (section 11.5).
+func shownDigits(out map[string]any, layers [3]any) {
+	for _, entry := range layers {
+		for _, name := range [...]string{
+			"minimumIntegerDigits", "minimumFractionDigits", "maximumFractionDigits",
+			"minimumSignificantDigits", "maximumSignificantDigits", "roundingIncrement",
+			"roundingMode", "roundingPriority", "trailingZeroDisplay",
+		} {
+			if v, ok := layerEntry(entry, name); ok && !isUndefinedValue(v) {
+				out[name] = v
+			}
+		}
+	}
 }
 
 // entries is what each layer holds under name, the lowest first; a layer
