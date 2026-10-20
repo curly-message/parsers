@@ -1,0 +1,27 @@
+#!/bin/sh
+# The pre-commit hook of every implementation directory. For each top-level
+# directory the commit touches, `.githooks/<dir>.sh` runs from inside that
+# directory, where there is one. A script exits 0 when its check passes, 75
+# when a tool it needs is missing, having said which and how to install it,
+# and anything else when the check fails. A missing tool skips that directory
+# rather than failing the commit, since a contributor to one implementation
+# need not have the toolchain of another.
+
+# Read without quoting (`-z`), so a name outside ASCII keeps its directory.
+dirs=$(git diff --cached --name-only -z | tr '\000' '\n' | cut -d / -f 1 | sort -u)
+
+set -f
+IFS='
+'
+for dir in $dirs; do
+  [ -f ".githooks/$dir.sh" ] && [ -d "$dir" ] || continue
+
+  (cd -- "$dir" && sh "../.githooks/$dir.sh")
+  status=$?
+
+  case $status in
+    0) ;;
+    75) echo "$dir: skipped" >&2 ;;
+    *) exit "$status" ;;
+  esac
+done
