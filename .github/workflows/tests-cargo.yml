@@ -1,0 +1,200 @@
+name: Cargo tests
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: 'Package directory to test'
+        required: true
+        type: string
+
+jobs:
+  # Debug builds, the configuration whose walk takes the most stack, so the
+  # tests that bound it run where it is tightest, on every system. Each crate
+  # of the suite is tested on its own: a workspace-wide build would unify a
+  # member's features into the leg without `intl`, and the conformance suite
+  # holds the leg to what CURLY_EXPECT_INTL says it is.
+  Tests:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain: ['1.88', stable]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        features: ['', intl]
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.package }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        env:
+          TOOLCHAIN: ${{ matrix.toolchain }}
+        run: |
+          rustup toolchain install "$TOOLCHAIN" --profile minimal --no-self-update
+          rustup default "$TOOLCHAIN"
+
+      # Written by main only, so a pull request reads what main built and
+      # leaves nothing behind for another to read.
+      - name: Cache the build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ inputs.package }}
+          key: ${{ matrix.features }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Test
+        env:
+          FEATURES: ${{ matrix.features }}
+          CURLY_EXPECT_INTL: ${{ matrix.features == 'intl' && '1' || '0' }}
+        run: cargo test -p curly-message-parser --locked ${FEATURES:+--features "$FEATURES"}
+
+      - name: Test the runner
+        if: matrix.features == ''
+        run: cargo test -p curly-message-conformance --locked
+
+  Lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.package }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt,clippy --no-self-update
+          rustup default stable
+
+      - name: Cache the build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ inputs.package }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Format
+        run: cargo fmt --all --check
+
+      # Once without features and once with every one, so the code each
+      # leaves out is linted by the other.
+      - name: Clippy
+        run: |
+          cargo clippy --workspace --all-targets --locked -- -D warnings
+          cargo clippy --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: Docs
+        env:
+          RUSTDOCFLAGS: -Dwarnings
+        run: cargo doc -p curly-message-parser --no-deps --all-features --locked
+
+      # The harness and the rows it is checked on are the family's, the same
+      # file in every package.
+      - name: Benchmark harness
+        run: |
+          cmp bench/harness.mjs ../js/bench/harness.mjs
+          diff -r bench/check ../js/bench/check
+
+      # A crate on the registry is a released surface: the change is held to
+      # the newest version published. Before the first, there is none to hold
+      # it to.
+      - name: Check the surface
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -A curly-message-ci https://crates.io/api/v1/crates/curly-message-parser)
+          case "$status" in
+            200) ;;
+            404) echo "curly-message-parser is not on crates.io yet, so there is no released surface to check against."; exit 0 ;;
+            *) echo "::error::crates.io answered $status."; exit 1 ;;
+          esac
+          cargo install cargo-semver-checks --locked
+          cargo semver-checks -p curly-message-parser
+
+  # What a release ships, tested as a consumer gets it: `cargo package` builds
+  # the crate from the files it carries, the crate's own tests and examples
+  # run from the unpacked archive, and the suite under tests/ runs in a
+  # project that depends on that archive rather than on the source.
+  Packaged:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # One target directory for the workspace, the unpacked crate and the
+    # project, so the dependencies they share are built once.
+    env:
+      CARGO_TARGET_DIR: ${{ github.workspace }}/${{ inputs.package }}/target
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ inputs.package }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Rust
+        run: |
+          rustup toolchain install stable --profile minimal --no-self-update
+          rustup default stable
+
+      - name: Cache the build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ${{ inputs.package }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Package
+        run: |
+          cargo package --locked -p curly-message-parser
+          version=$(cargo metadata --format-version 1 --no-deps --locked | jq -r '.packages[] | select(.name == "curly-message-parser") | .version')
+          target=$(cargo metadata --format-version 1 --no-deps --locked | jq -r .target_directory)
+          mkdir "$RUNNER_TEMP/packaged"
+          tar -xzf "$target/package/curly-message-parser-$version.crate" -C "$RUNNER_TEMP/packaged"
+          echo "CRATE=$RUNNER_TEMP/packaged/curly-message-parser-$version" >> "$GITHUB_ENV"
+
+      - name: Test the package
+        working-directory: ${{ runner.temp }}
+        run: |
+          cd "$CRATE"
+          cargo test --locked
+          cargo test --locked --features intl
+
+      # The project starts from the workspace's lockfile, so it resolves what
+      # the suite resolves; it is not locked, since its root is its own.
+      - name: Test against the package
+        env:
+          SOURCE: ${{ github.workspace }}/${{ inputs.package }}
+        run: |
+          consumer="$RUNNER_TEMP/consumer"
+          mkdir "$consumer"
+          cp -R tests "$consumer/tests"
+          cp Cargo.lock "$consumer/Cargo.lock"
+          cat > "$consumer/Cargo.toml" <<EOF
+          [package]
+          name = "packaged"
+          version = "0.0.0"
+          edition = "2024"
+          publish = false
+
+          [features]
+          intl = ["curly-message-parser/intl"]
+
+          [dev-dependencies]
+          curly-message-parser = { path = "$CRATE" }
+          curly-message-conformance = { path = "$SOURCE/conformance" }
+          libtest-mimic = "0.8.2"
+
+          [[test]]
+          name = "conformance"
+          harness = false
+
+          [workspace]
+          EOF
+          cd "$consumer"
+          CURLY_EXPECT_INTL=0 cargo test
+          CURLY_EXPECT_INTL=1 cargo test --features intl
