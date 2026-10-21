@@ -316,6 +316,11 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
   // it (section 13).
   let output = MAX_OUTPUT_LENGTH;
   let read = MAX_READ_LENGTH;
+  // A modifier may keep its input past the call, and the input's accessors
+  // close over this walk. Once the walk has returned they answer what it
+  // already rendered, so a read after the resolution renders nothing,
+  // reports nothing and runs no host code.
+  let closed = false;
 
   const resolvePlaceholder = ({ spelling, key, modifier: modifierKey, options: segments, inlineDefault }: Placeholder, depth: number): string | Span => {
     // A link that refuses to be read is not a link nobody passed. `ownValue`
@@ -365,6 +370,7 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
       const known = rendered.get(span);
 
       if (known !== undefined) return known;
+      if (closed) return '';
 
       const resolved = render(span, depth + 1);
 
@@ -393,6 +399,8 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
       .reduce<string | undefined>((chain, link) => chain ?? link(), undefined);
 
     const defaultText = () => {
+      if (closed) return resolvedDefault ?? '';
+
       resolvedDefault ??= declaredDefault() ?? (inlineDefault && valueOf(inlineDefault)) ?? '';
 
       return resolvedDefault;
@@ -571,7 +579,11 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     return parts.join('');
   };
 
-  return render(root, 1);
+  try {
+    return render(root, 1);
+  } finally {
+    closed = true;
+  }
 };
 
 // What a parser keeps of the messages it resolved, so a message resolved

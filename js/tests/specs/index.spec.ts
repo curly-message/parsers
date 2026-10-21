@@ -1586,7 +1586,7 @@ describe('parser', () => {
   });
   it('a modifier is handed the value as text, its options and the locale', () => {
     const seen: unknown[] = [];
-    const { resolve } = createParser({ customModifiers: { 'x-see': ({ value, options, locale }) => { seen.push({ value, options, locale }); return 'DONE'; } } });
+    const { resolve } = createParser({ customModifiers: { 'x-see': ({ value, options, locale }) => { seen.push({ value, options: options.map(({ key, value }) => ({ key, value })), locale }); return 'DONE'; } } });
 
     // A modifier receives the value, the options, the default, the locale and
     // the props. The default and the props are handed over above; these are the
@@ -1968,6 +1968,42 @@ describe('parser', () => {
 
     expect(resolve('{{v:x-copy}}', { payload })).toBe('V');
     expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
+  it('a modifier input kept past its resolution resolves nothing once the resolution returned', () => {
+    const reports: Report[] = [];
+    const kept: Parameters<Modifier.T>[0][] = [];
+    let defaultReads = 0;
+    const { resolve } = createParser({
+      customModifiers: { 'x-keep': (input) => { kept.push(input); return 'NOW'; } },
+      onReport: (report) => { reports.push(report); },
+    });
+
+    expect(resolve('{{v:x-keep; a:A{{w:zz}}; default:D{{w:zz}};}}', { payload: { v: 1, w: 2 } })).toBe('NOW');
+    expect(resolve('{{v:x-keep}}', { payload: { v: 1, get default() { defaultReads += 1; return 'D'; } } })).toBe('NOW');
+
+    // Read only after `resolve` returned, the default and the option values
+    // render nothing, report nothing and call no accessor of the payload.
+    expect(kept.map(({ defaultValue, options }) => [defaultValue, options.map(({ value }) => value)])).toEqual([['', ['']], ['', []]]);
+    expect(reports).toEqual([]);
+    expect(defaultReads).toBe(0);
+  });
+  it('a modifier input read during its resolution reads the same text once the resolution returned', () => {
+    const reports: Report[] = [];
+    const kept: Parameters<Modifier.T>[0][] = [];
+    let defaultReads = 0;
+    const { resolve } = createParser({
+      customModifiers: { 'x-keep': (input) => { kept.push(input); return `${input.defaultValue}|${input.options.map(({ value }) => value).join()}`; } },
+      onReport: (report) => { reports.push(report); },
+    });
+
+    expect(resolve('{{v:x-keep; a:A{{w:zz}}; default:D{{w:zz}};}}', { payload: { v: 1, w: 2 } })).toBe('D|A');
+    expect(resolve('{{v:x-keep}}', { payload: { v: 1, get default() { defaultReads += 1; return 'P'; } } })).toBe('P|');
+    expect(reports.map(({ code }) => code)).toEqual(['unknown-modifier', 'unknown-modifier']);
+    expect(defaultReads).toBe(1);
+
+    expect(kept.map(({ defaultValue, options }) => [defaultValue, options.map(({ value }) => value)])).toEqual([['D', ['A']], ['P', []]]);
+    expect(reports).toHaveLength(2);
+    expect(defaultReads).toBe(1);
   });
   it('a payload default a modifier cannot turn into text still fails soft', () => {
     const { resolve } = defaultParser;
