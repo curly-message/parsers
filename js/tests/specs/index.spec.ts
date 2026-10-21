@@ -3126,6 +3126,7 @@ describe('parser', () => {
       text: '{{v; a:settled; default:fallback;}}',
     }]);
   });
+  // No timeout: the test asserts counts, not how long 20 000 levels take.
   it('a refused placeholder takes its inline default however deeply the defaults nest', () => {
     // Every level names a key the payload lacks, so each takes its chain down
     // to the next, and each level past the limit is refused and reported once.
@@ -3162,7 +3163,7 @@ describe('parser', () => {
 
     expect(reentrant.resolve(defaults(20000), { payload: {} })).toBe('x');
     expect(inner).toEqual(['x']);
-  });
+  }, 0);
   it('a span handed back past the limit renders as the same text within it does', () => {
     // Each level names a key the payload lacks, so it renders its inline
     // default, and from the ninth level on that default is handed back.
@@ -3798,6 +3799,8 @@ describe('parser', () => {
     expect(output).toBe('x'.repeat(52000));
     expect(reports.map(({ code, limit, id }) => `${code}/${limit}/${id}`)).toEqual(['output-limit/100000/common.placeholder_chain', 'read-limit/100000/common.placeholder_chain']);
   });
+  // No timeout: the test asserts lengths and reports, not how long handing
+  // out a quarter of a gigabyte three times over takes.
   it('a result no string could hold is measured rather than carried', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
@@ -3814,9 +3817,7 @@ describe('parser', () => {
     // quarter of a gigabyte of `a` anywhere else.
     expect(output.length).toBe(huge.length);
     expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
-    // A quarter of a gigabyte three times over, which the collector needs
-    // longer to hand out than a test of this suite's usual size.
-  }, 30000);
+  }, 0);
   it('an `onReport` that throws does not take the resolution down', () => {
     const seen: string[] = [];
     const { resolve } = createParser({
