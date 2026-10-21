@@ -154,7 +154,16 @@ export module Modifier {
 
   export type Props<T = DefaultProps> = T & DefaultProps;
 
-  export type ModifierOption = Record<'key' | 'value', string>;
+  export type ModifierOption = {
+    key: string;
+    /**
+     * The option's value, rendered by the read rather than before the modifier
+     * was called, and once however often it is read. A read once `resolve` has
+     * returned renders nothing: it answers the text a read during the call
+     * rendered, or the empty string.
+     */
+    value: string;
+  };
 
   /**
    * A value's own configuration, standing in the payload where the value
@@ -205,7 +214,9 @@ export module Modifier {
      * links carry, and reports one no conversion describes. A generic copy of
      * the config is such a read — a rest destructure, a spread,
      * `JSON.stringify` — so a modifier with no use for the default takes the
-     * keys it needs by name.
+     * keys it needs by name. A read once `resolve` has returned walks nothing:
+     * it answers the text a read during the call resolved, or the empty
+     * string, and runs no host code and reports nothing.
      */
     defaultValue: string;
   }) => any;

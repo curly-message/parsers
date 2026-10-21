@@ -57,6 +57,16 @@
   one, and one resolved exactly twice about twice as long over its two calls.
   The payload, the props, the locale and the options are read on every call,
   and nothing a message resolves to, and no report, changes.
+* **A modifier's config resolves nothing once `resolve` has returned.** Its
+  `defaultValue` and each option's `value` are read by accessors, and a
+  modifier that kept its config and read one after the call still walked the
+  resolution it came from: it rendered the default or the option, called the
+  payload's accessors, and reported to `onReport` about a message that had
+  already been resolved. A read after the call now answers the text a read
+  during the call produced, or the empty string, and resolves, reports and
+  runs nothing. What a message resolves to, and every read and report during
+  the call, are unchanged; a modifier that keeps its options to read later
+  copies their values while it is called.
 
 ## 3.1.2
 
