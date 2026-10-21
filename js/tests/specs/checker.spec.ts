@@ -51,7 +51,8 @@ const instantiations = (keys: number) => {
 // Counted rather than timed: a count is the same on every machine and every
 // run, so the bound can be tight.
 describe('checker cost', () => {
+  // No timeout: the test asserts a count, not how long compiling takes.
   it('costs a call the same whatever the size of its payload', () => {
     expect(instantiations(40)).toBeLessThanOrEqual(2 * instantiations(20));
-  });
+  }, 0);
 });
