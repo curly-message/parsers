@@ -438,6 +438,11 @@ reporting a link it cannot describe. A generic copy of a modifier's config is
 such a read, so a rest destructure, a spread or `JSON.stringify` walks a chain
 that a modifier taking the keys it needs by name leaves alone.
 
+That read, and the read of an option's `value`, belong to the resolution that
+called the modifier. A modifier that keeps its config and reads it once
+`resolve` has returned gets the text a read during the call produced, or the
+empty string: nothing more is resolved, reported or run.
+
 Formatting options are keyed by modifier name, and their layers compose per
 property: the parser's `modifierDefaults`, then the `props` the call passes,
 then the wrapper's own `props`. Each layer overrides only the properties it
