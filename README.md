@@ -31,6 +31,12 @@ The Python implementation, `curly-message` on PyPI, implements the same
 version and is not yet released: its first version, `1.0.0rc0`, is published
 by its workflow through a pending trusted publisher.
 
+The PHP implementation, `curly-message/parser` for Composer, implements the
+same version and is not yet released. It is developed in `php/` and served
+to Composer from
+[`curly-message/parser-php`](https://github.com/curly-message/parser-php),
+which only its publish workflow writes to (see *Releasing*).
+
 ## Implementations
 
 | Path | Package | State |
@@ -39,10 +45,11 @@ by its workflow through a pending trusted publisher.
 | [`go/`](./go) | `github.com/curly-message/parsers/go` | Unreleased |
 | [`rust/`](./rust) | `curly-message-parser` | Unreleased |
 | [`python/`](./python) | `curly-message` (PyPI) | Unreleased |
+| [`php/`](./php) | `curly-message/parser` (Packagist) | Unreleased |
 
 One directory per language, each a standalone package with its own build,
 tests and version line. Release tags are namespaced by directory: `js-v1.0.0`,
-`rust-v1.0.0` or `python-v1.0.0` for a package a registry addresses by name,
+`rust-v1.0.0`, `python-v1.0.0` or `php-v1.0.0` for a package a registry addresses by name,
 so it can leave for its own repository without that being a breaking change
 for the others; and `go/v1.0.0` for a Go module, whose version the go command
 reads only from a tag named after the module's directory. A Go module's path
@@ -59,15 +66,17 @@ then runs every hook from `.githooks/`, and none from `.git/hooks/`.
 The check of a directory is `.githooks/<dir>.sh`: `npm run lint` for `js/`,
 for `go/` the formatting, vet and ASCII checks of the Lint job of
 `tests-go.yml`, for `rust/` the format, clippy and harness checks of the Lint
-job of `tests-cargo.yml`, and for `python/` the ruff and mypy checks of the
-Lint job of `tests-python.yml`.
+job of `tests-cargo.yml`, for `python/` the ruff and mypy checks of the Lint
+job of `tests-python.yml`, and for `php/` `composer lint`, the formatting and
+source checks of the Lint job of `tests-php.yml`.
 
 ## Benchmarks
 
 Each implementation directory has a benchmark, run by the command its README
 names (`npm run bench` in `js/`, `sh bench/prepare.sh && node
 bench/harness.mjs` in `go/` and in `rust/`, `uv run --no-project tasks.py
-bench-venv && node bench/harness.mjs` in `python/`), that measures what its
+bench-venv && node bench/harness.mjs` in `python/`, `composer bench` in
+`php/`), that measures what its
 build costs: counts, such as what checking a call costs a type checker, sizes,
 and times. A PR is benchmarked against its base by `bench.yml`, for each
 implementation it
@@ -209,6 +218,61 @@ creates the project, so no version is published by hand. Before anything is
 pushed, the release job checks that PyPI does not hold the version and makes
 the OIDC exchange the publish step will make, so a publisher that is missing
 or names something else fails the run before a tag exists.
+
+### PHP
+
+The PHP parser is released by the **PHP parser publish** workflow
+(`.github/workflows/publish-php.yml`, started by hand). It reads the
+changelog's pending section and the release types as the JavaScript workflow
+does: `patch`, `minor` and `major` cut `### 1.1.0 (Unreleased)` and must
+arrive at the version it names, and `next` cuts a release candidate of that
+version — `1.1.0-RC.0`, then `.1`, Composer's spelling — and leaves the
+section open. It runs the test matrix (`tests-php.yml`), writes the version
+into the benchmark's `php/package.json`, writes the benchmark into
+`BENCH.md`, commits and tags `php-v1.0.0` here, in the same three jobs as the
+JavaScript workflow, as the same App, from the same `release` environment.
+
+Packagist reads a package from the root of a repository, and its versions
+from tags its version parser accepts, which neither `php/` nor `php-v1.0.0`
+is. So the package is developed here and served from
+[`curly-message/parser-php`](https://github.com/curly-message/parser-php),
+which nothing but this workflow writes to. The workflow splits the history of
+`php/` off at the release's tag with `git subtree split`, over the whole
+history, so the same commit always splits to the same commit and each
+release's split descends from the one before it; it refuses a split whose
+tree is not what `php/` holds at the tag, and pushes it to that repository's
+`main`, tagged `v1.0.0`, where Packagist's GitHub hook reads it. Both
+repositories get a GitHub release of their tag, carrying the changelog
+section. The release here is never marked latest, which stays with the
+JavaScript parser's releases. In `curly-message/parser-php`, a release is
+marked latest, a backport after a later major included, and a release
+candidate is not. The run ends once Packagist lists the version. No registry
+credential exists: what Packagist serves is what the App pushed. The
+archive Composer installs is GitHub's of that tag, so `php/.gitattributes`
+decides what it holds, as it does for the archive the suite tests under
+`composer test:dist`.
+
+Nothing is pushed until both repositories have been checked and both pushes
+tried dry, and this repository is pushed first; neither push is forced. A run
+that stops after its tag landed here is finished by running the workflow with
+`mirror` set to that tag (`php-v1.0.0`): it pushes to
+`curly-message/parser-php` only what that repository lacks of the release,
+refuses where it holds something else under the release's tag or a `main`
+that neither holds the split nor is an ancestor of it, publishes only the
+GitHub releases that are missing, and waits for Packagist again.
+
+Packagist is told of `curly-message/parser-php` by hand, once, with its
+GitHub hook, and a submission reads `composer.json` off the repository's
+`main`, which the first release is the one to push. So the first run goes
+ahead while that repository is empty, and the repository is submitted while
+the run waits for Packagist, or before a `mirror` run that finishes it; once
+the repository holds a release, a run is refused while Packagist does not know
+the package.
+
+What the workflow needs outside this repository is set by hand: the App
+installed on `curly-message/parser-php` with read and write access to its
+contents, and allowed past any rule that guards that repository's `main` or
+its tags.
 
 ## Specification
 
