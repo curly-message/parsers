@@ -93,8 +93,8 @@ export type Report = {
    * itself either. It is message text throughout and never a payload value:
    * what a placeholder resolves to is data, and nothing reads it as text
    * again. Truncated — a cut is marked with a trailing `...` of the parser's
-   * own — and with its line terminators escaped, so no message can forge a
-   * line wherever this is written.
+   * own — and escaped as the body of a JSON string is, with U+2028 and U+2029
+   * escaped as well, so no message can forge a line wherever this is written.
    */
   text: string;
 };
@@ -254,9 +254,9 @@ export module Parser {
     /** The message's own id, where the caller passed one. */
     id?: Id;
     /**
-     * The value's text, truncated and with its line terminators escaped the
-     * way a report's text is. Unlike a report's, this **is** payload text: a
-     * host that writes it somewhere writes what its payload holds.
+     * The value's text, truncated and escaped the way a report's text is.
+     * Unlike a report's, this **is** payload text: a host that writes it
+     * somewhere writes what its payload holds.
      */
     text: string;
   };
