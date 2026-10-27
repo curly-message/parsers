@@ -1,0 +1,39 @@
+includes:
+    - tools/qa/vendor/phpstan/phpstan-strict-rules/rules.neon
+    - tools/qa/vendor/phpstan/phpstan-phpunit/extension.neon
+    - tools/qa/vendor/phpstan/phpstan-phpunit/rules.neon
+
+parameters:
+    level: max
+    phpVersion: 80200
+    paths:
+        - src
+        - tests
+        - tools
+        - bench
+        - conformance/src
+        - conformance/bin
+        - conformance/bin/curly-message-conformance
+    excludePaths:
+        - tools/qa
+    # A property that exists to be held, and so is never read, says so.
+    propertyAlwaysReadTags:
+        - '@held'
+    # The ICU a host links ext-intl against is the host's.
+    dynamicConstantNames:
+        - INTL_ICU_VERSION
+    ignoreErrors:
+        # PHP iterates an object's visible properties one at a time, which
+        # PHPStan does not model, and a walk that stops early copies none.
+        -
+            identifier: foreach.nonIterable
+            path: src/Internal/Resolution.php
+            count: 1
+        # Letting go of a value runs its `__destruct`, which may raise, and
+        # which PHPStan does not model.
+        -
+            identifier: catch.neverThrown
+            path: src/Internal/Contained.php
+            count: 1
+    bootstrapFiles:
+        - vendor/autoload.php

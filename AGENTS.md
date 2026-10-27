@@ -23,15 +23,15 @@ checked out beside this repository on an up-to-date `main`, otherwise
 Official implementations of the
 [Curly Message Format](https://github.com/curly-message/spec).
 
-- **One directory per language** — `js/` today. Each is a fully standalone
-  package with its own build, tests, configs, README, CHANGELOG and version
-  line. There is no root package manifest and no workspace: run every command
-  from inside the implementation directory, for every directory a change
-  touches.
-- **Release tags are namespaced by directory** — `js-v1.0.0`, `py-v0.9.0` — so
-  moving an implementation to its own repository later is not a breaking event.
-  The publish workflow cuts them (`.github/workflows/publish-js.yml`; the
-  README's Releasing section says what it does).
+- **One directory per language** — `js/` and `php/` today. Each is a fully
+  standalone package with its own build, tests, configs, README, CHANGELOG
+  and version line. There is no root package manifest and no workspace: run
+  every command from inside the implementation directory, for every
+  directory a change touches.
+- **Release tags are namespaced by directory** — `js-v1.0.0`, `php-v1.0.0` —
+  so moving an implementation to its own repository later is not a breaking
+  event. The publish workflows cut them (`.github/workflows/publish-js.yml`,
+  `publish-php.yml`; the README's Releasing section says what they do).
 - The root holds only `README.md`, this file, `CLAUDE.md`, `LICENSE`,
   `.gitignore`, `.githooks/` and `.github/workflows/`. An implementation
   directory may hold a `.gitignore` of its own, for what only its toolchain
@@ -44,7 +44,7 @@ Official implementations of the
   passes; 75 when a tool it needs is missing, having printed which and how to
   install it, which skips the directory (`<dir>: skipped`) without failing the
   commit; and anything else to fail the commit. An implementation's check is
-  its script, `.githooks/js.sh` for `js/`.
+  its script, `.githooks/js.sh` for `js/` and `.githooks/php.sh` for `php/`.
 - **`bench.yml` reads its packages from the tree**: each directory that holds
   a `bench/rows.mjs` outside a `bench/check/`, with its own copy of
   `bench/harness.mjs` and `bench/check/`. On a PR it benchmarks those with a
@@ -181,3 +181,107 @@ its `CHANGELOG.md` and the doc comments in `src/types.ts`.
 - What a message resolves to is the conformance set's to pin: a case the
   suite adds beyond it is either an implementation detail or a gap in the set
   (§ Architecture of `spec`'s AGENTS.md).
+
+## php/
+
+Tech stack of `php/` — **ground truth, do not assume otherwise**:
+
+| | |
+|---|---|
+| Package | `curly-message/parser` for Composer, unreleased; how it reaches Packagist waits on curly-message/spec#109 |
+| Language | PHP with `declare(strict_types=1)`, namespace `CurlyMessage\` (PSR-4 over `src/`) |
+| Package manager | Composer: `composer.lock` for the package and its suite, and `tools/qa/composer.lock` for php-cs-fixer and PHPStan |
+| Build | none: what a release ships is `git archive` of `php/` under its `.gitattributes`, which `composer test:dist` installs by copy and tests |
+| Tests | PHPUnit 11; the conformance set fetched by `composer fetch-set` at the version and SHA-256 `conformance/set.json` pins, run through the runner in `conformance/` |
+| Lint | php-cs-fixer and `tools/check-source.php` (`composer lint`), run by `.githooks/php.sh` and the Lint job of `tests-php.yml`; PHPStan at level max (`composer analyse`) |
+| Runtime dependencies | none; ext-intl is suggested, and satisfies the Intl level |
+| Supported runtimes | PHP 8.2 to 8.5 on Linux, macOS and Windows, with ext-intl and without; thread-safe (ZTS) builds are not tested |
+| CI | `tests-php.yml`, `bench.yml` and `bench-label.yml` (PHP from `.php-version`), `publish-php.yml` |
+
+Commands, run from `php/`:
+
+| Command | What it does |
+|---------|--------------|
+| `composer install` | install from the lockfiles, `tools/qa/`'s included |
+| `composer test` | fetch the set, lint, analyse, run the suite, then `composer test:dist` — what CI's Tests, Lint and Artifact jobs run between them, but for the Lint job's check of the case table (`composer unicode -- --check`) |
+| `composer test:dist` | build the archive a release ships, install it into a scratch project by copy, and run the unit and conformance suites, the surface probe and a `php -n` smoke run against it — what CI's Artifact job runs |
+| `composer lint`, `composer analyse` | the formatting contract and the source checks, then PHPStan — what CI's Lint job runs, beside the check of the case table; the pre-commit hook runs the first |
+| `composer lint:fix` | fix what the formatting contract reports |
+| `composer unicode` | regenerate the case table from the pinned Unicode data; `composer unicode -- --check` fetches that data and fails where the table differs from what it generates, as CI's Lint job runs it |
+| `composer bench` | the benchmark (`bench/rows.mjs`), on Node 22 or later; `sh bench/prepare.sh` prepares a side |
+| `composer bench -- --compare <dir>` | the same, beside the package checked out and prepared at `<dir>` — what `bench.yml` runs on a PR |
+| `php tools/memory.php` | what ends a process at 128M in each shape of the README's Memory table; `php tools/memory.php <limit>` at another |
+
+Map of `php/`:
+
+| Path | Role |
+|------|------|
+| `src/Parser.php` | `Parser`: its options, `resolve`, `levels`, `unexpressible`, and the limits |
+| `src/Cst.php`, `src/Cst/` | `Cst::parse`: the tree a message is described by, its spans in bytes |
+| `src/ModifierInput.php`, `src/Option.php` | what a host modifier is handed |
+| `src/Report.php`, `src/ReportCode.php`, `src/FormatRequest.php`, `src/Facility.php`, `src/Origin.php` | what `onReport` and `onRequest` are handed |
+| `src/ReentryLimit.php`, `src/Undefined.php` | the one throw, and the host's undefined |
+| `src/Internal/Resolution.php` | one resolution: the walk, its budgets and the texts host code asks for |
+| `src/Internal/Conversion.php` | a value as text (section 4), the JSON written and bounded here |
+| `src/Internal/Layers.php` | reads of the payload, wrappers and props layers, by own entries only |
+| `src/Internal/Scanner.php`, `src/Internal/Text.php` | the placeholder scanner, `LINE_TERM` and the pure text helpers |
+| `src/Internal/Guard.php`, `src/Internal/Contained.php` | the re-entry bounds, and the containment of host code |
+| `src/Internal/Comparisons.php`, `src/Internal/Intl/` | the format's comparisons, and its Intl modifiers over ext-intl |
+| `src/Internal/Excerpt.php` | the escaped text a report carries |
+| `conformance/` | the runner of the set and the audit of its defects, and the set's pin |
+| `tests/Unit/`, `tests/Conformance/`, `tests/Runner/`, `tests/Types/surface.php`, `tests/Scripts/` | the suite (see *Tests*) |
+| `tools/` | the archive test, the `php -n` smoke run, the source checks, the case table's generator, the memory probe, and `qa/`'s tools |
+| `bench/rows.mjs` | the rows of the benchmark, each run by `bench/worker.php` on the package's own autoloader; `bench/harness.mjs` and `bench/check/` are the family's copies |
+
+### Architecture you must respect
+
+The rules of `js/` hold here, with these readings:
+
+- **The public surface** is every class under `CurlyMessage\` outside
+  `CurlyMessage\Internal\`, whose classes are `@internal`.
+- **Diagnostics leave through `onReport` and nowhere else.**
+- **Reads go through `Layers::own`**: a container is a PHP array or a
+  `stdClass`, read by its own entries alone, so an `ArrayAccess` or a
+  `__get` never answers. This is the prototype-key rule in PHP.
+- **The resolution limits** are `Parser::MAX_OUTPUT_LENGTH`,
+  `MAX_READ_LENGTH`, `MAX_CONVERSION_NODES` and `MAX_NESTING`, held to the
+  same values and the same rules as `js/`'s, counted in bytes. Three bounds of
+  PHP's own stand beside them, as load-bearing: `MAX_TEXT_LENGTH`, the
+  longest text the parser writes; `MAX_REENTRY`, the resolutions in progress
+  on one thread of execution, a fiber being one, where an option or a
+  fallback chain host code asks for takes no place; and `MAX_IN_PROGRESS`, the
+  resolutions in progress in the process that were each begun beneath
+  another on their thread. PHP ends a recursion at its memory limit with a
+  fatal error no `catch` sees, so the last two stand in for the host's limit
+  of section 13, and, as it asks, neither refuses a resolution begun where
+  none is in progress on its thread.
+- **`ReentryLimit` is all `resolve` throws**, past either re-entry bound:
+  everything host code runs where the parser calls it — a modifier, a
+  handler, `__toString`, `jsonSerialize`, a `__destruct` as the parser lets
+  go of what it holds — runs inside `Contained`, and a refused read throws
+  into the host code that asked. What a `__destruct` PHP's cycle collector
+  runs throws is the one exception: it leaves wherever the collector ran.
+- **A report escapes every line terminator of `Text::LINE_TERM`**, the list
+  the scanner reads.
+- **Source is ASCII**, and the library calls nothing an optional extension or
+  a dev dependency defines outside the Intl level: `tools/check-source.php`
+  holds the source to both, and the `php -n` smoke run of `composer test:dist`
+  checks the second on the archive.
+
+### Tests
+
+- `php/tests/Unit/`: resolution (`ParserTest.php`), host modifiers
+  (`ModifiersTest.php`), re-entry (`ReentryTest.php`), the limits, the
+  conversion of values, the tree (`CstTest.php`), the Intl modifiers with
+  ext-intl and without, and `Internal/` for the pure helpers. What has to run
+  in a process of its own, at a memory limit of its own, is a script in
+  `tests/Scripts/`.
+- `php/tests/Conformance/`: every case of the set through `adapter.php`,
+  and the audit of the runner against the set's defects; `tests/Runner/`
+  tests the runner itself.
+- `php/tests/Types/surface.php`: the public surface as a consumer's analysis
+  reads it, analysed by PHPStan against the source and against the archive's
+  copy.
+- The unit and conformance suites run twice: against the source, and through
+  `composer test:dist` against the archive a release ships.
+- What a message resolves to is the conformance set's to pin, as for `js/`.
