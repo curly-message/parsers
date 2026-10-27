@@ -203,10 +203,14 @@ placeholder resolves to is data, and nothing reads it as text again. It is cut
 to 120 UTF-16 code units of what reached it — what a string's `length` counts
 — or one fewer where the last of them is the high half of a surrogate pair, so
 the cut never severs a character. A cut is marked with a trailing `...` of the
-parser's own, and the excerpt is escaped after that — quotes, backslashes, and
-every line terminator. So a cut excerpt arrives at 122 code units at the
-shortest, one carrying something to escape arrives longer still, and no message
-can forge a line where a report is written.
+parser's own, and the excerpt is escaped after that as the body of a JSON
+string is — quotes, backslashes, every control character below U+0020 and every
+lone surrogate — and U+2028 and U+2029 as well. That covers every line
+terminator the format names; U+0085, at which some line readers end a line
+too, is left as it is, for a host whose logs are read that way to escape. So a
+cut excerpt arrives at 122 code units at the shortest, one carrying something
+to escape arrives longer still, and no message can forge a line where a report
+is written.
 
 `recognizeWrappers` says whether a payload entry shaped like a wrapper carries
 the value's own configuration. It is on where the caller says nothing, so a
