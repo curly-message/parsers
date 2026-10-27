@@ -1,0 +1,89 @@
+[build-system]
+requires = ["hatchling==1.32.4"]
+build-backend = "hatchling.build"
+
+[project]
+name = "curly-message"
+version = "0.0.0"
+description = "Python implementation of the Curly Message Format."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+license-files = ["LICENSE"]
+dependencies = []
+keywords = ["curly-message", "parser", "i18n", "internationalization", "translations", "interpolation"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
+  "Programming Language :: Python :: 3.15",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Topic :: Software Development :: Internationalization",
+  "Topic :: Software Development :: Localization",
+  "Typing :: Typed",
+]
+
+[project.optional-dependencies]
+intl = ["babel>=2.14,<3", "tzdata>=2024.1"]
+
+[project.urls]
+Homepage = "https://curlymessage.dev/"
+Repository = "https://github.com/curly-message/parsers"
+Issues = "https://github.com/curly-message/spec/issues"
+Changelog = "https://github.com/curly-message/parsers/blob/main/python/CHANGELOG.md"
+
+[dependency-groups]
+test = ["pytest", "jsonschema"]
+lint = ["ruff", "mypy", "types-jsonschema"]
+dev = [{ include-group = "test" }, { include-group = "lint" }]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/curly_message"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/bench",
+    "/build-constraints.txt",
+    "/CHANGELOG.md",
+    "/LICENSE",
+    "/README.md",
+    "/package.json",
+    "/pyproject.toml",
+    "/tasks.py",
+    "/uv.lock",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "A", "SIM", "RUF", "PL", "N", "S"]
+# The walk and the scanner are state machines read top to bottom, and the
+# limits they test are the format's own numbers.
+ignore = ["PLR0911", "PLR0912", "PLR0913", "PLR0915", "PLR2004"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101", "S603"]
+"tasks.py" = ["S603"]
+
+[tool.mypy]
+strict = true
+warn_unused_ignores = true
+python_version = "3.11"
+files = ["src", "tests", "bench", "tasks.py"]
+mypy_path = "src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "surface.py"]
+addopts = ["-ra", "--strict-markers"]
+xfail_strict = true
