@@ -45,18 +45,22 @@ Official implementations of the
   install it, which skips the directory (`<dir>: skipped`) without failing the
   commit; and anything else to fail the commit. An implementation's check is
   its script, `.githooks/js.sh` for `js/`.
-- **`bench.yml` reads its packages from the tree**: each directory that holds
-  a `bench/rows.mjs` outside a `bench/check/`, with its own copy of
-  `bench/harness.mjs` and `bench/check/`. On a PR it benchmarks those with a
-  changed file that is neither a `*.md` nor under the package's `tests/`, or
-  all of them where `bench.yml` itself changed. It sets up Node, which the
-  harness runs on, and a toolchain per manifest the package holds: uv for a
-  `pyproject.toml`, Go from a `go.mod`, PHP from the `.php-version` beside a
-  `composer.json` (with `intl` and `opcache`), and the runner's rustup, which
-  reads `rust-toolchain.toml`, for a `Cargo.toml`. Each side is prepared from
-  the package's directory, by `sh bench/prepare.sh` where the package has
-  one, and by `npm ci --ignore-scripts && npm run build` otherwise. The base
-  is prepared and compared only where its commit has the package's
+- **`bench.yml` reads its packages from the branch and the base**: each
+  directory that holds a `bench/rows.mjs` outside a `bench/check/`, with its
+  own copy of `bench/harness.mjs` and `bench/check/`, on the branch, or on the
+  base where the branch still holds a file of it that is neither a `*.md` nor
+  under its `tests/`. On a PR it benchmarks those with a changed file that is
+  neither a `*.md` nor under the package's `tests/`, or all of them where
+  `bench.yml` itself changed; a package whose branch lacks its
+  `bench/rows.mjs`, `bench/harness.mjs` or `bench/check/check.mjs` fails,
+  naming what is missing. It sets up Node, which the harness runs on, and a
+  toolchain per manifest the package holds: uv for a `pyproject.toml`, Go
+  from a `go.mod`, PHP from the `.php-version` beside a `composer.json` (with
+  `intl` and `opcache`), and the runner's rustup, which reads
+  `rust-toolchain.toml`, for a `Cargo.toml`. Each side is prepared from the
+  package's directory, by `sh bench/prepare.sh` where the package has one,
+  and by `npm ci --ignore-scripts && npm run build` otherwise. The base is
+  prepared and compared only where its commit has the package's
   `bench/rows.mjs`; where it has none, as on the PR that adds the package or
   its benchmark, or one that renames its directory, nothing is compared.
 - Issues live in the family's
