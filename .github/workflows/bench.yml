@@ -5,8 +5,11 @@ name: Benchmark
 # `bench/rows.mjs`. It fails where the benchmark does: a row of the branch
 # that fails, or, unless the PR carries the `bench-accepted` label, a count
 # that grew, a row gone missing or changing kind, or a row that fails on the
-# base. A base that does not hold the package compares nothing.
-# `bench-label.yml` re-runs it when that label changes.
+# base. The base is compared only where its commit has the package's
+# `bench/rows.mjs`; where it has none, as for the PR that adds the package or
+# its benchmark, or one that renames its directory, nothing is compared, and
+# only the branch's own benchmark can fail the job. `bench-label.yml` re-runs
+# it when that label changes.
 on:
   pull_request:
     paths:
@@ -119,20 +122,34 @@ jobs:
           coverage: none
 
       # The harness on rows that fail wherever two measurements share a
-      # process, so a table below is one whose sides were measured apart.
+      # process, with a base and without, so a table below is one whose sides
+      # were measured apart and whose base was read as given.
       - name: Check the harness
         timeout-minutes: 5
         working-directory: change/${{ matrix.package }}/bench/check
-        run: node ../harness.mjs --compare .
+        run: node check.mjs
+
+      # Read from the base's commit rather than from what its checkout holds,
+      # so a path given wrong fails the harness instead of comparing nothing.
+      # The substitution is unpiped, so a git that fails fails the step.
+      - name: Read whether the base has a benchmark
+        id: base
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          rows=$(git -C base ls-tree --name-only "$BASE_SHA" -- "$PACKAGE/bench/rows.mjs")
+          if [ -n "$rows" ]; then holds=true; else holds=false; fi
+          echo "holds=$holds" >> "$GITHUB_OUTPUT"
 
       # Each side by its `bench/prepare.sh`, or else from its lockfile with
       # npm. Neither runs a dependency's install script where its toolchain
       # lets it refuse one, since the job holds a token that writes to the PR.
       # A base that does not build leaves rows that fail, which the label can
-      # accept; a base that does not hold the package is not prepared, and the
-      # harness compares nothing.
+      # accept; a base without a benchmark is not prepared.
       - name: Install and build
         env:
+          HOLDS: ${{ steps.base.outputs.holds }}
           PACKAGE: ${{ matrix.package }}
         run: |
           prepare() {
@@ -142,10 +159,10 @@ jobs:
               npm ci --ignore-scripts && npm run build
             fi
           }
-          if [ -d "base/$PACKAGE" ]; then
+          if [ "$HOLDS" = true ]; then
             (cd "base/$PACKAGE" && prepare) || echo "::warning::The base did not install or build."
           else
-            echo "::notice::The base does not hold $PACKAGE."
+            echo "::notice::The base has no benchmark of $PACKAGE."
           fi
           (cd "change/$PACKAGE" && prepare)
 
@@ -165,12 +182,14 @@ jobs:
         working-directory: change/${{ matrix.package }}
         env:
           ACCEPTED: ${{ steps.labels.outputs.accepted }}
+          HOLDS: ${{ steps.base.outputs.holds }}
           PACKAGE: ${{ matrix.package }}
         run: |
           flags=()
+          if [ "$HOLDS" = true ]; then flags+=(--compare "$GITHUB_WORKSPACE/base/$PACKAGE"); fi
           if [ "$ACCEPTED" = true ]; then flags+=(--accepted); fi
           status=0
-          node bench/harness.mjs --compare "$GITHUB_WORKSPACE/base/$PACKAGE" "${flags[@]}" > "$RUNNER_TEMP/bench.md" || status=$?
+          node bench/harness.mjs "${flags[@]}" > "$RUNNER_TEMP/bench.md" || status=$?
           cat "$RUNNER_TEMP/bench.md" >> "$GITHUB_STEP_SUMMARY"
           echo "status=$status" >> "$GITHUB_OUTPUT"
 

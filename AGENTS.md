@@ -55,9 +55,10 @@ Official implementations of the
   `composer.json` (with `intl` and `opcache`), and the runner's rustup, which
   reads `rust-toolchain.toml`, for a `Cargo.toml`. Each side is prepared from
   the package's directory, by `sh bench/prepare.sh` where the package has
-  one, and by `npm ci --ignore-scripts && npm run build` otherwise. A base
-  that does not hold the package is not prepared, and the harness compares
-  nothing against it.
+  one, and by `npm ci --ignore-scripts && npm run build` otherwise. The base
+  is prepared and compared only where its commit has the package's
+  `bench/rows.mjs`; where it has none, as on the PR that adds the package or
+  its benchmark, or one that renames its directory, nothing is compared.
 - Issues live in the family's
   [shared tracker](https://github.com/curly-message/spec/issues).
 
