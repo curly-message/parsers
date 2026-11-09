@@ -30,10 +30,25 @@
 // does is read from its first call, so a synchronous one is timed by a loop
 // that awaits nothing. A row that holds something open while it is measured,
 // a browser say, gives it back in its `close`, which each process calls once
-// the row is measured or has failed there; a process that dies takes what it
-// held with it, and fails the row. The spread leaves
-// out the lowest and the highest quarter of the samples, rounded down, so a
-// busy neighbour neither hides nor flags a change.
+// the row is measured or has failed there; a process that dies fails the row,
+// and takes with it what lives in it, but not a child process it started. The
+// spread leaves out the lowest and the highest quarter of the samples, rounded
+// down, so a busy neighbour neither hides nor flags a change.
+//
+// A row over a child process, as a package that is not JavaScript measures
+// what it ships, keeps to more. A child the row keeps open between calls is
+// started in the row's `run`, ends when its standard input closes, so that it
+// ends with the process measuring it however that ends, and is given back in
+// the row's `close`. The child writes and flushes each reply before it reads
+// the next request, since a reply left unflushed never arrives and the run
+// hangs, and the row rejects a pending call once the child exits or fails to
+// start, so that a child that fails fails the row. A child that runs to
+// completion within `run` needs none of this. A time row that measures work
+// done in a child sends that one child a batch per call, large enough that
+// the round trip, tens of microseconds, is not what it measures: a process
+// started per sample measures its start, some milliseconds whose spread alone
+// hides a parse of 20 microseconds grown tenfold. A row that measures a
+// command end to end, its start included, starts it per call.
 //
 // A package's name and version are read each on its own: from its
 // `package.json` where that names it, and otherwise from the `name` or
