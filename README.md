@@ -46,7 +46,9 @@ names (`npm run bench` in `js/`), that measures what its build costs: counts,
 such as what checking a call costs a type checker, sizes, and times. A PR is
 benchmarked against its base by `bench.yml`, for each implementation it
 touches, which posts a table per implementation on the PR (a PR from a fork
-finds them in the job's summary). A count that grew, a row gone missing or
+finds them in the job's summary). An implementation is benchmarked where the
+branch or the base has its benchmark, so a PR that drops the benchmark of an
+implementation it changes fails. A count that grew, a row gone missing or
 changing kind, or a row that fails on the base fails the check unless the PR
 carries the `bench-accepted` label; adding or removing the label runs it
 again. The base is compared only where its commit has the implementation's

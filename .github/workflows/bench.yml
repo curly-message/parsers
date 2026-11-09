@@ -2,7 +2,9 @@ name: Benchmark
 
 # The benchmark of a PR against its base, posted on the PR and in the job's
 # summary, for each package the PR touches: each directory that holds a
-# `bench/rows.mjs`. It fails where the benchmark does: a row of the branch
+# `bench/rows.mjs` on the branch, or on the base where the branch still holds
+# more of it than documents and tests. It fails where the branch dropped the
+# package's benchmark, and where the benchmark fails: a row of the branch
 # that fails, or, unless the PR carries the `bench-accepted` label, a count
 # that grew, a row gone missing or changing kind, or a row that fails on the
 # base. The base is compared only where its commit has the package's
@@ -30,7 +32,10 @@ concurrency:
 
 jobs:
   # The packages the PR touches: those with a changed file that is neither a
-  # document nor a test, or every package where this workflow changed.
+  # document nor a test, or every package where this workflow changed. Read
+  # from the base as well as the branch, so a PR that deletes a package's rows
+  # still benchmarks it, and fails. Each tree is read unpiped, so a git that
+  # fails fails the step.
   packages:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -44,27 +49,53 @@ jobs:
       - name: Checkout the branch
         uses: actions/checkout@v7
         with:
+          path: change
+          persist-credentials: false
+
+      - name: Checkout the base
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base
           persist-credentials: false
 
       - name: List the packages
         id: list
         env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GH_TOKEN: ${{ github.token }}
           PR: ${{ github.event.pull_request.number }}
         run: |
-          packages=$(git ls-files '*/bench/rows.mjs' | { grep -v '/bench/check/' || true; } | sed 's#/bench/rows.mjs$##')
+          branch=$(git -C change ls-files)
+          base=$(git -C base ls-tree -r --name-only "$BASE_SHA")
           changed=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[] | .filename, (.previous_filename // empty)')
           all=0
           if grep -qxF '.github/workflows/bench.yml' <<< "$changed"; then all=1; fi
           list=$(awk -v all="$all" '
-            NR == FNR { changed[++n] = $0; next }
-            $0 != "" {
-              for (i = 1; i <= n; i++) {
-                file = changed[i]
-                if (all || (index(file, $0 "/") == 1 && file !~ /\.md$/ && index(file, $0 "/tests/") != 1)) { print; break }
-              }
+            # Whether the change filter counts a file for the package in dir.
+            function counts(file, dir) {
+              return index(file, dir "/") == 1 && file !~ /\.md$/ && index(file, dir "/tests/") != 1
             }
-          ' <(printf '%s\n' "$changed") <(printf '%s\n' "$packages") | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            # The package whose rows a file is, or "" where it is none.
+            function package(file) {
+              if (file !~ /\/bench\/rows\.mjs$/ || file ~ /\/bench\/check\//) return ""
+              sub(/\/bench\/rows\.mjs$/, "", file)
+              return file
+            }
+            function list(dir) { listed[dir] = 1; packages[++m] = dir }
+            FILENAME == ARGV[1] { changed[++n] = $0; next }
+            FILENAME == ARGV[2] {
+              held[++h] = $0
+              if ((dir = package($0)) != "" && !(dir in listed)) list(dir)
+              next
+            }
+            (dir = package($0)) != "" && !(dir in listed) {
+              for (i = 1; i <= h; i++) if (counts(held[i], dir)) { list(dir); break }
+            }
+            END {
+              for (j = 1; j <= m; j++) for (i = 1; i <= n; i++) if (all || counts(changed[i], packages[j])) { print packages[j]; break }
+            }
+          ' <(printf '%s\n' "$changed") <(printf '%s\n' "$branch") <(printf '%s\n' "$base") | jq -R -s -c 'split("\n") | map(select(length > 0))')
           echo "Packages: $list"
           echo "list=$list" >> "$GITHUB_OUTPUT"
 
@@ -84,6 +115,21 @@ jobs:
         with:
           path: change
           persist-credentials: false
+
+      # A package listed from the base whose branch dropped its benchmark
+      # fails here, naming what is missing, rather than in a step that needs it.
+      - name: Check the benchmark is there
+        env:
+          PACKAGE: ${{ matrix.package }}
+        run: |
+          missing=0
+          for file in bench/rows.mjs bench/harness.mjs bench/check/check.mjs; do
+            if [ ! -f "change/$PACKAGE/$file" ]; then
+              echo "::error::The branch has no $PACKAGE/$file."
+              missing=1
+            fi
+          done
+          exit "$missing"
 
       - name: Checkout the base
         uses: actions/checkout@v7
