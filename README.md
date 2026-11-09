@@ -49,8 +49,10 @@ touches, which posts a table per implementation on the PR (a PR from a fork
 finds them in the job's summary). A count that grew, a row gone missing or
 changing kind, or a row that fails on the base fails the check unless the PR
 carries the `bench-accepted` label; adding or removing the label runs it
-again. A base that does not hold the implementation, as on the PR that adds
-it, compares nothing and fails nothing.
+again. The base is compared only where its commit has the implementation's
+benchmark; where it has none, as on the PR that adds the implementation or its
+benchmark, or one that renames its directory, nothing is compared, and only the
+branch's own benchmark can fail the check.
 
 ## Releasing
 

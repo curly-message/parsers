@@ -9,11 +9,14 @@
 // it calls. A count is deterministic and gates: one that grew fails the run,
 // as do a row gone missing, a row whose kind changed, a base whose rows fail
 // to load and a row of the base that fails, unless `--accepted` says the
-// change means them. A base that does not hold the package, the base of the
-// change that adds it, compares nothing and gates nothing. This package fails
-// the run regardless when its `bench/rows.mjs` is missing or fails to load, or
-// when a row of it fails. A size that grew and a time beyond its spread are
-// flagged for review.
+// change means them. Whether the base holds the package is the caller's to
+// decide, and the harness takes its word: without `--compare` nothing is
+// compared, as for the change that adds the package or its benchmark, and an
+// empty `<dir>`, or one that does not exist or holds no `bench/rows.mjs`, is a
+// path given wrong, which fails the run whatever `--accepted` says. This package fails
+// the run regardless when its `bench/rows.mjs` is missing or fails to load,
+// or when a row of it fails. A size that grew and a time beyond its spread
+// are flagged for review.
 //
 // Each side of a row is measured in processes of its own, forked from this one
 // with `--side`, so neither side's code, nor a row measured before it, shapes
@@ -32,10 +35,11 @@
 // out the lowest and the highest quarter of the samples, rounded down, so a
 // busy neighbour neither hides nor flags a change.
 //
-// A package's name and version are read from its `package.json`, or, where it
-// has none, from the `name` and `version` its `bench/rows.mjs` exports, so a
-// package that npm does not manage is measured like one it does; the table is
-// headed by the directory's name where neither gives one.
+// A package's name and version are read each on its own: from its
+// `package.json` where that names it, and otherwise from the `name` or
+// `version` its `bench/rows.mjs` exports, so a package that npm does not
+// manage is measured like one it does; the table is headed by the directory's
+// name where neither gives one.
 //
 // This file is the same in every repository of the family; change every copy
 // at once.
@@ -71,27 +75,20 @@ const readManifest = (file) => {
   }
 };
 
-// A side's name, version and rows by name, or why there are no rows to read. A
-// base checked out before the package was added, or before it had a benchmark,
-// has none, and is no failure; a directory that holds neither a manifest nor
-// rows is.
+// A side's name, version and rows by name, or why there are no rows to read.
 const load = async (dir) => {
-  if (!existsSync(dir)) return { missing: true };
-
   const manifest = resolve(dir, 'package.json');
   const file = resolve(dir, 'bench/rows.mjs');
-
-  if (!existsSync(manifest) && !existsSync(file)) return { error: 'neither a package.json nor a bench/rows.mjs is there' };
-
   let read;
 
   try {
     read = existsSync(manifest) ? readManifest(manifest) : undefined;
 
-    if (!existsSync(file)) return { name: read?.name, version: read?.version, absent: true };
+    if (!existsSync(file)) return { name: read?.name, version: read?.version };
 
     const { default: rows, ...exported } = await import(pathToFileURL(file).href);
-    const { name, version } = read ?? exported;
+    const name = read?.name ?? exported.name;
+    const version = read?.version ?? exported.version;
     const named = new Map();
 
     for (const row of rows) {
@@ -409,16 +406,24 @@ if (!change.rows) {
 // A path is meant from where the command was given: npm runs a workspace's
 // script in the workspace and names that place in INIT_CWD.
 const against = args.compare === undefined ? undefined : resolve(process.env.INIT_CWD ?? '.', args.compare);
+
+// The caller gives a base only where it holds the package, so a base without
+// rows is a path given wrong, not a change with nothing to compare. An empty
+// path would resolve to the place the command was given, often this package.
+const wrong = args.compare === ''
+  ? '`--compare` names no base'
+  : against !== undefined && !existsSync(resolve(against, 'bench/rows.mjs')) && `the base at \`${against}\` ${existsSync(against) ? 'has no bench/rows.mjs' : 'does not exist'}`;
+
+if (wrong) {
+  console.log([...lines, `Failed: ${wrong}.`].join('\n'));
+  process.exit(1);
+}
+
 const base = against === undefined ? undefined : await list(against);
 const compared = Boolean(base?.rows);
 
-if (base?.error) {
-  lines.push(`The base at \`${args.compare}\` failed to load its rows: ${base.error}`, '');
-} else if (base?.missing) {
-  lines.push(`The base at \`${args.compare}\` does not hold this package, so nothing is compared.`, '');
-} else if (base?.absent) {
-  lines.push(`The base at \`${args.compare}\` has no benchmark, so nothing is compared.`, '');
-}
+if (base?.error) lines.push(`The base at \`${against}\` failed to load its rows: ${base.error}`, '');
+else if (compared) lines.push(`Compared with the base at \`${against}\`.`, '');
 
 const results = await measureAll([against, resolve('.')], change.rows, base?.rows);
 const verdicts = results.map((result) => verdict(result, compared));
@@ -444,7 +449,7 @@ lines.push('');
 if (fatal) lines.push(`Failed: ${fatal} row${fatal > 1 ? 's' : ''} of this package failed.`);
 else if (gated && !args.accepted) lines.push(`Failed: ${gated} row${gated > 1 ? 's' : ''} grew, went missing, changed kind or failed on the base. A change that means it is accepted with \`--accepted\` (the \`bench-accepted\` label on a PR).`);
 else if (gated) lines.push(`Passed: ${gated} row${gated > 1 ? 's' : ''} grew, went missing, changed kind or failed on the base, accepted.`);
-else lines.push('Passed.');
+else lines.push(against === undefined ? 'Passed; nothing was compared.' : 'Passed.');
 
 console.log(lines.join('\n'));
 process.exitCode = fatal || (gated && !args.accepted) ? 1 : 0;
