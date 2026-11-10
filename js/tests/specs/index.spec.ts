@@ -115,6 +115,66 @@ const polluted = (name: string, value: any, read: () => string) => {
   }
 };
 
+// A parser whose modifiers keep what they are handed and read it from another
+// placeholder. `x-keep` and its two variants put an option value, a default or
+// a whole input on a stack and answer `k`; `x-read` takes the last one off and
+// answers its text, or `e` where nothing is kept, so a message of n keeping
+// placeholders followed by one reading placeholder reads n values, each from
+// inside the one before it. `deepest` is how many of those reads were ever in
+// progress at once. The `spare` is an input kept outside that stack, `full`
+// writes a message that renders `innermost` with 32 of those reads in
+// progress, and a test adds the modifiers and the report handler it needs.
+const keeping = (customModifiers: Modifier.CustomModifiers = {}, onReport: Parser.OnReport = () => {}) => {
+  type Input = Parameters<Modifier.T>[0];
+
+  const reports: Report[] = [];
+  const kept: { readonly value: string }[] = [];
+  let spare: Input | undefined;
+  let reading = 0;
+  let deepest = 0;
+
+  const { resolve } = createParser({
+    customModifiers: {
+      'x-keep': ({ options }) => { kept.push(options[0]); return 'k'; },
+      'x-keep-default': (input) => { kept.push({ get value() { return input.defaultValue; } }); return 'k'; },
+      'x-keep-input': (input) => { kept.push({ get value() { return input.options[0].value; } }); return 'k'; },
+      'x-read': () => {
+        const slot = kept.pop();
+
+        if (!slot) return 'e';
+
+        reading += 1;
+        deepest = Math.max(deepest, reading);
+
+        try {
+          return slot.value;
+        } finally {
+          reading -= 1;
+        }
+      },
+      'x-own': ({ options, defaultValue }) => `${options[0].value}${defaultValue}`,
+      'x-own-after': (input) => `${input.options[0].value}${input.defaultValue}`,
+      'x-value': ({ value }) => value,
+      'x-raise': () => { throw new Error('MODIFIER FAILURE'); },
+      'x-spare': (input) => { spare = input; return ''; },
+      'x-spare-own': (input) => { spare = input; void input.options[0].value; return undefined; },
+      'x-read-spare': () => spare?.options[0].value,
+      'x-read-spare-default': () => spare?.defaultValue,
+      ...customModifiers,
+    },
+    onReport: (report) => { reports.push(report); onReport(report); },
+  });
+
+  return {
+    resolve: (text: string, context: Parser.Context) => { kept.length = 0; return resolve(text, context); },
+    reports,
+    deepest: () => deepest,
+    left: () => kept.length,
+    spare: () => spare,
+    full: (innermost: string) => `{{x:x-keep; o:${innermost}}}${'{{x:x-keep; o:{{x:x-read}}}}'.repeat(31)}{{x:x-read}}`,
+  };
+};
+
 // The format's whitespace class (SPEC.md section 6). Every member is written as
 // an escape: a literal invisible code point is invisible to review and to a
 // diff.
@@ -2004,6 +2064,580 @@ describe('parser', () => {
     expect(kept.map(({ defaultValue, options }) => [defaultValue, options.map(({ value }) => value)])).toEqual([['D', ['A']], ['P', []]]);
     expect(reports).toHaveLength(2);
     expect(defaultReads).toBe(1);
+  });
+  it('a chain of 32 kept option values, each read from another placeholder, resolves in full', () => {
+    const { resolve, deepest, reports } = keeping();
+
+    expect(resolve(`${'{{x:x-keep; o:{{x:x-read; default:D}}}}'.repeat(32)}{{x:x-read}}`, { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}e`);
+    expect(deepest()).toBe(32);
+    expect(reports).toEqual([]);
+  });
+  it.each([33, 50, 200])('the 33rd of %i kept option values read in a chain is refused, and the modifier that asked is answered the empty string', (kept) => {
+    const { resolve, deepest, left, reports } = keeping();
+
+    // The message is flat, so the nesting limit never meets it: what stops the
+    // chain is how many of those renders are in progress, and the read past
+    // that answers the empty string to a modifier that then answers with it.
+    // The empty string is an answer, so the default beside it is not taken.
+    expect(resolve(`${'{{x:x-keep; o:{{x:x-read; default:D}}}}'.repeat(kept)}{{x:x-read}}`, { payload: { x: 1 } })).toBe('k'.repeat(kept));
+    expect(deepest()).toBe(33);
+    expect(left()).toBe(kept - 33);
+    expect(reports).toEqual([]);
+  });
+  it('a kept default and the option of a kept input count as a kept option value does', () => {
+    const run = (slot: string, kept: number) => {
+      const { resolve, reports } = keeping();
+
+      return [resolve(`${slot.repeat(kept)}{{x:x-read}}`, { payload: { x: 1 } }), reports.map(({ code }) => code)];
+    };
+
+    expect(run('{{x:x-keep-default; default:{{x:x-read}}}}', 32)).toEqual([`${'k'.repeat(32)}e`, []]);
+    expect(run('{{x:x-keep-default; default:{{x:x-read}}}}', 33)).toEqual(['k'.repeat(33), []]);
+    expect(run('{{x:x-keep-input; o:{{x:x-read}}}}', 32)).toEqual([`${'k'.repeat(32)}e`, []]);
+    expect(run('{{x:x-keep-input; o:{{x:x-read}}}}', 33)).toEqual(['k'.repeat(33), []]);
+  });
+  it('a modifier reading its own options and default is counted by the nesting limit alone', () => {
+    const { resolve, deepest, full, reports } = keeping();
+
+    // 32 kept values are being read, each from inside the one before, so the
+    // count is full, and the innermost of them holds a placeholder whose
+    // modifier reads its own option and its own default. Neither read leaves
+    // the placeholder that asked, so neither is a 33rd and both answer.
+    expect(resolve(`{{x:x-keep; o:{{x:x-own; o:a; default:b}}}}${'{{x:x-keep; o:{{x:x-read}}}}'.repeat(31)}{{x:x-read}}`, { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}ab`);
+    expect(deepest()).toBe(32);
+    expect(reports).toEqual([]);
+
+    // A modifier is the current one again once a modifier called beneath it
+    // has returned or raised, so the default it reads next is still its own.
+    expect(resolve(full('{{x:x-own-after; o:{{x:x-value}}; default:b}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}1b`);
+    expect(reports).toEqual([]);
+    expect(resolve(full('{{x:x-own-after; o:<{{x:x-raise}}>; default:b}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}<>b`);
+    expect(reports.map(({ code, text }) => [code, text])).toEqual([['failed-modifier', '{{x:x-raise}}']]);
+  });
+  it('each hop of a kept chain may read its own options eight levels deep', () => {
+    const { resolve, deepest, reports } = keeping();
+    const own = (levels: number, innermost: string): string => (levels <= 1 ? innermost : `{{x:x-own; o:${own(levels - 1, innermost)}}}`);
+
+    // The count is of renders asked for from outside their placeholder, so
+    // what a hop nests in its own options costs it nothing of the 32.
+    expect(resolve(`${`{{x:x-keep; o:${own(7, '{{x:x-read}}')}}}`.repeat(32)}{{x:x-read}}`, { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}e`);
+    expect(deepest()).toBe(32);
+    expect(reports).toEqual([]);
+  });
+  it('a refused read is not kept: the value renders for a later read, and the placeholder that owns it reads its own', () => {
+    const { resolve, spare, reports } = keeping();
+    const chain = (kept: number, innermost: string) => `{{x:x-keep; o:${innermost}}}${'{{x:x-keep; o:{{x:x-read}}}}'.repeat(kept - 1)}{{x:x-read}}`;
+
+    // The innermost hop of 32 reads a value kept outside the chain: the 33rd
+    // render, refused. The placeholder after the chain reads the same value
+    // with nothing in progress, and it renders.
+    expect(resolve(`{{x:x-spare; o:S}}${chain(32, '<{{x:x-read-spare}}>')}{{x:x-read-spare}}`, { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}<>S`);
+    expect(reports).toEqual([]);
+
+    // A placeholder that kept its own input starts the chain from its own
+    // option, and the innermost hop is refused that placeholder's default.
+    // The placeholder still owns it: its modifier answers nothing, and its
+    // fallback chain is the default it wrote.
+    expect(resolve(`${chain(32, '<{{x:x-read-spare-default}}>').slice(0, -'{{x:x-read}}'.length)}[{{x:x-spare-own; o:{{x:x-read}}; default:D}}]`, { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}[D]`);
+    expect(reports).toEqual([]);
+    expect(spare()?.defaultValue).toBe('D');
+  });
+  it('a read refused while a value becomes text answers the empty string to that conversion, and nothing fails', () => {
+    const { resolve, spare, reports } = keeping();
+    let read: string | undefined;
+    let coercions = 0;
+    // A class instance says what it is through its own `toString`.
+    const reading = new class Reading { toString() { coercions += 1; read = spare()?.options[0].value; return 'T'; } }();
+
+    // The value becomes text with 32 reads in progress, and the read it makes
+    // is a 33rd. The conversion is answered the empty string and goes on: the
+    // value is the text it then says it is, for both placeholders that name
+    // it, and every `x-read` answers what it read.
+    const innermost = '[{{t:x-value; default:D}}{{t}}]';
+
+    expect(resolve(`{{x:x-spare; o:S}}{{x:x-keep; o:${innermost}}}${'{{x:x-keep; o:{{x:x-read}}}}'.repeat(31)}{{x:x-read}}`, { payload: { x: 1, t: reading } })).toBe(`${'k'.repeat(32)}[TT]`);
+    expect(read).toBe('');
+    expect(coercions).toBe(1);
+    expect(reports).toEqual([]);
+    coercions = 0;
+
+    // The near miss: the same value read with one render in progress.
+    expect(resolve('{{x:x-spare; o:S}}{{x:x-keep; o:[{{t}}]}}{{x:x-read}}', { payload: { x: 1, t: reading } })).toBe('k[T]');
+    expect(read).toBe('S');
+    expect(coercions).toBe(1);
+    expect(reports).toEqual([]);
+  });
+  it('a refused read made after every modifier has returned answers the empty string and fails nothing', () => {
+    type Input = Parameters<Modifier.T>[0];
+
+    const reports: Report[] = [];
+    let kept: Input | undefined;
+    let read: string | undefined;
+    const { resolve } = createParser({
+      customModifiers: { 'x-keep': (input) => { kept = input; return 'k'; } },
+      onReport: (report) => { reports.push(report); },
+    });
+    // The default reads itself as it becomes text, and what reads it first is
+    // a value of a placeholder that names no modifier.
+    const declared = new class Declared { toString() { read = kept?.defaultValue; return `d<${read}>`; } }();
+    const reading = new class Reading { toString() { return `t(${kept?.defaultValue})`; } }();
+
+    expect(resolve('{{w:x-keep}}[{{t; default:D}}]', { payload: { t: reading, w: { value: 1, default: declared } } })).toBe('k[t(d<>)]');
+    expect(read).toBe('');
+    expect(reports).toEqual([]);
+  });
+  it('a read refused beneath the call of a modifier the format defines fails nothing', () => {
+    type Option = Parameters<Modifier.T>[0]['options'][number];
+
+    const reports: Report[] = [];
+    let kept: Option | undefined;
+    let read: string | undefined;
+    const { resolve } = createParser({
+      customModifiers: { 'x-keep': ({ options }) => { kept = options[0]; return options[0].value; } },
+      onReport: (report) => { reports.push(report); },
+    });
+    // `number` hands its properties to the host's formatter, which converts
+    // this one beneath the call of `number`, inside the option it reads.
+    const digits = (reads: boolean) => ({ minimumFractionDigits: { valueOf() { if (reads) read = kept?.value; return 1; } } as unknown as number });
+
+    expect(resolve('{{x:x-keep; o:[{{n:number; default:DEF}}]}}', { payload: { x: 1, n: 5 }, locale: 'en', props: { number: digits(true) } })).toBe('[5.0]');
+    expect(read).toBe('');
+    expect(reports).toEqual([]);
+
+    // The near miss: the same conversion reading the option once it has
+    // rendered.
+    expect(resolve('{{x:x-keep; o:V}}[{{n:number; default:DEF}}]', { payload: { x: 1, n: 5 }, locale: 'en', props: { number: digits(true) } })).toBe('V[5.0]');
+    expect(read).toBe('V');
+    expect(reports).toEqual([]);
+  });
+  it('a read of text already produced holds no place: with 32 reads in progress it answers the text and fails nothing', () => {
+    const { resolve, full, reports } = keeping();
+
+    // The spare value is produced by a read with nothing in progress, and
+    // read again as a 33rd: the near miss of the read refused there.
+    expect(resolve(`{{x:x-spare; o:S}}<{{x:x-read-spare}}>${full('[{{x:x-read-spare; default:D}}]')}`, { payload: { x: 1 } })).toBe(`<S>${'k'.repeat(32)}[S]`);
+    expect(reports).toEqual([]);
+
+    expect(resolve(`{{x:x-spare; o:S}}${full('[{{x:x-read-spare; default:D}}]')}`, { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}[]`);
+    expect(reports).toEqual([]);
+  });
+  it('a read refused to a payload accessor or a handler answers the empty string and fails nothing', () => {
+    type Option = Parameters<Modifier.T>[0]['options'][number];
+
+    const reports: Report[] = [];
+    const heard: (string | undefined)[] = [];
+    let kept: Option | undefined;
+    let listening = false;
+    const { resolve } = createParser({
+      customModifiers: { 'x-keep': ({ options }) => { kept = options[0]; return options[0].value; } },
+      onReport: (report) => { reports.push(report); if (listening && report.code === 'unknown-modifier') heard.push(kept?.value); },
+      onSuspectValue: () => { if (listening) heard.push(kept?.value); },
+    });
+    const codes = () => reports.splice(0).map(({ code, text }) => [code, text]);
+
+    // The accessor runs while the option `x-keep` asked for renders, and the
+    // option it reads is the one in progress.
+    const payload = { x: 1, get g() { heard.push(kept?.value); return 'G'; } };
+
+    expect(resolve('{{x:x-keep; o:[{{g; default:D}}]; default:F}}', { payload })).toBe('[G]');
+    expect(heard.splice(0)).toEqual(['']);
+    expect(codes()).toEqual([]);
+
+    // The near miss: the accessor reads the value once it has rendered.
+    expect(resolve('{{x:x-keep; o:V}}[{{g; default:D}}]', { payload })).toBe('V[G]');
+    expect(heard.splice(0)).toEqual(['V']);
+    expect(codes()).toEqual([]);
+
+    // So does a handler told of a placeholder inside that option.
+    listening = true;
+
+    expect(resolve('{{x:x-keep; o:<{{x:x-nobody; default:D}}>; default:F}}', { payload: { x: 1 } })).toBe('<D>');
+    expect(heard.splice(0)).toEqual(['']);
+    expect(codes()).toEqual([['unknown-modifier', '{{x:x-nobody; default:D}}']]);
+
+    // And a handler told of a value that holds message syntax.
+    expect(resolve('{{x:x-keep; o:<{{s}}>; default:F}}', { payload: { x: 1, s: '{{' } })).toBe('<{{>');
+    expect(heard.splice(0)).toEqual(['']);
+    expect(codes()).toEqual([]);
+  });
+  it('a value read again while it renders is refused at once, and is not rendered again', () => {
+    type Option = Parameters<Modifier.T>[0]['options'][number];
+
+    const reports: Report[] = [];
+    let kept: Option | undefined;
+    let asked = 0;
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-keep': ({ options }) => { kept = options[0]; return `[${options[0].value}]`; },
+        'x-again': () => { asked += 1; return `<${kept?.value}>`; },
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+
+    // Nothing else is being read, so no count refuses these: each `x-again`
+    // inside the value asks for the value it is part of, is answered the empty
+    // string and answers with it. The one after it reads the value once it
+    // has rendered, and is answered its text without another render.
+    expect(resolve('a{{x:x-keep; o:{{x:x-again; default:D}}-{{x:x-again}}}}b{{x:x-again}}', { payload: { x: 1 } })).toBe('a[<>-<>]b<<>-<>>');
+    expect(asked).toBe(3);
+    expect(reports).toEqual([]);
+  });
+  it('a value read while another value of its placeholder renders is rendered, and only the one rendering is refused', () => {
+    type Options = Parameters<Modifier.T>[0]['options'];
+
+    const reports: Report[] = [];
+    let kept: Options = [];
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-keep': ({ options }) => { kept = options; return options[0].value; },
+        'x-first': () => kept[0].value,
+        'x-second': () => kept[1].value,
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+
+    expect(resolve('{{x:x-keep; a:<{{x:x-second}}>; b:B}}', { payload: { x: 1 } })).toBe('<B>');
+    expect(reports).toEqual([]);
+
+    // The second value renders inside the first and asks for the first.
+    expect(resolve('{{x:x-keep; a:<{{x:x-second}}>; b:({{x:x-first; default:F}})}}', { payload: { x: 1 } })).toBe('<()>');
+    expect(reports).toEqual([]);
+
+    // The first value is still rendering once the second has rendered in it.
+    expect(resolve('{{x:x-keep; a:<{{x:x-second}}{{x:x-first; default:F}}>; b:B}}', { payload: { x: 1 } })).toBe('<B>');
+    expect(reports).toEqual([]);
+  });
+  it('a current modifier is refused its own option too while that option renders', () => {
+    type Option = Parameters<Modifier.T>[0]['options'][number];
+
+    const reports: Report[] = [];
+    let kept: Option | undefined;
+    let read: string | undefined;
+    const { resolve } = createParser({
+      customModifiers: { 'x-keep': ({ options }) => { kept = options[0]; return options[0].value; } },
+      onReport: (report) => { reports.push(report); },
+    });
+    const reading = new class Reading { toString() { read = kept?.value; return 'T'; } }();
+
+    // The value becomes text beneath the call of `x-keep`, inside the option
+    // `x-keep` is reading, so the read is one of its own placeholder's and
+    // is refused all the same.
+    expect(resolve('{{x:x-keep; o:[{{t; default:D}}]; default:F}}', { payload: { x: 1, t: reading } })).toBe('[T]');
+    expect(read).toBe('');
+    expect(reports).toEqual([]);
+  });
+  it('the count of kept values being read is restored when a chain ends, however it ends', () => {
+    const { resolve, deepest, reports } = keeping();
+    const chain = (kept: number, innermost = '{{x:x-read}}') => `{{x:x-keep; o:${innermost}}}${'{{x:x-keep; o:{{x:x-read}}}}'.repeat(kept - 1)}{{x:x-read}}`;
+
+    // A refused chain, a chain a modifier raised out of, and then a full
+    // chain of 32 on the same parser and on another: each starts from none.
+    expect(resolve(chain(40), { payload: { x: 1 } })).toBe('k'.repeat(40));
+    expect(resolve(chain(32, '{{x:x-raise}}'), { payload: { x: 1 } })).toBe('k'.repeat(32));
+    expect(reports.map(({ code, text }) => [code, text])).toEqual([['failed-modifier', '{{x:x-raise}}']]);
+    reports.length = 0;
+
+    expect(resolve(chain(32), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}e`);
+    expect(keeping().resolve(chain(32), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}e`);
+    expect(deepest()).toBe(33);
+    expect(reports).toEqual([]);
+  });
+  it('a kept value read from a resolution begun inside the one that owns it is counted, and that resolution is not', () => {
+    const reports: Report[] = [];
+    const kept: Parameters<Modifier.T>[0]['options'] = [];
+    let asked = 0;
+    const parser: Parser.T = createParser({
+      customModifiers: {
+        'x-keep': ({ options }) => { kept.push(options[0]); return 'k'; },
+        // Each hop reads the next kept value through a `resolve` of its own.
+        'x-resolve': () => parser.resolve('{{x:x-read}}', { payload: { x: 1 } }),
+        'x-read': () => kept.pop()?.value ?? 'e',
+        // A message that names itself again, 100 resolutions deep and then no
+        // deeper: nothing is kept, so nothing is counted.
+        'x-nest': ({ value }) => { asked += 1; return Number(value) > 1 ? parser.resolve('{{x:x-nest}}', { payload: { x: Number(value) - 1 } }) : 'end'; },
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+    const chain = (count: number) => `${'{{x:x-keep; o:{{x:x-resolve}}}}'.repeat(count)}{{x:x-read}}`;
+
+    expect(parser.resolve(chain(32), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}e`);
+    expect(reports).toEqual([]);
+
+    expect(parser.resolve(chain(33), { payload: { x: 1 } })).toBe('k'.repeat(33));
+    expect(reports).toEqual([]);
+
+    expect(parser.resolve('{{x:x-nest}}', { payload: { x: 100 } })).toBe('end');
+    expect(asked).toBe(100);
+    expect(reports).toEqual([]);
+  });
+  it('a resolution a modifier begins runs beneath its call, and a modifier called inside that resolution is the current one', () => {
+    const reports: Report[] = [];
+    const kept: Parameters<Modifier.T>[0]['options'] = [];
+    let mine: Parameters<Modifier.T>[0]['options'] = [];
+    const parser: Parser.T = createParser({
+      customModifiers: {
+        'x-keep': ({ options }) => { kept.push(options[0]); return 'k'; },
+        'x-read': () => kept.pop()?.value ?? 'e',
+        // The option is read by a value becoming text in a resolution
+        // `x-inner` begins: beneath its call, with no other modifier called.
+        'x-inner': ({ options }) => parser.resolve('[{{t; default:D}}]', { payload: { t: new class Reading { toString() { return options[0].value; } }() } }),
+        // The option is read by a modifier that resolution calls.
+        'x-outer': ({ options }) => { mine = options; return parser.resolve('[{{y:x-other; default:D}}]', { payload: { y: 1 } }); },
+        'x-other': () => mine[0].value,
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+    const chain = (count: number, innermost: string) => `{{x:x-keep; o:${innermost}}}${'{{x:x-keep; o:{{x:x-read}}}}'.repeat(count - 1)}{{x:x-read}}`;
+
+    // With 32 counted reads in progress, the read is one `x-inner` makes of
+    // its own placeholder, and costs nesting alone.
+    expect(parser.resolve(chain(32, '{{x:x-inner; o:V}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}[V]`);
+    expect(reports).toEqual([]);
+
+    // Made by `x-other`, it is a read of another placeholder's option and a
+    // 33rd: `x-other` is answered the empty string and answers with it.
+    expect(parser.resolve(chain(32, '{{x:x-outer; o:V}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}[]`);
+    expect(reports).toEqual([]);
+
+    // The near miss: the same read as a 32nd.
+    expect(parser.resolve(chain(31, '{{x:x-outer; o:V}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(31)}[V]`);
+    expect(reports).toEqual([]);
+  });
+  it.each([
+    ['a wrapper declares', true],
+    ['the payload declares', false],
+  ])('a kept default %s is counted while it becomes text, and the 33rd in a chain is refused', (_, wrapped) => {
+    type Input = Parameters<Modifier.T>[0];
+
+    const reports: Report[] = [];
+    const kept: Input[] = [];
+    let converting = 0;
+    let deepest = 0;
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-keep': (input) => { kept.push(input); return 'k'; },
+        'x-read': () => kept.pop()?.defaultValue,
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+    // Each default becomes text by reading the one kept before it, so the
+    // conversions stand one inside another in a message that nests nothing.
+    const text = () => {
+      converting += 1;
+      deepest = Math.max(deepest, converting);
+
+      try {
+        return `d${kept.length ? kept.pop()!.defaultValue : 'e'}`;
+      } finally {
+        converting -= 1;
+      }
+    };
+    const declared = () => new class Declared { toString() { return text(); } }();
+    // The first of the chain is read by a modifier, or by a value becoming
+    // text for a placeholder that names none.
+    const first = new class First { toString() { return kept.pop()?.defaultValue ?? ''; } }();
+    const run = (count: number, reader: string) => {
+      const keys = Array.from({ length: count }, (__, index) => `a${index}`);
+      const entries = keys.map((key) => [key, wrapped ? { value: 1, default: declared() } : 1]);
+
+      kept.length = 0;
+      deepest = 0;
+
+      return resolve(`${keys.map((key) => `{{${key}:x-keep}}`).join('')}${reader}`, { payload: { ...Object.fromEntries(entries), x: 1, t: first, default: wrapped ? undefined : declared() } });
+    };
+
+    expect(run(32, '{{x:x-read}}')).toBe(`${'k'.repeat(32)}${'d'.repeat(32)}e`);
+    expect(deepest).toBe(32);
+    expect(run(32, '{{t}}')).toBe(`${'k'.repeat(32)}${'d'.repeat(32)}e`);
+    expect(deepest).toBe(32);
+    expect(reports).toEqual([]);
+
+    // The read refused is answered the empty string and nothing fails: the
+    // chain ends there, 32 deep.
+    expect(run(40, '{{t}}')).toBe(`${'k'.repeat(40)}${'d'.repeat(32)}`);
+    expect(deepest).toBe(32);
+    expect(kept.length).toBe(7);
+    expect(reports).toEqual([]);
+
+    // Read first by a modifier, the chain ends 32 deep as well, and the
+    // modifier answers what it read.
+    expect(run(40, '{{x:x-read; default:D}}')).toBe(`${'k'.repeat(40)}${'d'.repeat(32)}`);
+    expect(deepest).toBe(32);
+    expect(reports).toEqual([]);
+  });
+  it('a default read while it becomes text is refused at once, and is not converted again', () => {
+    type Input = Parameters<Modifier.T>[0];
+
+    const reports: Report[] = [];
+    let kept: Input | undefined;
+    let coercions = 0;
+    const { resolve } = createParser({
+      customModifiers: {
+        'x-keep': (input) => { kept = input; return `[${input.defaultValue}]`; },
+        'x-again': () => `(${kept?.defaultValue})`,
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+    const declared = new class Declared { toString() { coercions += 1; return `d<${kept?.defaultValue}>`; } }();
+
+    // Nothing else is being read, so no count refuses the read the default
+    // makes of itself. It is answered the empty string, and the first read
+    // goes on to produce the default. The placeholder after it reads that
+    // text.
+    expect(resolve('{{w:x-keep}}{{x:x-again}}', { payload: { x: 1, w: { value: 1, default: declared } } })).toBe('[d<>](d<>)');
+    expect(coercions).toBe(1);
+    expect(reports).toEqual([]);
+
+    // An inline default asked for by a modifier of a placeholder it holds.
+    expect(resolve('{{x:x-keep; default:i{{x:x-again; default:D}}}}{{x:x-again}}', { payload: { x: 1 } })).toBe('[i()](i())');
+    expect(reports).toEqual([]);
+  });
+  it('host code beneath a modifier\'s call reads that modifier\'s options uncounted while none of them is being produced', () => {
+    type Input = Parameters<Modifier.T>[0];
+
+    const heard: string[] = [];
+    let mine: Input | undefined;
+    const reading = (read: () => string | undefined) => new class Reading { toString() { return `<${read()}>`; } }();
+    const own = reading(() => mine?.options[0].value);
+    const { resolve, full, reports } = keeping({
+      // Converts a value that reads its first option, then reads that option.
+      'x-convert': (input) => { mine = input; return `${String(own)}${input.options[0].value}`; },
+      // Reads its second option, then its default, then its first option.
+      'x-mine': (input) => { mine = input; return `${input.options[1]?.value ?? ''}${input.defaultValue}${input.options[0].value}`; },
+      'x-answer': (input) => reading(() => input.options[0].value),
+      'x-raise-mine': (input) => { mine = input; throw new Error('MODIFIER FAILURE'); },
+      'x-resolve': (input) => `${resolve('{{x}}', { payload: { x: 'r' } })}${input.options[0].value}${input.defaultValue}`,
+    }, ({ text }) => { if (mine && text.includes('x-raise-mine')) heard.push(mine.options[0].value); });
+
+    // With 32 counted reads in progress, a value becoming text beneath the
+    // call of `x-convert` reads that modifier's option. Nothing of the
+    // placeholder is being produced, so the read is the modifier's own.
+    expect(resolve(full('{{x:x-convert; a:A}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}<A>A`);
+    expect(reports).toEqual([]);
+    mine = undefined;
+
+    // A value becoming text inside the modifier's second option, and a
+    // default the payload declares becoming text, each read the modifier's
+    // first option while another value of the placeholder is being produced.
+    // Those reads stand inside it, so they are counted, and each is a 33rd.
+    // The modifier's own read of its first option, made last, is not.
+    expect(resolve(full('{{w:x-mine; a:A; b:{{u}}}}'), { payload: { x: 1, u: own, w: { value: 1, default: own } } })).toBe(`${'k'.repeat(32)}<><>A`);
+    expect(reports).toEqual([]);
+    mine = undefined;
+
+    // The near miss: the same reads with room for them.
+    expect(resolve('{{w:x-mine; a:A; b:{{u}}}}', { payload: { x: 1, u: own, w: { value: 1, default: own } } })).toBe('<A><A>A');
+    expect(reports).toEqual([]);
+    mine = undefined;
+
+    // An answer becomes text once its modifier has returned, so the read it
+    // makes is a 33rd.
+    expect(resolve(full('{{x:x-answer; a:A}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}<>`);
+    expect(resolve('{{x:x-answer; a:A}}', { payload: { x: 1 } })).toBe('<A>');
+    expect(reports).toEqual([]);
+
+    // So is what a handler reads once the modifier has raised.
+    expect(resolve(full('{{x:x-raise-mine; a:A; default:D}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}D`);
+    expect(heard.splice(0)).toEqual(['']);
+    expect(reports.splice(0).map(({ code, text }) => [code, text])).toEqual([['failed-modifier', '{{x:x-raise-mine; a:A; default:D}}']]);
+    mine = undefined;
+
+    // A modifier that began a resolution is still the current one once that
+    // resolution returns.
+    expect(resolve(full('{{x:x-resolve; a:A; default:D}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}rAD`);
+    expect(reports).toEqual([]);
+  });
+  it.each([33, 40, 200])('options of one placeholder read each from inside the one before stop 33 deep, of %i', (count) => {
+    type Input = Parameters<Modifier.T>[0];
+
+    const reports: Report[] = [];
+    let mine: Input | undefined;
+    let next = 1;
+    let converting = 0;
+    let deepest = 0;
+    const { resolve } = createParser({
+      customModifiers: { 'x-first': (input) => { mine = input; return input.options[0].value; } },
+      onReport: (report) => { reports.push(report); },
+    });
+    // The value becomes text beneath the call of `x-first`, inside the option
+    // being produced, by reading the option after it: no modifier is called
+    // in between, and the message nests one level however many options it
+    // has.
+    const chained = new class Chained {
+      toString() {
+        const option = mine?.options[next];
+
+        next += 1;
+        converting += 1;
+        deepest = Math.max(deepest, converting);
+
+        try {
+          return `<${option ? option.value : 'e'}>`;
+        } finally {
+          converting -= 1;
+        }
+      }
+    }();
+
+    // The first option is the modifier's own read, and the 32 after it are
+    // counted. With 33 options the innermost conversion finds no option left;
+    // with more, the read it makes is refused and the rest never render.
+    expect(resolve(`{{x:x-first${'; o:{{t}}'.repeat(count)}}}`, { payload: { x: 1, t: chained } })).toBe(`${'<'.repeat(33)}${count === 33 ? 'e' : ''}${'>'.repeat(33)}`);
+    expect(deepest).toBe(33);
+    expect(next).toBe(34);
+    expect(reports).toEqual([]);
+  });
+  it('a read the stack ran out under is not kept, and leaves nothing counted', () => {
+    type Option = Parameters<Modifier.T>[0]['options'][number];
+
+    let kept: Option | undefined;
+    let raised = 0;
+    // How deep the stack goes is the runtime's to say: the read is tried from
+    // its far end and again from each level above it, until one has the room.
+    const dive = (): string | undefined => {
+      try {
+        return dive();
+      } catch {
+        raised += 1;
+
+        return kept?.value;
+      }
+    };
+    const { resolve, full, reports } = keeping({
+      'x-hold': ({ options }) => { kept = options[0]; return 'h'; },
+      'x-dive': () => dive(),
+      'x-held': () => kept?.value,
+    });
+
+    for (let round = 0; round < 3; round += 1) {
+      expect(resolve('{{x:x-hold; o:V}}[{{x:x-dive}}]({{x:x-held}})', { payload: { x: 1 } })).toBe('h[V](V)');
+      expect(raised).toBeGreaterThan(0);
+      expect(resolve(full('{{x:x-read}}'), { payload: { x: 1 } })).toBe(`${'k'.repeat(32)}e`);
+      expect(reports).toEqual([]);
+    }
+  });
+  it('a read refused to an accessor of a context answers the empty string and fails nothing', () => {
+    const reports: Report[] = [];
+    let kept: Parameters<Modifier.T>[0]['options'][number] | undefined;
+    let read: string | undefined;
+    const parser: Parser.T = createParser({
+      customModifiers: {
+        'x-keep': ({ options }) => { kept = options[0]; return options[0].value; },
+        // The accessor is called by the resolution `x-call` begins, beneath
+        // the call of `x-call`, and that resolution calls no modifier.
+        'x-call': () => parser.resolve('{{p}}', { get payload() { read = kept?.value; return { p: 'P' }; } }),
+      },
+      onReport: (report) => { reports.push(report); },
+    });
+
+    expect(parser.resolve('{{x:x-keep; o:[{{x:x-call; default:D}}]}}', { payload: { x: 1 } })).toBe('[P]');
+    expect(read).toBe('');
+    expect(reports).toEqual([]);
+
+    // The near miss: the accessor reads the value once it has rendered.
+    expect(parser.resolve('{{x:x-keep; o:V}}[{{x:x-call; default:D}}]', { payload: { x: 1 } })).toBe('V[P]');
+    expect(read).toBe('V');
+    expect(reports).toEqual([]);
   });
   it('a payload default a modifier cannot turn into text still fails soft', () => {
     const { resolve } = defaultParser;

@@ -225,7 +225,24 @@ const MAX_SERIALIZED_LENGTH = 536870888;
 
 const MAX_NESTING = 8;
 
+const MAX_REENTRY = 32;
+
 const MAX_REPORTED_LENGTH = 120;
+
+// The current modifier, named by the options of the placeholder it was called
+// for: the innermost call of a modifier that has not returned, the format's
+// own or a host's alike, through whatever host code runs beneath that call.
+// Beside it, how many option values and defaults are being produced for a
+// reader the walk does not own. Both are the module's and not a resolution's:
+// what the count bounds is the host's one call stack, which every parser and
+// every resolution begun inside another share. Each is put back on the way
+// out of what changed it, so neither outlives a call to `resolve`.
+let current: unknown;
+let reentered = 0;
+
+// What a placeholder is producing the text of, innermost first: a span for an
+// option value, none for the default.
+type Producing = { slot: Span | undefined, below: Producing | undefined };
 
 // A cut that would fall between the halves of a surrogate pair stops one unit
 // short, so an excerpt ends on a whole character and not on an escaped half.
@@ -382,28 +399,65 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     // An option value is the message's own text, so it is rendered rather than
     // read, and the placeholders it writes resolve one level deeper. A
     // modifier asks for the options it was given when it wants them and may
-    // ask twice, so a value is rendered where it is first asked for and not
-    // again — and an option the modifier passes over is never rendered at all,
-    // so however deeply it nests it costs nothing and reaches no limit.
-    const rendered = new Map<Span, string>();
-    const valueOf = (span: Span) => {
-      const known = rendered.get(span);
+    // ask twice, so what a read produced is kept and not produced again, and
+    // an option the modifier passes over is never rendered at all, so however
+    // deeply it nests it costs nothing and reaches no limit. The default is
+    // kept the same way, under no span: its chain is walked once.
+    //
+    // A modifier may keep what it was handed, so not every read is made
+    // while the modifier called for this placeholder is the current one, and
+    // code beneath that call may read one option from inside the render of
+    // another. Either read stands at this placeholder's depth and not at
+    // its reader's, so the nesting limit does not count it: a flat message
+    // whose modifiers each read what the one before kept goes a level deeper
+    // per placeholder. Those are counted while they produce their text, and
+    // one made with `MAX_REENTRY` of them in progress is refused. A read of
+    // what is being produced is refused whatever the count and whoever makes
+    // it: it has no text yet, and producing it inside itself would resolve
+    // its placeholders twice. A refused read answers the empty string, fails
+    // nothing and is not kept, so a later read produces the text. A read of text already produced is none of
+    // these: it holds no place and answers what is kept.
+    const produced = new Map<Span | undefined, string>();
+    let producing: Producing | undefined;
+    const textOf = (slot: Span | undefined, mine: boolean) => {
+      const known = produced.get(slot);
 
       if (known !== undefined) return known;
       if (closed) return '';
 
-      const resolved = render(span, depth + 1);
+      let inside = producing;
 
-      rendered.set(span, resolved);
+      while (inside && inside.slot !== slot) inside = inside.below;
 
-      return resolved;
+      const own = mine && !producing;
+
+      if (inside || (!own && reentered >= MAX_REENTRY)) return '';
+
+      const below = producing;
+
+      producing = { slot, below };
+
+      if (!own) reentered += 1;
+
+      try {
+        const text = slot ? render(slot, depth + 1) : declaredDefault() ?? (inlineDefault ? render(inlineDefault, depth + 1) : '');
+
+        produced.set(slot, text);
+
+        return text;
+      } finally {
+        // Each is put back by an assignment and none by a call: the host's
+        // stack may have run out under the read, and a call made on the way
+        // out of it could raise in turn and leave the rest as it stood.
+        producing = below;
+
+        if (!own) reentered -= 1;
+      }
     };
 
-    const options = segments.map((segment) => ({ key: segment.key, get value() { return valueOf(segment.value); } }));
+    const options = segments.map((segment) => ({ key: segment.key, get value() { return textOf(segment.value, current === options); } }));
 
     const valueText = payloadText(value);
-
-    let resolvedDefault: string | undefined;
 
     // A placeholder can name `default` itself, and then the chain's payload
     // link is the entry it has already read as its value. One entry is read
@@ -418,13 +472,9 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     const declaredDefault = () => [() => payloadText(ownValue(wrapper, 'default', raised)), payloadDefault]
       .reduce<string | undefined>((chain, link) => chain ?? link(), undefined);
 
-    const defaultText = () => {
-      if (closed) return resolvedDefault ?? '';
-
-      resolvedDefault ??= declaredDefault() ?? (inlineDefault && valueOf(inlineDefault)) ?? '';
-
-      return resolvedDefault;
-    };
+    // The walk taking this placeholder's fallback chain reads the default as
+    // the modifier called for the placeholder does while it is current.
+    const defaultText = () => textOf(undefined, true);
 
     // The nesting limit bounds resolution and not derivation: every
     // placeholder's span is settled before the walk starts, and what the limit
@@ -478,6 +528,8 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     const modifierName = hasModifier ? modifierKey : 'eq';
     const modifier = modifierFor(modifierName)!;
 
+    const around = current;
+
     // Fail soft: a modifier that raises resolves its placeholder, never out of `resolve`.
     // Containment is what keeps that failure out of the caller's render path,
     // and not a reason for the caller to hear nothing about it.
@@ -507,10 +559,18 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
       // What the modifier answers with is this placeholder's result rather than
       // text it read, so it is bounded by the output limit and spends nothing
       // of the read budget.
-      const input = { value: valueText, options, props: modifierProps, get defaultValue() { return defaultText(); }, locale, parserOptions };
+      const input = { value: valueText, options, props: modifierProps, get defaultValue() { return textOf(undefined, current === options); }, locale, parserOptions };
 
-      return describedText(modifier(input), raised, conversions) ?? defaultText();
+      current = options;
+
+      const answer = modifier(input);
+
+      current = around;
+
+      return describedText(answer, raised, conversions) ?? defaultText();
     } catch (failure) {
+      current = around;
+
       // A built-in modifier that cannot answer says why by raising, the way a
       // host-defined one already does; a raise that says nothing is the
       // failure it has always been.
