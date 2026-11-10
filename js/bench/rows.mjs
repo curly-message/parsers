@@ -220,6 +220,12 @@ export default [
 
     return () => resolve('{{n; 1:one; default:many}} and {{n:number}}', { payload: { n: index++ }, props: { number: { maximumFractionDigits: 1 } }, locale: 'en' });
   } },
+  { name: 'resolve: 250 placeholders, a custom modifier reading its own option two levels deep', kind: 'time', run: () => {
+    const parser = createParser({ customModifiers: { own: ({ options }) => options[0].value } });
+    const message = '{{v:own; o:{{v:own; o:{{v}}}}}}'.repeat(250);
+
+    return () => parser.resolve(message, { payload: { v: 'a' }, locale: 'en' });
+  } },
   { name: 'cst: five catalogue messages', kind: 'time', run: () => () => {
     for (const message of MESSAGES) cst(message);
   } },
