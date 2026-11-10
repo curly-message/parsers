@@ -177,6 +177,13 @@ export default [
 
     return () => resolveWrapped('{{v:test}}', { payload, props: { test: { q: 1 } }, locale: 'en' });
   } },
+  { name: 'resolve: a value of 4 000 nodes, serialized', kind: 'time', run: () => {
+    // Strings and object keys, some longer than an index runs to, and
+    // under the output limit as JSON, so the text is written and carried.
+    const payload = { v: Array.from({ length: 1000 }, (_, index) => ({ id: index, name: `item ${index}`, descriptionOfTheItem: 'x'.repeat(20) })) };
+
+    return () => resolve('{{v}}', { payload, locale: 'en' });
+  } },
   { name: 'cst: five catalogue messages', kind: 'time', run: () => () => {
     for (const message of MESSAGES) cst(message);
   } },
