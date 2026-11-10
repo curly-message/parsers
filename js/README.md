@@ -284,6 +284,17 @@ entry, so a resolution asks one entry once however many placeholders name it,
 and an entry that refuses the question is not asked again — though it reports
 at every placeholder that reads it.
 
+The same limit bounds the text one serialization writes, since a handful of
+nodes can hold strings of any length: at most **536870888 UTF-16 code units**,
+which is what a string's `length` counts, or the engine's own longest string
+where that is shorter, as on a 32-bit V8. A serialization that would write
+more is one no conversion describes either: it falls through its fallback
+chain, reports as `unserializable-value` and spends none of the read budget.
+The number is the parser's own rather than the engine's, so Node, Deno and Bun
+refuse the same serialization. It bounds a serialization — what a plain object
+or a plain array becomes, a custom modifier's structured answer included — and
+not a value's own string conversion, whose longest text stays the engine's.
+
 All four bounds belong to the call rather than to the parser, and a call is
 what a host begins by calling `resolve` again while one is running — from a
 custom modifier, from an `onReport` handler writing its diagnostic into a

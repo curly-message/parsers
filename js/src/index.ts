@@ -42,19 +42,35 @@ const isPlainArray = (value: any) => Array.isArray(value) && prototypeIs(value, 
 // `catch` to find. The budget is what one conversion may spend: a value
 // visiting more nodes than a resolvable output can hold is one no conversion
 // describes, which is what a cycle and a `toJSON` answering nothing are too.
+//
+// So is one whose text runs past `MAX_SERIALIZED_LENGTH`, however few nodes
+// hold it. The length of what was written decides that, on every engine
+// alike. The count beside the budget only spares writing the rest of such a
+// value where it can: it adds a string between its quotes, and a key between
+// its quotes and before its colon. An index is never written, and the budget
+// keeps one under six digits, so a key longer than ten is an object's, and
+// one whose entry is left out is left out with it. The count is at most the
+// text written, so it refuses nothing the length would not.
 const serialize = (value: any): string | undefined => {
   let budget = MAX_CONVERSION_NODES;
+  let written = 0;
 
   try {
-    const json = JSON.stringify(value, (_, entry) => {
+    const json = JSON.stringify(value, (key, entry) => {
       budget -= 1;
 
       if (budget < 0) throw new RangeError('The value visits more nodes than a resolvable output can hold.');
 
+      const type = typeof entry;
+
+      if (type === 'string') written += entry.length + 2;
+      if (key.length > 10 && type !== 'undefined' && type !== 'function' && type !== 'symbol') written += key.length + 3;
+      if (written > MAX_SERIALIZED_LENGTH) throw new RangeError('The value serializes to more text than one serialization may write.');
+
       return entry;
     });
 
-    return typeof json === 'string' ? json : undefined;
+    return typeof json === 'string' && json.length <= MAX_SERIALIZED_LENGTH ? json : undefined;
   } catch {
     return undefined;
   }
@@ -202,6 +218,10 @@ const MAX_OUTPUT_LENGTH = 100000;
 const MAX_READ_LENGTH = 100000;
 
 const MAX_CONVERSION_NODES = 100000;
+
+// In UTF-16 code units, which a string's `length` counts: the longest string
+// a 64-bit V8 holds, so that Node, Deno and Bun refuse the same serialization.
+const MAX_SERIALIZED_LENGTH = 536870888;
 
 const MAX_NESTING = 8;
 

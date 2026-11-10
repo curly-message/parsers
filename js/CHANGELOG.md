@@ -67,6 +67,30 @@
   runs nothing. What a message resolves to, and every read and report during
   the call, are unchanged; a modifier that keeps its options to read later
   copies their values while it is called.
+* **One serialization writes at most 536870888 UTF-16 code units.** The
+  conversion limit bounded the nodes a serialization visits and not the text
+  it writes, so the longest JSON a plain object or a plain array could become
+  was whatever the engine's longest string happened to be: 536870888 code
+  units on Node and Deno, 2147483647 on Bun. The bound is now the parser's
+  own, the lower of the two, counted as a string's `length` counts. A
+  serialization that would write more is a value no conversion describes: it
+  takes its fallback chain, reports `unserializable-value` and spends none of
+  the read budget. Node and Deno already refused such a serialization, and
+  refuse it as before. On Bun a serialization of 536870889 to 2147483647 code
+  units was written: a payload value's was then read, so its placeholder
+  resolved to the empty string with `output-limit` and left no read budget to
+  the placeholders after it; a custom modifier's answer of that size resolved
+  to the empty string with `output-limit` as well; and a message that is not
+  text was resolved as that text. Each is now refused as it is on the other
+  two, the first two with `unserializable-value` and the message by resolving
+  to the empty string. Where the text is held in strings or in object keys, a
+  refusal no longer walks the rest of the value: an array naming one string
+  of 100 000 characters 20 000 times was read to its end and is now left at
+  the 5 369th. That is the one change on Node and Deno: an accessor of the
+  refused value past that point is no longer called, so whatever it did
+  besides answering no longer happens. The bound holds one serialization and
+  not a value's own string conversion, whose longest text is still the
+  engine's.
 
 ## 3.1.2
 
