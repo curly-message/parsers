@@ -158,9 +158,24 @@ export module Modifier {
     key: string;
     /**
      * The option's value, rendered by the read rather than before the modifier
-     * was called, and once however often it is read. A read once `resolve` has
+     * was called, and not again once it has rendered. A read once `resolve` has
      * returned renders nothing: it answers the text a read during the call
      * rendered, or the empty string.
+     *
+     * The current modifier is the one whose call is the innermost call of a
+     * modifier that has not returned, the format's own or a custom one,
+     * through whatever host code runs beneath that call. A read of an option
+     * of the placeholder the current modifier was called for, made while no
+     * option value or default of that placeholder is rendering, is bounded by
+     * nesting alone. A modifier that kept the option may read it, or hand it
+     * on to be read, at any other time in the call: at most 32 reads made
+     * that way, of option values and defaults together, are producing their
+     * text at once, and a read of text already rendered is not among them. A
+     * read made that way with 32 in progress is refused, and so is any read
+     * of a value from inside its own render, whatever is in progress: it
+     * answers the empty string and is not kept, so a later read renders the
+     * value. A refused read fails nothing and reports nothing: the code that
+     * made it carries on with the empty string.
      */
     value: string;
   };
@@ -217,6 +232,12 @@ export module Modifier {
      * keys it needs by name. A read once `resolve` has returned walks nothing:
      * it answers the text a read during the call resolved, or the empty
      * string, and runs no host code and reports nothing.
+     *
+     * A read that produces the default other than while the modifier called
+     * for its placeholder is the current one, by code that kept the config,
+     * or while an option value of that placeholder is rendering, is counted
+     * and refused as such a read of an option's `value` is,
+     * whether the default is the inline one or one the payload declares.
      */
     defaultValue: string;
   }) => any;

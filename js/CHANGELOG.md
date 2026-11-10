@@ -91,6 +91,45 @@
   besides answering no longer happens. The bound holds one serialization and
   not a value's own string conversion, whose longest text is still the
   engine's.
+* **A kept option or default read from outside its placeholder is bounded.** A
+  custom modifier may keep its config, and it or other code of the host may
+  read an option's `value` or its `defaultValue` later in the call. The parser
+  tells those reads apart by the current modifier: the one whose call is the
+  innermost call of a modifier that has not returned, the format's own or a
+  custom one, through whatever host code runs beneath that call. Read while
+  any other modifier is current, or while none is, a kept option or default
+  produces its text where its placeholder stands, so the nesting limit never
+  counted it, and a flat message whose modifiers each read what the one before
+  kept went a level deeper per placeholder: resolved from the top of a script,
+  about 1 800 placeholders ran the engine's stack out on Node 22, which was
+  contained as a `failed-modifier`, and about 5 000 did on Bun, which reported
+  nothing. At most 32 such reads are now producing their text at once, of an
+  option value, of an inline default or of a default the payload declares
+  becoming text; a read gives its place back when it returns, and a read of
+  text already produced holds no place and answers that text. **This changes
+  every chain of 33 or more such reads, those that resolved in full before
+  among them**: a message of 50 placeholders each reading what the one before
+  kept resolved without a report, and its 33rd read is now refused. A read of
+  an option or the default of the placeholder the current modifier was called
+  for, made by that modifier or by host code beneath its call while no option
+  value or default of that placeholder is being produced, a placeholder taking
+  its fallback chain and a `resolve` called from inside another are not
+  counted and resolve as they did. Made while one of that placeholder is being
+  produced, such a read is counted like any other, so the options of one
+  placeholder read each from inside the one before stop at the same depth.
+* **An option value or default read while it is being produced is refused.** A
+  read of one from inside its own production, by a modifier of a placeholder
+  it holds or by a value becoming text there, used to produce it again, a
+  level deeper each time until the stack ran out, so a modifier inside it ran
+  and reported more than once. It is now refused at once, whatever else is in
+  progress and whoever reads, the current modifier reading its own placeholder
+  included, and the text is produced once. Read after that has finished, it
+  answers its text as before.
+* **What a refused read does.** It produces nothing, answers the empty string
+  and is not kept, so a later read that is not refused produces the text. It
+  fails nothing and reports nothing: the code that made the read carries on
+  with the empty string, and what a modifier then answers is its placeholder's
+  result like any other answer. No type, report code or report field is added.
 
 ## 3.1.2
 

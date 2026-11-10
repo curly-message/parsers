@@ -308,6 +308,49 @@ it again recurses until the host's own stack runs out, which is contained like
 any other failure — the placeholder takes its fallback chain and `resolve`
 still answers with text.
 
+One thing a custom modifier can do inside a call is bounded all the same. A
+modifier may keep its config, or an option of it, and it or other code of the
+host may read what it kept while the call is still running. The parser tells
+those reads apart by the **current modifier**: the modifier whose call is the
+innermost call of a modifier that has not returned, one of the format's own or
+a custom one alike. A modifier stays current through whatever host code runs
+beneath its call — a value's `toString` or `valueOf`, an accessor, an
+`onReport` or `onSuspectValue` handler, a `resolve` it begins — until that
+code calls another modifier, and is current again once that one returns.
+
+While a modifier is current, a read of an option's `value` or of the
+`defaultValue` of the placeholder it was called for is bounded by nesting
+alone, whichever code beneath the call makes it and however often, as long as
+no option value or default of that placeholder is being produced when it is
+made; so is a placeholder taking its own fallback chain. Any other read by
+host code that
+produces its text produces it where the placeholder that wrote it stands
+rather than where its reader does, so the nesting budget does not count it,
+and a flat message whose modifiers each read what the one before kept would go
+a level deeper for every placeholder it holds. Those reads are counted
+instead: at most **32** of them are producing their text at once, on every
+parser and through every `resolve` begun inside another. What is produced is
+an option value rendering or a default, whether that is the inline default
+rendering or a default the payload declares becoming text. The count is one of
+depth: a read gives its place back when it returns. During a resolution an
+option value or a default is produced at most once, so a read of text already
+produced produces nothing: it holds no place, is never refused and answers
+that text. A `resolve` begun inside another is not counted itself.
+
+A counted read made with 32 in progress, the 33rd, is refused. So, whatever
+the count and whoever reads, the current modifier reading its own placeholder
+included, is a read of an option value or a default that is being produced at
+that moment, asked for from inside itself: it has no text yet, and it is not
+produced a second time. A refused read produces nothing and is not kept:
+`value` or `defaultValue` answers the empty string, and a later read that is
+not refused produces the text.
+
+A refused read fails nothing and reports nothing. The code that made it
+carries on with the empty string, whether that is a modifier, a value's
+`toString`, an accessor or a handler, and what a modifier then answers is its
+placeholder's result like any other answer: there is no report code for a
+refused read.
+
 ## Plural selection
 
 `plural` and `ordinal` select an option by the category the locale's plural
