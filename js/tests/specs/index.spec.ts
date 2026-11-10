@@ -3854,6 +3854,86 @@ describe('parser', () => {
     expect(output.length).toBe(huge.length);
     expect(reports.map(({ code }) => code)).toEqual(['output-limit']);
   }, 0);
+  // No timeouts in here either: each case asserts lengths, counts and
+  // reports, not how long writing half a gigabyte takes.
+  describe('the text one serialization writes', () => {
+    // The bound, in the UTF-16 code units a string's `length` counts.
+    const bound = 536870888;
+    const long = 'x'.repeat(100000);
+    // The length rather than the text: a mismatch prints a number here and
+    // half a gigabyte anywhere else.
+    const resolved = (message: string, payload: Record<string, unknown>) => {
+      const reports: Report[] = [];
+      const output = createParser({ onReport: (report) => { reports.push(report); } }).resolve(message, { payload });
+
+      return { output: output.length > 100 ? output.length : output, codes: reports.map(({ code }) => code) };
+    };
+
+    it('a serialization past the bound stops at the string that carries it there', () => {
+      let reads = 0;
+      const entry = {
+        get s() {
+          reads += 1;
+
+          return long;
+        },
+      };
+      const { output, codes } = resolved('{{v; default:A}}{{v; default:B}}{{w}}', { v: Array.from({ length: 20000 }, () => entry), w: 'W' });
+
+      // The value is converted once for both placeholders, and what that
+      // wrote spends none of what `w` reads.
+      expect(output).toBe('ABW');
+      expect(codes).toEqual(['unserializable-value', 'unserializable-value']);
+      // A string is written between two quotes, so this is the first one the
+      // text has no room for.
+      expect(reads).toBe(Math.floor(bound / (long.length + 2)) + 1);
+    }, 0);
+    it('a serialization past the bound stops at the key that carries it there', () => {
+      let reads = 0;
+      const entry = Object.defineProperty({}, long, {
+        enumerable: true,
+        get: () => {
+          reads += 1;
+
+          return 1;
+        },
+      });
+      const { output, codes } = resolved('{{v; default:A}}{{w}}', { v: Array.from({ length: 20000 }, () => entry), w: 'W' });
+
+      expect(output).toBe('AW');
+      expect(codes).toEqual(['unserializable-value']);
+      // A key is written between two quotes and before a colon.
+      expect(reads).toBe(Math.floor(bound / (long.length + 3)) + 1);
+    }, 0);
+    it('a serialization of exactly the bound is text, and one unit more is not', () => {
+      // An array of strings writes its two brackets, and each string's two
+      // quotes and the comma after it, the last string's comma aside.
+      const count = Math.floor((bound - 4) / (long.length + 3));
+      const strings = (length: number) => [...Array.from({ length: count }, () => long), 'x'.repeat(length - 4 - count * (long.length + 3))];
+
+      // Text the output has no room for and the read budget is spent on.
+      expect(resolved('{{v}}|{{w; default:after}}', { v: strings(bound) })).toEqual({ output: '|', codes: ['output-limit', 'read-limit'] });
+      // No text at all, so `w` still has a budget to find nothing in.
+      expect(resolved('{{v}}|{{w; default:after}}', { v: strings(bound + 1) })).toEqual({ output: '|after', codes: ['unserializable-value'] });
+    }, 0);
+    it('the bound measures the text written, not the strings it was written from', () => {
+      // Every quotation mark is written as two characters, so strings holding
+      // half the bound between them write more than all of it.
+      const quotes = '"'.repeat(100000);
+      const v = Array.from({ length: Math.ceil(bound / (2 * quotes.length + 3)) + 1 }, () => quotes);
+
+      expect(v.length * (quotes.length + 2)).toBeLessThan(bound * 0.51);
+      expect(resolved('{{v}}|{{w; default:after}}', { v })).toEqual({ output: '|after', codes: ['unserializable-value'] });
+    }, 0);
+    it('a key the serialization leaves out counts for nothing', () => {
+      const entry = { [long]: undefined, ['y'.repeat(100000)]: () => 1 };
+      const v = Array.from({ length: 5400 }, () => entry);
+
+      expect(v.length * (long.length + 3)).toBeGreaterThan(bound);
+      // `[{},{},...]`, then the message's `|` and its inline default.
+      expect(resolved('{{v}}|{{w; default:after}}', { v })).toEqual({ output: 3 * v.length + 1 + '|after'.length, codes: [] });
+    }, 0);
+  });
   it('an `onReport` that throws does not take the resolution down', () => {
     const seen: string[] = [];
     const { resolve } = createParser({

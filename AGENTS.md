@@ -132,12 +132,13 @@ taken from the message go through `ownValue`, so
 inherited members.
 
 **The resolution limits are load-bearing.** `MAX_OUTPUT_LENGTH`,
-`MAX_READ_LENGTH`, `MAX_CONVERSION_NODES` and `MAX_NESTING` are what keep the
-cost of a resolution bounded by the message rather than by the payload: a
-value no conversion terminates on, a message nested past what a host will
-walk, and a payload handing back more text than a caller can hold each stop at
-one of them. Don't remove them, don't raise them to buy behavior, and treat a
-change to any of them as a format change.
+`MAX_READ_LENGTH`, `MAX_CONVERSION_NODES`, `MAX_SERIALIZED_LENGTH` and
+`MAX_NESTING` are what keep the cost of a resolution bounded by the message
+rather than by the payload: a value no conversion terminates on, a
+serialization longer than every supported engine holds, a message nested past
+what a host will walk, and a payload handing back more text than a caller can
+hold each stop at one of them. Don't remove them, don't raise them to buy
+behavior, and treat a change to any of them as a format change.
 
 **A report carries message text, and carries it escaped.** `Report.text` is
 the placeholder that reported or the message that held it, never a payload
