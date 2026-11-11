@@ -130,6 +130,19 @@
   fails nothing and reports nothing: the code that made the read carries on
   with the empty string, and what a modifier then answers is its placeholder's
   result like any other answer. No type, report code or report field is added.
+* **A refused read reports once for each input a placeholder reads.** Props
+  are one input, however many layers and properties make them up, so props
+  whose properties refuse to be read report `unserializable-value` once for
+  the placeholder: `{{n:number}}` with three refusing `number` properties
+  reported three times, and reports once. A payload entry that refuses to name
+  its keys is absent, as one that refuses to be read already was, and is not
+  converted after the refusal: it reported twice, once when asked whether it
+  configures a value and once when described, and reports once. **This changes
+  what such an entry resolves to where a conversion never asks for its keys**:
+  one whose `toJSON` answers resolved to that answer, and now takes the
+  fallback chain, as one without did already. Props that refuse still name
+  nothing. The answer a modifier gives and each link of the chain still report
+  on their own account (section 14.3 of the specification).
 
 ## 3.1.2
 

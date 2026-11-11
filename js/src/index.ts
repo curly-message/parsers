@@ -139,7 +139,9 @@ const WRAPPED = ['value', 'default', 'props'];
 // does and costs what the entry holds, so the verdict is recorded for the
 // resolution the way a conversion is, the answer that the entry refused the
 // question included. The report is not: each placeholder that reads a refusing
-// entry is a defect of its own.
+// entry is a defect of its own. An entry that refused is neither a wrapper nor
+// a value, so the answer is `undefined` and the caller reads it as absent
+// rather than converting it, which would ask it the same question again.
 const isWrapped = (value: any, wrappers: Wrappers, onRaise?: () => void) => {
   if (!isPlainObject(value)) return false;
 
@@ -154,7 +156,7 @@ const isWrapped = (value: any, wrappers: Wrappers, onRaise?: () => void) => {
 
   if (wrapped === undefined) onRaise?.();
 
-  return !!wrapped;
+  return wrapped;
 };
 
 // A configuration layer is anything carrying entries to read. `isPlainObject`
@@ -378,8 +380,9 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
     // The payload's root `default` is the fallback itself, never configuration.
     // A caller that turned recognition off passes entries it did not write, so
     // an entry shaped like a wrapper is a value here and converts as one.
-    const wrapper = recognizeWrappers && key !== 'default' && isWrapped(entry, wrappers, raised) ? entry : undefined;
-    const value = wrapper ? ownValue(wrapper, 'value', raised) : entry;
+    const wrapped = recognizeWrappers && key !== 'default' ? isWrapped(entry, wrappers, raised) : false;
+    const wrapper = wrapped ? entry : undefined;
+    const value = wrapper ? ownValue(wrapper, 'value', raised) : wrapped === undefined ? undefined : entry;
 
     // Value text is what a placeholder takes from the payload, and every
     // character of it is spent whether or not any of it reaches the output: a
@@ -538,13 +541,21 @@ const interpolate: Interpolation = ({ value: { source, root }, props, payload, p
       // slice its own name holds rather than the table those layers are: what
       // one modifier is configured with is not what the next reads, and a
       // modifier nobody configured reads an object all the same.
-      const layers = [modifierDefaults, props, ownValue(wrapper, 'props', raised)];
-      const ownProps = ownSlice(layers, modifierName, raised);
+      // Props are one input of the placeholder, however many layers and
+      // properties make them up, so what refuses among them reports once.
+      let propsRefused = false;
+      const propsRaised = () => {
+        if (propsRefused) return;
+        propsRefused = true;
+        raised();
+      };
+      const layers = [modifierDefaults, props, ownValue(wrapper, 'props', propsRaised)];
+      const ownProps = ownSlice(layers, modifierName, propsRaised);
       // The format's own `plural` takes its category from the number `number`
       // shows, so it is handed the digit properties composed under `number`
       // beneath its own. One a host registered reads its own name alone, like
       // any modifier a host registered.
-      const modifierProps = modifier === defaultModifiers.plural ? mergeLayer(shownDigitsOf(layers, raised), ownProps, raised) : ownProps;
+      const modifierProps = modifier === defaultModifiers.plural ? mergeLayer(shownDigitsOf(layers, propsRaised), ownProps, propsRaised) : ownProps;
 
       // A modifier answers with a host value like any other, so it becomes text
       // by the conversion a payload entry does: an object it built stays

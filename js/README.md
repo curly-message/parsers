@@ -281,8 +281,8 @@ a payload getter, or by a custom modifier — is a new value every time and is
 converted every time. Whether an entry is a wrapper is asked the same way:
 recognizing one enumerates the entry's own names, work that grows with the
 entry, so a resolution asks one entry once however many placeholders name it,
-and an entry that refuses the question is not asked again — though it reports
-at every placeholder that reads it.
+and an entry that refuses the question is absent and is not asked again, nor
+converted — though it reports at every placeholder that reads it.
 
 The same limit bounds the text one serialization writes, since a handful of
 nodes can hold strings of any length: at most **536870888 UTF-16 code units**,
@@ -478,7 +478,8 @@ else wrote to supplies nothing at any of those reads either.
 
 A read that raises is an absence and a report wherever it sits, not only at a
 value. A `props` entry that refuses to be read leaves the layer beneath it
-standing and reports `unserializable-value` at the placeholder that needed it;
+standing and reports `unserializable-value` at the placeholder that needed it,
+once however many of that placeholder's props refuse;
 `customModifiers`, `modifierDefaults` and the context's own entries are read
 once for the call, so a report about one names the text that went looking
 rather than a placeholder, and an `id` that is itself the entry that raised
