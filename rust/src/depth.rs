@@ -7,13 +7,18 @@ use crate::MAX_REENTRY;
 
 // Stack exhaustion is no panic: it aborts the process. So the resolutions in
 // progress on a thread are counted, across every parser running on it, and
-// one asked for past the bound is refused (section 13). One resolution's own
-// walk is no part of the count: it reaches the thread's stack only through
-// the options and defaults its modifiers read, and the nesting limit bounds
-// those.
+// one asked for past the bound is refused (section 13). So are the reads of
+// an option's value or a default that are not the walk's, while each produces
+// its text. The walk's own reads, the fallback chain and what the current
+// modifier reads of its own placeholder, are no part of the count: the
+// nesting limit bounds those.
 thread_local! {
     static IN_PROGRESS: Cell<usize> = const { Cell::new(0) };
     static REFUSED_UNWINDING: Cell<bool> = const { Cell::new(false) };
+    // The placeholder whose modifier is current: the innermost modifier call
+    // on this thread that has not returned, through whatever host code runs
+    // beneath it, named by the placeholder's address; 0 where none is.
+    static CURRENT: Cell<usize> = const { Cell::new(0) };
 }
 
 /// What [`Parser::resolve`](crate::Parser::resolve) unwinds with where it
@@ -148,6 +153,91 @@ fn discard<T>(value: T) {
 /// No borrow of a walker's state is held across it.
 pub(crate) fn host_call<T>(call: impl FnOnce() -> T) -> Option<T> {
     contained(call)
+}
+
+/// Calls a modifier as [`host_call`] calls any host code, the modifier of the
+/// placeholder at `placeholder` being the current one until it comes back.
+pub(crate) fn modifier_call<T>(placeholder: usize, call: impl FnOnce() -> T) -> Option<T> {
+    let _current = Current::enter(placeholder);
+
+    host_call(call)
+}
+
+struct Current {
+    around: Option<usize>,
+}
+
+impl Current {
+    fn enter(placeholder: usize) -> Self {
+        Self {
+            around: CURRENT
+                .try_with(|current| current.replace(placeholder))
+                .ok(),
+        }
+    }
+}
+
+impl Drop for Current {
+    fn drop(&mut self) {
+        if let Some(around) = self.around {
+            let _ = CURRENT.try_with(|current| current.set(around));
+        }
+    }
+}
+
+/// An option's value or a default being produced (section 13): marked as in
+/// progress, and where the read is not the walk's, counted as a resolution in
+/// progress, while this lives.
+pub(crate) struct Producing<'s> {
+    slot: &'s Cell<bool>,
+    placeholder: &'s Cell<usize>,
+    _counted: Option<InProgress>,
+}
+
+impl<'s> Producing<'s> {
+    /// Begins producing the text `slot` marks, of a placeholder `placeholder`
+    /// counts the slots of that are being produced, or refuses to, answering
+    /// nothing. A slot already being produced is refused whoever reads: the
+    /// read was made inside its own production. A read the current modifier
+    /// makes of its own placeholder (`at` its address), while nothing of that
+    /// placeholder is being produced, is the walk's and holds no place; any
+    /// other holds one of [`MAX_REENTRY`], and is refused where none is left.
+    pub(crate) fn begin(
+        slot: &'s Cell<bool>,
+        placeholder: &'s Cell<usize>,
+        at: usize,
+    ) -> Option<Self> {
+        if slot.get() {
+            return None;
+        }
+
+        let own = placeholder.get() == 0
+            && CURRENT
+                .try_with(Cell::get)
+                .is_ok_and(|current| current == at);
+        let counted = if own {
+            None
+        } else {
+            Some(InProgress::enter()?)
+        };
+
+        slot.set(true);
+        placeholder.set(placeholder.get().saturating_add(1));
+
+        Some(Self {
+            slot,
+            placeholder,
+            _counted: counted,
+        })
+    }
+}
+
+impl Drop for Producing<'_> {
+    fn drop(&mut self) {
+        self.slot.set(false);
+        self.placeholder
+            .set(self.placeholder.get().saturating_sub(1));
+    }
 }
 
 #[cfg(test)]

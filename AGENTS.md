@@ -226,7 +226,7 @@ Map of `rust/`:
 | `src/lib.rs` | the public surface and the limits |
 | `src/parser.rs` | `Parser`, its builder, `Context` and `Message`; the backstop of `resolve` |
 | `src/walk.rs` | one resolution: the walk on an explicit stack, the fallback chain, the modifier call |
-| `src/depth.rs` | containment of host code and the per-thread count of resolutions in progress |
+| `src/depth.rs` | containment of host code, the per-thread count of resolutions in progress and the current modifier |
 | `src/scan.rs`, `src/syntax.rs` | the placeholder scanner, `LINE_TERM` among its classes, which the walk and the tree both read; what a placeholder declares, and unescaping |
 | `src/cst.rs` | `cst`: the tree, an arena with byte spans |
 | `src/value.rs`, `src/convert.rs`, `src/number.rs` | the value model of section 4, its conversion to text, and ECMAScript's numbers and dates |
@@ -265,11 +265,20 @@ The rules of `js/` above hold here, in their Rust form:
   facility, a `Display`, a report handler), every call of which goes through
   `depth::host_call`, contained, with no borrow of the walker's state held
   across it.
-- **`MAX_REENTRY` counts resolutions, and its cost is measured.** It
-  bounds the resolutions in progress on one thread, across parsers, and
-  nothing of one resolution's walk: the nesting limit bounds what a walk
-  puts on the thread's stack, the options and defaults its modifiers read,
-  so no resolution is cut short by the ones around it. A refusal unwinds
+- **`MAX_REENTRY` counts resolutions and the reads that are not the walk's,
+  and its cost is measured.** It bounds the resolutions in progress on one
+  thread, across parsers, and with them every read of an option's value or a
+  default, through a `ModifierInput` a modifier lent, that is not the walk's
+  (one made while that placeholder's modifier is not the current one, the
+  innermost modifier call on the thread that has not returned, or while one
+  of that placeholder's options or its default is being rendered), each while
+  it renders its text; and nothing of one resolution's walk: the nesting
+  limit bounds what a walk puts on the thread's stack, the fallback chain and
+  the reads the current modifier makes of its own placeholder, so no
+  resolution is cut short by the ones around it. A counted read past the
+  bound, and a read of an option or a default from inside its own rendering
+  whoever makes it, answers the empty string, records nothing, unwinds
+  nothing and fails nothing. The refusal of a resolution unwinds
   with `ReentryLimit` from `Parser::resolve`, outside its backstop, so it
   reaches the host code that asked, and `std::panic::resume_unwind` keeps
   the panic hook out of it; one refused while the thread already unwinds
@@ -277,7 +286,9 @@ The rules of `js/` above hold here, in their Rust form:
   abort the process, and `depth::contained` fails the host call that asked
   for it all the same. Its worst cases, `MAX_REENTRY` resolutions each as
   deep into its options as a placeholder resolves, one of them for each
-  request of the Intl facility, run on a 512 KiB thread in a debug build on
+  request of the Intl facility, and as many counted reads of a lent input,
+  the innermost reading its own options as deep as a placeholder resolves,
+  run on a 512 KiB thread in a debug build on
   every OS leg; the one whose innermost formats a date in a zone name the
   process has not used yet runs on a 1 MiB thread, in a binary of its own,
   since jiff reads a zone's rules the first time the process formats in each
@@ -285,9 +296,9 @@ The rules of `js/` above hold here, in their Rust form:
   debug build about 230 KiB. A change that grows what
   a resolution costs the stack, or raises the bound, is checked there.
   Stack exhaustion aborts the process rather than panicking, so this bound
-  is the only containment there is. The count, and the flag
-  `depth::contained` reads for a refusal made while the thread unwinds, are
-  `thread_local!`s, and whether the thread unwinds is
+  is the only containment there is. The count, the current modifier, and
+  the flag `depth::contained` reads for a refusal made while the thread
+  unwinds, are `thread_local!`s, and whether the thread unwinds is
   `std::thread::panicking`'s, all the OS thread's: stackful fibers that share
   an OS thread share them, so while one is suspended in a `Drop` mid-unwind a
   refusal on any of them answers the empty string and can fail another
@@ -329,7 +340,9 @@ The rules of `js/` above hold here, in their Rust form:
 - `rust/tests/`: `resolve.rs` for resolution, `modifiers.rs` for the
   Extensions level, `limits.rs` for the limits and the stack-independence
   tests, `panics.rs` (its own binary, with a silent panic hook) for
-  containment, the refusal past `MAX_REENTRY` and its worst case, `cost.rs`
+  containment, the refusal past `MAX_REENTRY` and its worst case, `lent.rs`
+  for the reads of an input a modifier lends, through a scoped thread-local,
+  counted and refused, `cost.rs`
   and `allocations.rs` for cost by count, `cst.rs` for the tree, `value.rs`
   for the value model, `fuzz.rs` for messages written at random, `intl.rs`
   (with the facility's worst cases of `MAX_REENTRY`), `intl_supplier.rs`

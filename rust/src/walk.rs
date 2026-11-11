@@ -3,7 +3,7 @@ use std::cell::{Cell, OnceCell};
 
 use crate::builtins::{Builtin, Selected};
 use crate::convert::{Converted, Record, Txt};
-use crate::depth::host_call;
+use crate::depth::{Producing, host_call, modifier_call};
 use crate::formatting::{Asked, Formatting};
 use crate::modifier::{Modifier, ModifierInput};
 use crate::parser::{Config, Context};
@@ -75,7 +75,9 @@ pub(crate) struct Ph<'a> {
     // none: the name its props are composed under.
     name: Cow<'a, str>,
     options: Vec<Segment<'a>>,
-    rendered: Vec<OnceCell<Box<str>>>,
+    // What a modifier's input has rendered of the options, and which of them
+    // it is rendering.
+    rendered: Vec<Rendered>,
     inline_default: Option<(usize, usize)>,
     wrapper: Option<&'a Object>,
     value_text: Option<Txt<'a>>,
@@ -84,6 +86,21 @@ pub(crate) struct Ph<'a> {
     links: OnceCell<Option<Box<str>>>,
     // The inline default, rendered for a modifier that asked for it.
     default: OnceCell<Box<str>>,
+    default_in_progress: Cell<bool>,
+    // How many of its option values and its default are being produced.
+    producing: Cell<usize>,
+}
+
+#[derive(Default)]
+struct Rendered {
+    text: OnceCell<Box<str>>,
+    in_progress: Cell<bool>,
+}
+
+// What names a placeholder while its modifier is current: its address, which
+// no other placeholder alive at the same time shares.
+fn address(ph: &Ph<'_>) -> usize {
+    std::ptr::from_ref(ph).addr()
 }
 
 impl<'a> Ph<'a> {
@@ -287,6 +304,8 @@ impl<'a> Walker<'a> {
             value_text,
             links: OnceCell::new(),
             default: OnceCell::new(),
+            default_in_progress: Cell::new(false),
+            producing: Cell::new(0),
         };
 
         // The nesting limit bounds resolution and not derivation: what it
@@ -401,14 +420,15 @@ impl<'a> Walker<'a> {
             Err(_) => return self.failed(ph),
         };
         let mut configured = formatting.configure(&self.layers(&ph));
+        let at = address(&ph);
         let answer = match formatting.ask(input, &mut configured) {
             Asked::Format => Some(
-                host_call(|| facility.format(locale, &configured.request))
+                modifier_call(at, || facility.format(locale, &configured.request))
                     .and_then(Result::ok)
                     .map(Ok),
             ),
             Asked::Select => Some(
-                host_call(|| facility.select(locale, &configured.request))
+                modifier_call(at, || facility.select(locale, &configured.request))
                     .and_then(Result::ok)
                     .map(Err),
             ),
@@ -446,9 +466,11 @@ impl<'a> Walker<'a> {
     // came back at all are each the placeholder's to settle, and none of them
     // leaves the resolution.
     fn call(&self, modifier: &dyn Modifier, mut ph: Box<Ph<'a>>) -> Outcome<'a> {
-        ph.rendered = ph.options.iter().map(|_| OnceCell::new()).collect();
+        ph.rendered = ph.options.iter().map(|_| Rendered::default()).collect();
 
-        let answer = host_call(|| modifier.call(&ModifierInput::new(self, &ph)));
+        let answer = modifier_call(address(&ph), || {
+            modifier.call(&ModifierInput::new(self, &ph))
+        });
 
         match answer {
             Some(Ok(Some(value))) => self.answer(value, *ph),
@@ -531,25 +553,44 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// An option's value for a modifier, rendered on the first ask.
+    /// An option's value for a modifier's input, rendered on the first ask.
+    /// A read refused (section 13) answers the empty string and records
+    /// nothing.
     pub(crate) fn option_value<'p>(&self, ph: &'p Ph<'_>, at: usize) -> Option<&'p str> {
         let option = ph.options.get(at)?;
-        let cell = ph.rendered.get(at)?;
+        let rendered = ph.rendered.get(at)?;
 
-        if let Some(text) = cell.get() {
+        if let Some(text) = rendered.text.get() {
             return Some(text);
         }
 
+        let Some(producing) = Producing::begin(&rendered.in_progress, &ph.producing, address(ph))
+        else {
+            return Some("");
+        };
         let text = self.render(option.value.0, option.value.1, ph.depth.saturating_add(1));
-        let _ = cell.set(text.into_boxed_str());
 
-        Some(cell.get().map_or("", |text| text))
+        drop(producing);
+
+        let _ = rendered.text.set(text.into_boxed_str());
+
+        Some(rendered.text.get().map_or("", |text| text))
     }
 
-    /// The chain for a modifier, walked on the first ask.
+    /// The chain for a modifier's input, walked on the first ask. A read
+    /// refused (section 13) answers the empty string and records nothing.
     pub(crate) fn default_text<'p>(&self, ph: &'p Ph<'a>) -> &'p str {
         const NOTHING: &Option<Box<str>> = &None;
 
+        match (ph.links.get(), ph.default.get()) {
+            (Some(Some(text)), _) | (Some(None), Some(text)) => return text,
+            _ => {}
+        }
+
+        let Some(producing) = Producing::begin(&ph.default_in_progress, &ph.producing, address(ph))
+        else {
+            return "";
+        };
         let links = match ph.links.get() {
             Some(links) => links,
             None => {
@@ -569,16 +610,15 @@ impl<'a> Walker<'a> {
             return text;
         }
 
-        if let Some(text) = ph.default.get() {
-            return text;
-        }
-
         let text = match ph.inline_default {
             Some((from, to)) => self
                 .render(from, to, ph.depth.saturating_add(1))
                 .into_boxed_str(),
             None => Box::from(""),
         };
+
+        drop(producing);
+
         let _ = ph.default.set(text);
 
         ph.default.get().map_or("", |text| text)

@@ -423,6 +423,25 @@ const ROWS: &[Row] = &[
         },
     },
     Row {
+        name: "resolve: 250 placeholders, a custom modifier reading its own option two levels deep",
+        measure: Measure::Time {
+            batch: 100,
+            setup: || {
+                let parser = Parser::builder()
+                    .modifier("own", |input: &curly_message_parser::ModifierInput<'_>| {
+                        Ok(input.option_value(0).map(Value::from))
+                    })
+                    .build();
+
+                resolving(
+                    parser,
+                    "{{v:own; o:{{v:own; o:{{v}}}}}}".repeat(250),
+                    Object::new().with("v", "a"),
+                )
+            },
+        },
+    },
+    Row {
         name: "cst: five catalogue messages",
         measure: Measure::Time {
             batch: 1_000,

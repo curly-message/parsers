@@ -105,6 +105,34 @@ text, with:
 Every accessor borrows the input alone, so a modifier may hold any number of
 their answers at once.
 
+The input lives no longer than the call, but a modifier may lend it for the
+length of the call, through a scoped thread-local say, to host code the
+parser calls meanwhile: another modifier, a value's `Display`, a report
+handler. The parser tells the reads made through it apart by the **current
+modifier**: the one whose call is the innermost call of a modifier on the
+thread that has not returned, one of the format's own or a host's alike. A
+modifier stays current through whatever host code runs beneath its call, a
+value's `Display`, a report handler, a resolution it starts, until that code
+calls another modifier, and is current again once that one returns.
+
+While a modifier is current, its reads of its own options and default are the
+walk's, whatever code beneath the call makes them, as long as none of that
+placeholder's options or default is being rendered when it is made: the
+nesting limit alone bounds them. Any other read that renders an option or
+walks a default counts as one more resolution in progress on the thread while
+it does, toward `MAX_REENTRY` (see [Limits](#limits)), and gives its place
+back when it returns. An option's value and a default are produced at most
+once per resolution, so a read of text already produced holds no place and
+answers that text.
+
+A counted read made with `MAX_REENTRY` in progress is refused, and so,
+whatever the count and whoever reads, the current modifier reading its own
+placeholder included, is a read of an option or a default made from inside
+its own rendering. A refused read answers the empty string, records nothing,
+so a later read that is not refused renders the text, and fails nothing and
+reports nothing: the code that made it carries on with the empty string, and
+what a modifier then answers is taken as any answer is.
+
 `Ok(Some(value))` is the answer, and converts to text as a payload value
 does, a structure included. `Ok(None)`, or `Undefined`, is no answer: the
 placeholder takes its fallback chain and nothing is reported. `Err(_)` and a
@@ -279,7 +307,7 @@ prints what it prints for any other; that refusal runs none.
 | `MAX_CONVERSION_NODES` | 100 000 | nodes one conversion of a value visits |
 | `MAX_SERIALIZED_LENGTH` | 536 870 888 | code units of UTF-16 one serialization of a value writes |
 | `MAX_NESTING` | 8 | levels a placeholder may nest and still resolve |
-| `MAX_REENTRY` | 8 | resolutions in progress at once on one thread |
+| `MAX_REENTRY` | 8 | resolutions in progress at once on one thread, and the reads of a lent input's options and default that are not the walk's |
 
 A placeholder nested past `MAX_NESTING` takes its fallback chain and reports
 `nesting-limit`. The walk keeps what it nests on a stack of its own, so a
@@ -287,15 +315,20 @@ message nested any depth resolves without a call per level, and so does a
 value nested any depth convert. What does reach the thread's stack is host
 code the parser calls: a modifier, and the option or default it asks for,
 each rendered by a call of its own and so at most `MAX_NESTING` deep; the
-[`Intl`] facility a parser formats with; and a resolution a modifier, the
-facility, a report handler or a value's `Display` starts from inside another.
+[`Intl`] facility a parser formats with; a resolution a modifier, the
+facility, a report handler or a value's `Display` starts from inside another;
+and an option or default that host code reads through an input a modifier
+lent it, where the read is not the walk's (see [Modifiers](#modifiers)).
 
 A thread that runs out of stack aborts the process, which nothing can
 contain, so `MAX_REENTRY` is the bound that stands in for the host's own
 limit on a resolution reaching itself (section 13). It counts the
-resolutions in progress on one thread, across every parser, and nothing of
-the walk of one, so a resolution is never cut short within its nesting by
-the ones around it. A resolution asked for while `MAX_REENTRY` are in
+resolutions in progress on one thread, across every parser, and the reads of
+a lent input's options and default that are not the walk's while each renders
+its text, and nothing of the walk of one, so a resolution is never cut short
+within its nesting by the ones around it. A counted read past the bound is
+refused differently from a resolution: it answers the empty string, unwinds
+nothing and fails nothing (see [Modifiers](#modifiers)). A resolution asked for while `MAX_REENTRY` are in
 progress on its thread is refused before anything is read: `resolve` unwinds
 with [`ReentryLimit`] into the host code that asked, without running the
 panic hook. That code may catch it, as it may any panic. One it lets pass is
@@ -319,7 +352,10 @@ share an OS thread share its count, the crate's mark of a refusal made
 while the thread unwinds, and whether the thread unwinds at all, which
 `std::thread::panicking` answers for the OS thread. A resolution asked for
 on a fiber where none is in progress is refused there while `MAX_REENTRY`
-are in progress on the other fibers of its OS thread, suspended part way.
+are in progress on the other fibers of its OS thread, suspended part way,
+and so is a counted read. They share which modifier is current too, so where
+their modifier calls interleave, a modifier's read of its own placeholder can
+be counted, and another read can be taken for the walk's.
 While a fiber is suspended in a `Drop` that runs as it unwinds, a refusal
 on any fiber of its OS thread answers the empty string rather than
 unwinding, and a refusal made there can fail a host call in progress on
