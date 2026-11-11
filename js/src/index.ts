@@ -740,8 +740,15 @@ const resolveCall = <Source>(parserOptions: Parser.Options<Modifier.Key, any> | 
   // not one that shadows the name it would replace. Filtered after the
   // lookup instead, a host's bad entry would take the built-in down with it.
   // A name is looked up in the host's table and then in the built-in
-  // registry, which nothing writes to, rather than the two merged anew.
-  const registered = customModifiers === undefined ? undefined : ownModifiers(customModifiers, callRaised);
+  // registry, which nothing writes to, rather than the two merged anew. The
+  // registry is one input of the call however many of its entries refuse,
+  // so it reports once.
+  let registryRefused = false;
+  const registered = customModifiers === undefined ? undefined : ownModifiers(customModifiers, () => {
+    if (registryRefused) return;
+    registryRefused = true;
+    callRaised();
+  });
   const modifierFor = (name: string): Modifier.T<any, any> | undefined => registered?.[name] ?? builtInModifiers[name];
   // One value converts once, however many placeholders read it: the walk is
   // the costly step. So is one entry asked once whether it configures its

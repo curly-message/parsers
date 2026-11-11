@@ -143,6 +143,12 @@
   fallback chain, as one without did already. Props that refuse still name
   nothing. The answer a modifier gives and each link of the chain still report
   on their own account (section 14.3 of the specification).
+* **A modifier registry whose entries refuse to be read reports once for the
+  call.** Each refusing entry of `customModifiers` reported
+  `unserializable-value` on its own, even for a message with no placeholder:
+  three refusing entries reported three times on every call. The registry is
+  one input of the call, so it reports once, naming the message. The entries
+  that refuse are still not registered, and the ones that answer still are.
 
 ## 3.1.2
 
