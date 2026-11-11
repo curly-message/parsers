@@ -3036,6 +3036,66 @@ describe('parser', () => {
     // it is missing because it refused to be read is what the report says.
     expect(reports.map(({ code, origin, text }) => `${code}/${origin}/${text}`)).toEqual(['unserializable-value/payload/{{v:number}}']);
   });
+  it('props that refuse to be read report once for the placeholder, however many refuse', () => {
+    const reports: Report[] = [];
+    const { resolve } = createParser<any, { echo?: object }>({ customModifiers: { echo: ({ value }) => value }, onReport: (entry) => reports.push(entry) });
+    const refusing = (...names: string[]) => Object.defineProperties({}, Object.fromEntries(names.map((name) => [name, { enumerable: true, get(): never { throw new Error(`${name} FAILURE`); } }])));
+    const codes = () => reports.splice(0).map(({ code, text }) => `${code}/${text}`);
+
+    expect(resolve('{{v:echo}}', { payload: { v: 'x' }, props: { echo: refusing('a', 'b', 'c') } })).toBe('x');
+    expect(codes()).toEqual(['unserializable-value/{{v:echo}}']);
+
+    expect(resolve('{{v:echo}}', { payload: { v: { value: 'x', props: { echo: refusing('d') } } }, props: { echo: refusing('e') } })).toBe('x');
+    expect(codes()).toEqual(['unserializable-value/{{v:echo}}']);
+
+    expect(resolve('{{v:echo}}', { payload: { v: 'x' }, props: refusing('echo') })).toBe('x');
+    expect(codes()).toEqual(['unserializable-value/{{v:echo}}']);
+
+    // `plural` reads its own layers and the digits under `number`, all of them
+    // the props of the one placeholder.
+    expect(resolve('{{n:plural; one:A; other:B}}', { payload: { n: 1 }, props: { number: refusing('maximumFractionDigits'), plural: refusing('type') }, locale: defaultLocale })).toBe('A');
+    expect(codes()).toEqual(['unserializable-value/{{n:plural; one:A; other:B}}']);
+
+    // Each placeholder reads its props on its own account.
+    expect(resolve('{{v:echo}}{{w:echo}}', { payload: { v: 'x', w: 'y' }, props: { echo: refusing('a', 'b') } })).toBe('xy');
+    expect(codes()).toEqual(['unserializable-value/{{v:echo}}', 'unserializable-value/{{w:echo}}']);
+  });
+  it('modifier defaults that refuse to be read report once for the placeholder', () => {
+    const reports: Report[] = [];
+    const refusing = Object.defineProperties({}, { a: { enumerable: true, get(): never { throw new Error('A FAILURE'); } }, b: { enumerable: true, get(): never { throw new Error('B FAILURE'); } } });
+    const { resolve } = createParser<any, { echo?: object }>({ customModifiers: { echo: ({ value }) => value }, modifierDefaults: { echo: refusing }, onReport: (entry) => reports.push(entry) });
+
+    expect(resolve('{{v:echo}}', { payload: { v: 'x' } })).toBe('x');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
+  it('an entry that refuses to name its keys is absent, and reported once', () => {
+    const reports: Report[] = [];
+    let conversions = 0;
+    const entry = new Proxy({}, { ownKeys: () => { throw new Error('OWN KEYS FAILURE'); }, get: (target, name) => { conversions += 1; return Reflect.get(target, name); } });
+    const { resolve } = createParser({ onReport: (report) => reports.push(report) });
+
+    expect(resolve('{{v; default:D}}', { payload: { v: entry } })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+    expect(conversions).toBe(0);
+
+    // Even where a conversion would never ask for the keys it refused.
+    reports.length = 0;
+
+    expect(resolve('{{v; default:D}}', { payload: { v: new Proxy({ toJSON: () => 'converted' }, { ownKeys: () => { throw new Error('OWN KEYS FAILURE'); } }) } })).toBe('D');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value']);
+  });
+  it('a refused input and the link the chain reaches next each report', () => {
+    const reports: Report[] = [];
+    const refusingKeys = new Proxy({}, { ownKeys: () => { throw new Error('OWN KEYS FAILURE'); } });
+    const { resolve } = createParser({ customModifiers: { opaque: () => circular }, onReport: (report) => reports.push(report) });
+
+    expect(resolve('{{v}}', { payload: { v: refusingKeys, default: circular } })).toBe('');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value', 'unserializable-value']);
+    reports.length = 0;
+
+    expect(resolve('{{v:opaque}}', { payload: { v: 'x', default: circular } })).toBe('');
+    expect(reports.map(({ code }) => code)).toEqual(['unserializable-value', 'unserializable-value']);
+  });
   it('the option bag is read once for the call, not once for each placeholder', () => {
     const reports: Report[] = [];
     const reads = { onReport: 0, customModifiers: 0, modifierDefaults: 0 };
@@ -3174,11 +3234,11 @@ describe('parser', () => {
     expect(answer('A {{v:number}} B', { payload, locale: defaultLocale }, { customModifiers: keysRaise('REGISTRY') }))
       .toEqual({ text: `A ${formatted} B`, reported: ['unserializable-value/payload/A {{v:number}} B'] });
 
-    // Enumerating a target reads it as surely as reading one entry does. This
-    // entry is enumerated twice — once to ask whether it configures a value,
-    // once to describe it — and each read that raised is a report of its own.
+    // Enumerating a target reads it as surely as reading one entry does. An
+    // entry that refuses to say whether it configures a value is absent, and
+    // is not asked again to be described, so the one read reports once.
     expect(answer('{{v; default:FALLBACK}}', { payload: { v: new Proxy({}, { ownKeys: () => { throw new Error('OWN KEYS FAILURE'); } }) } }))
-      .toEqual({ text: 'FALLBACK', reported: ['unserializable-value/payload/{{v; default:FALLBACK}}', 'unserializable-value/payload/{{v; default:FALLBACK}}'] });
+      .toEqual({ text: 'FALLBACK', reported: ['unserializable-value/payload/{{v; default:FALLBACK}}'] });
 
     // Nothing raised, so nothing is reported: the layers a caller passes are
     // read the same way whether they answer or not.
@@ -4088,16 +4148,17 @@ describe('parser', () => {
     expect(enumerations).toBe(1);
 
     // The answer that the entry refused the question is recorded like the
-    // answer that no conversion describes it; the report is not, because each
-    // placeholder that reads a refusing entry is a defect of its own.
+    // answer that no conversion describes it, and the entry is not asked again
+    // to be described; the report is not recorded, because each placeholder
+    // that reads a refusing entry is a defect of its own.
     const reports: Report[] = [];
     const { resolve: reporting } = createParser({ onReport: (entry) => reports.push(entry) });
 
     enumerations = 0;
 
     expect(reporting('{{v; default:D}}|{{v; default:D}}', { payload: { v: counted({}, () => { throw new Error('OWN KEYS FAILURE'); }) } })).toBe('D|D');
-    expect(enumerations).toBe(2);
-    expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(Array(4).fill('unserializable-value/{{v; default:D}}'));
+    expect(enumerations).toBe(1);
+    expect(reports.map(({ code, text }) => `${code}/${text}`)).toEqual(Array(2).fill('unserializable-value/{{v; default:D}}'));
   });
   it('a bigint converts once for the resolution, like every value carrying host code', () => {
     const { resolve } = defaultParser;
