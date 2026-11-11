@@ -481,9 +481,10 @@ value. A `props` entry that refuses to be read leaves the layer beneath it
 standing and reports `unserializable-value` at the placeholder that needed it,
 once however many of that placeholder's props refuse;
 `customModifiers`, `modifierDefaults` and the context's own entries are read
-once for the call, so a report about one names the text that went looking
-rather than a placeholder, and an `id` that is itself the entry that raised
-leaves the report naming no id.
+once for the call and report once each, however many of the registry's
+entries refuse. A report about one names the text that went looking rather than
+a placeholder, and an `id` that is itself the entry that raised leaves the
+report naming no id.
 
 A modifier's answer becomes text by that same conversion, so an answer no
 conversion describes is read as missing and reported the same way, and the

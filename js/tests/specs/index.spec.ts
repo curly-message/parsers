@@ -3096,6 +3096,19 @@ describe('parser', () => {
     expect(resolve('{{v:opaque}}', { payload: { v: 'x', default: circular } })).toBe('');
     expect(reports.map(({ code }) => code)).toEqual(['unserializable-value', 'unserializable-value']);
   });
+  it('a registry whose entries refuse to be read reports once for the call, however many refuse', () => {
+    const reports: Report[] = [];
+    const registry = Object.defineProperties({ echo: ({ value }: { value: string }) => value }, Object.fromEntries(['a', 'b', 'c'].map((name) => [name, { enumerable: true, get(): never { throw new Error(`${name} FAILURE`); } }])));
+    const { resolve } = createParser({ customModifiers: registry, onReport: (entry) => reports.push(entry) });
+
+    // The registry is one input of the call, so a message with no placeholder
+    // reports it once, and the modifiers it holds that can be read still answer.
+    expect(resolve('plain')).toBe('plain');
+    expect(reports.splice(0).map(({ code, text }) => `${code}/${text}`)).toEqual(['unserializable-value/plain']);
+
+    expect(resolve('{{v:echo}}{{w:a; default:D}}', { payload: { v: 'x', w: 'y' } })).toBe('xD');
+    expect(reports.splice(0).map(({ code, text }) => `${code}/${text}`)).toEqual(['unserializable-value/{{v:echo}}{{w:a; default:D}}', 'unknown-modifier/{{w:a; default:D}}']);
+  });
   it('the option bag is read once for the call, not once for each placeholder', () => {
     const reports: Report[] = [];
     const reads = { onReport: 0, customModifiers: 0, modifierDefaults: 0 };
