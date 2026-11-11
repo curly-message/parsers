@@ -68,6 +68,31 @@ const reads = () => {
   return count;
 };
 
+// A props slice of 1 000 entries, as wide as a host cares to make one.
+const WIDE = Object.fromEntries(Array.from({ length: 1000 }, (_, index) => [`k${index}`, index]));
+
+const over = (placeholder, count) => Array.from({ length: count }, () => placeholder).join(' ');
+
+// What 100 placeholders naming one modifier read of the slice it is
+// configured with, for a selection, a plural selection and a modifier a host
+// registered: every trap, counted.
+const sliceReads = () => {
+  let count = 0;
+  const handler = Object.fromEntries(['get', 'has', 'getOwnPropertyDescriptor', 'ownKeys', 'getPrototypeOf'].map((trap) => [trap, (...args) => {
+    count += 1;
+
+    return Reflect[trap](...args);
+  }]));
+
+  const slice = new Proxy(WIDE, handler);
+
+  resolve(over('{{v:eq; 1:a}}', 100), { payload: { v: 1 }, props: { eq: slice } });
+  resolve(over('{{v:plural; one:a; other:b}}', 100), { payload: { v: 1 }, props: { plural: slice }, locale: 'en' });
+  resolveWrapped(over('{{v:test}}', 100), { payload: { v: 1 }, props: { test: slice } });
+
+  return count;
+};
+
 // What checking resolve calls against a payload type of 20 keys costs a
 // consumer's checker, against the declarations the build ships. The checker
 // carries what it works out for one call over to the next, so the count
@@ -111,6 +136,7 @@ export default [
   { name: 'dist/index.js', kind: 'size', run: () => bundle().length },
   { name: 'dist/index.js, gzipped', kind: 'size', run: () => gzipSync(bundle(), { level: 9 }).length },
   { name: 'payload reads: resolving five catalogue messages', kind: 'count', run: reads },
+  { name: 'props reads: 100 placeholders of each of three modifiers over one props slice of 1 000 entries', kind: 'count', run: sliceReads },
   { name: 'checker: instantiations of resolve calls against a payload type of 20 keys', kind: 'count', run: instantiations },
   { name: 'resolve: five catalogue messages', kind: 'time', run: () => () => {
     for (const message of MESSAGES) resolve(message, { payload: PAYLOAD, locale: 'en' });
@@ -183,6 +209,16 @@ export default [
     const payload = { v: Array.from({ length: 1000 }, (_, index) => ({ id: index, name: `item ${index}`, descriptionOfTheItem: 'x'.repeat(20) })) };
 
     return () => resolve('{{v}}', { payload, locale: 'en' });
+  } },
+  { name: 'resolve: one formatted number, no props', kind: 'time', run: () => {
+    let index = 0;
+
+    return () => resolve('You have {{n:number}} items', { payload: { n: index++ }, locale: 'en' });
+  } },
+  { name: 'resolve: a selection and a formatted number, props for the call', kind: 'time', run: () => {
+    let index = 0;
+
+    return () => resolve('{{n; 1:one; default:many}} and {{n:number}}', { payload: { n: index++ }, props: { number: { maximumFractionDigits: 1 } }, locale: 'en' });
   } },
   { name: 'cst: five catalogue messages', kind: 'time', run: () => () => {
     for (const message of MESSAGES) cst(message);
