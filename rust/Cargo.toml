@@ -47,6 +47,7 @@ writeable = { version = "0.6", optional = true }
 [dev-dependencies]
 curly-message-conformance = { path = "conformance" }
 libtest-mimic = "0.8.2"
+scoped-tls-hkt = "0.1.5"
 
 [[test]]
 name = "conformance"

@@ -51,6 +51,22 @@ where
 /// are first asked for and not again; an option nobody asks for is never
 /// rendered, however deeply it nests. Every accessor borrows the input alone,
 /// so a modifier may hold any number of their answers at once.
+///
+/// The input lives no longer than the call, but the modifier may lend it for
+/// the length of its call, through a scoped thread-local say, to host code
+/// the parser calls meanwhile: another modifier, a value's `Display`, a
+/// report handler. A modifier is *current* while its call is the innermost
+/// call of a modifier on the thread that has not returned, through whatever
+/// host code runs beneath it (section 13). While this input's modifier is
+/// current, a read of an option's value or of the default through it is the
+/// walk's, as long as none of them is being rendered: it holds no place.
+/// Any other read that renders its text holds one of
+/// [`MAX_REENTRY`](crate::MAX_REENTRY) places while it does, as a resolution
+/// in progress does, and where none is left it is refused. A read of an
+/// option or of the default made from inside its own rendering is refused
+/// at once, whoever makes it. A refused read answers the empty string,
+/// records nothing, so a later read renders the text, and fails and reports
+/// nothing.
 pub struct ModifierInput<'w> {
     walker: &'w Walker<'w>,
     placeholder: &'w Ph<'w>,
@@ -84,13 +100,15 @@ impl<'w> ModifierInput<'w> {
     }
 
     /// The value of the option at `at`, rendered on the first ask (section
-    /// 9.4). An option that writes no value stands for its key.
+    /// 9.4). An option that writes no value stands for its key. The empty
+    /// string where the read is refused, as the type's own page says.
     pub fn option_value(&self, at: usize) -> Option<&str> {
         self.walker.option_value(self.placeholder, at)
     }
 
     /// The placeholder's fallback chain (section 10), walked on the first
-    /// ask: a link nobody asks for is never read, and never reported.
+    /// ask: a link nobody asks for is never read, and never reported. The
+    /// empty string where the read is refused, as the type's own page says.
     pub fn default(&self) -> &str {
         self.walker.default_text(self.placeholder)
     }

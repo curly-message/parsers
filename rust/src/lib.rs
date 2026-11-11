@@ -69,6 +69,15 @@ pub const MAX_REPORTED_LENGTH: usize = 120;
 /// already unwinds, answers the empty string and fails the host code that
 /// asked all the same. One asked for where none is in progress never is.
 ///
+/// It counts too a read of an option's value or a default, through a
+/// [`ModifierInput`] a modifier lent, that is not the walk's: one made while
+/// the placeholder's modifier is not the current one, or while one of that
+/// placeholder's options or its default is being rendered. Such a read holds
+/// a place while it renders its text, and one made while this many are in
+/// progress is refused: it answers the empty string, records nothing, and
+/// fails and reports nothing. The current modifier's reads of its own
+/// placeholder hold none: [`MAX_NESTING`] bounds those.
+///
 /// What the crate keeps for this bound is the operating-system thread's,
 /// which falls short of section 13's count per thread of execution for a
 /// host that runs stackful fibers. Fibers that share an OS thread share its
@@ -77,7 +86,10 @@ pub const MAX_REPORTED_LENGTH: usize = 120;
 /// a refusal made while it does, so while one fiber is suspended in a `Drop`
 /// that runs as it unwinds, a refusal on any of them answers the empty
 /// string, and one made there can fail a host call on another fiber in
-/// place of the one that asked. A fiber suspended in the middle of a
+/// place of the one that asked. They share which modifier is current, so
+/// where their modifier calls interleave, a modifier's read of its own
+/// placeholder can be counted, and another read taken for the walk's. A
+/// fiber suspended in the middle of a
 /// resolution holds a value on its stack that is not `Send`, so whatever
 /// sends it to another OS thread, a host's `unsafe impl Send` or a coroutine
 /// library's own, claims a `Send` the stack does not have: the resolution

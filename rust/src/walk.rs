@@ -3,7 +3,7 @@ use std::cell::{Cell, OnceCell};
 
 use crate::builtins::{Builtin, Selected};
 use crate::convert::{Converted, Record, Txt};
-use crate::depth::host_call;
+use crate::depth::{Current, Producing, host_call, modifier_call};
 use crate::formatting::{Asked, Conversions, Formatting};
 use crate::modifier::{Modifier, ModifierInput};
 use crate::parser::{Config, Context};
@@ -51,19 +51,24 @@ enum Outcome<'a> {
 /// the host's code holds it.
 enum Step<'a> {
     Settled(Outcome<'a>),
+    // What one of the format's own modifiers selected, rendered while that
+    // modifier is current, as a host's call is (section 13).
+    Selected(Outcome<'a>, Current),
     Call(&'a dyn Modifier, Box<Ph<'a>>),
     Intl(Formatting, Box<Ph<'a>>),
 }
 
-// A span being rendered: the text the walk has made of it so far, and the
+// A span being rendered: the text the walk has made of it so far, the
 // placeholder it stands for, where it is a default or an option the walk
-// renders in that placeholder's place.
+// renders in that placeholder's place, and the format's modifier current while
+// it renders, where one selected it.
 struct Frame {
     to: usize,
     depth: usize,
     at: usize,
     out: String,
     placeholder: Option<(usize, usize)>,
+    current: Option<Current>,
 }
 
 /// One placeholder as the walk resolves it: what it declares, what it read,
@@ -78,7 +83,9 @@ pub(crate) struct Ph<'a> {
     // none: the name its props are composed under.
     name: Cow<'a, str>,
     options: Vec<Segment<'a>>,
-    rendered: Vec<OnceCell<Box<str>>>,
+    // What a modifier's input has rendered of the options, and which of them
+    // it is rendering.
+    rendered: Vec<Rendered>,
     inline_default: Option<(usize, usize)>,
     wrapper: Option<&'a Object>,
     value_text: Option<Txt<'a>>,
@@ -87,6 +94,21 @@ pub(crate) struct Ph<'a> {
     links: OnceCell<Option<Box<str>>>,
     // The inline default, rendered for a modifier that asked for it.
     default: OnceCell<Box<str>>,
+    default_in_progress: Cell<bool>,
+    // How many of its option values and its default are being produced.
+    producing: Cell<usize>,
+}
+
+#[derive(Default)]
+struct Rendered {
+    text: OnceCell<Box<str>>,
+    in_progress: Cell<bool>,
+}
+
+// What names a placeholder while its modifier is current: its address, which
+// no other placeholder alive at the same time shares.
+fn address(ph: &Ph<'_>) -> usize {
+    std::ptr::from_ref(ph).addr()
 }
 
 impl<'a> Ph<'a> {
@@ -178,21 +200,28 @@ impl<'a> Walker<'a> {
             at: from,
             out: String::new(),
             placeholder: None,
+            current: None,
         }];
 
         while let Some(top) = stack.last_mut() {
             let Some((open, close)) = self.scan.next(top.at, top.to) else {
                 push_text(&mut top.out, text, top.at, top.to);
 
-                let Some(done) = stack.pop() else {
+                let Some(Frame {
+                    out,
+                    placeholder,
+                    current,
+                    ..
+                }) = stack.pop()
+                else {
                     break;
                 };
 
-                match (stack.last_mut(), done.placeholder) {
-                    (Some(parent), Some((open, close))) => {
-                        self.deliver(parent, open, close, &done.out)
-                    }
-                    _ => return done.out,
+                drop(current);
+
+                match (stack.last_mut(), placeholder) {
+                    (Some(parent), Some((open, close))) => self.deliver(parent, open, close, &out),
+                    _ => return out,
                 }
 
                 continue;
@@ -203,14 +232,17 @@ impl<'a> Walker<'a> {
 
             let depth = top.depth;
 
-            let outcome = match self.placeholder(open, close, depth) {
-                Step::Settled(outcome) => outcome,
-                Step::Call(modifier, ph) => self.call(modifier, ph),
+            let (outcome, current) = match self.placeholder(open, close, depth) {
+                Step::Settled(outcome) => (outcome, None),
+                Step::Selected(outcome, current) => (outcome, Some(current)),
+                Step::Call(modifier, ph) => (self.call(modifier, ph), None),
                 Step::Intl(formatting, ph) => self.intl(formatting, *ph),
             };
 
             match outcome {
                 Outcome::Done(resolved) => {
+                    drop(current);
+
                     if let Some(top) = stack.last_mut() {
                         self.deliver(top, open, close, &resolved);
                     }
@@ -221,6 +253,7 @@ impl<'a> Walker<'a> {
                     at: from,
                     out: String::new(),
                     placeholder: Some((open, close)),
+                    current,
                 }),
             }
         }
@@ -298,6 +331,8 @@ impl<'a> Walker<'a> {
             value_text,
             links: OnceCell::new(),
             default: OnceCell::new(),
+            default_in_progress: Cell::new(false),
+            producing: Cell::new(0),
         };
 
         // The nesting limit bounds resolution and not derivation: what it
@@ -358,14 +393,14 @@ impl<'a> Walker<'a> {
         match modifier {
             Resolved::Builtin(builtin) => {
                 let value = ph.value_text.as_deref().unwrap_or_default();
-
-                Step::Settled(match builtin.select(value, &ph.options) {
-                    Selected::Option(at) => match ph.options.get(at) {
-                        Some(option) => Outcome::Inline(option.value.0, option.value.1),
-                        None => self.chain(ph),
-                    },
+                let selected = builtin.select(value, &ph.options);
+                let current = Current::format_defined();
+                let outcome = match selected {
+                    Selected::Option(at) => self.option(ph, at),
                     Selected::Default => self.chain(ph),
-                })
+                };
+
+                Step::Selected(outcome, current)
             }
             Resolved::Intl(formatting) => Step::Intl(formatting, Box::new(ph)),
             Resolved::Host(modifier) => Step::Call(modifier, Box::new(ph)),
@@ -395,50 +430,59 @@ impl<'a> Walker<'a> {
     // code, so how it fails and whether it came back are the placeholder's to
     // settle. A locale nobody supplied is the one failure the chain does not
     // answer: a default stands in for a value, never for the locale it would
-    // have been formatted in.
-    fn intl(&self, formatting: Formatting, ph: Ph<'a>) -> Outcome<'a> {
+    // have been formatted in. The modifier is current from the test of its
+    // value, through its props' conversion and the facility's call, to the
+    // end of what a selection selected; the chain a failure takes renders
+    // after the call.
+    fn intl(&self, formatting: Formatting, ph: Ph<'a>) -> (Outcome<'a>, Option<Current>) {
         let Some(facility) = self.config.intl.as_deref() else {
-            return self.chain(ph);
+            return (self.chain(ph), None);
         };
         let Some(locale) = self.locale.filter(|locale| !locale.is_empty()) else {
             self.report(Code::MissingLocale, ph.open, ph.close);
 
-            return Outcome::Done(Txt::Borrowed(""));
+            return (Outcome::Done(Txt::Borrowed("")), None);
         };
+        let current = Current::format_defined();
         let value = ph.value_text.as_deref().unwrap_or_default();
         let input = match formatting.input(value, &ph.options) {
             Ok(input) => input,
-            Err(Asked::Option(at)) => return self.option(ph, at),
-            Err(_) => return self.failed(ph),
+            Err(Asked::Option(at)) => return (self.option(ph, at), Some(current)),
+            Err(_) => {
+                drop(current);
+
+                return (self.failed(ph), None);
+            }
         };
         let own = own_props(&ph);
         let kept = own.is_none().then_some(&self.conversions);
         let mut configured = formatting.configure(&self.layers(own), kept);
         let answer = match formatting.ask(input, &mut configured) {
-            Asked::Format => Some(
-                host_call(|| facility.format(locale, &configured.request))
-                    .and_then(Result::ok)
-                    .map(Ok),
-            ),
-            Asked::Select => Some(
-                host_call(|| facility.select(locale, &configured.request))
-                    .and_then(Result::ok)
-                    .map(Err),
-            ),
+            Asked::Format => host_call(|| facility.format(locale, &configured.request))
+                .and_then(Result::ok)
+                .map(Ok),
+            Asked::Select => host_call(|| facility.select(locale, &configured.request))
+                .and_then(Result::ok)
+                .map(Err),
             Asked::Option(_) | Asked::Failed => None,
         };
 
         match answer {
-            Some(Some(Ok(text))) => Outcome::Done(Txt::Owned(text)),
-            Some(Some(Err(category))) => {
+            Some(Ok(text)) => (Outcome::Done(Txt::Owned(text)), None),
+            Some(Err(category)) => {
                 let category = category.as_str();
-
-                match ph.options.iter().position(|option| option.key == category) {
+                let outcome = match ph.options.iter().position(|option| option.key == category) {
                     Some(at) => self.option(ph, at),
                     None => self.chain(ph),
-                }
+                };
+
+                (outcome, Some(current))
             }
-            Some(None) | None => self.failed(ph),
+            None => {
+                drop(current);
+
+                (self.failed(ph), None)
+            }
         }
     }
 
@@ -459,9 +503,11 @@ impl<'a> Walker<'a> {
     // came back at all are each the placeholder's to settle, and none of them
     // leaves the resolution.
     fn call(&self, modifier: &dyn Modifier, mut ph: Box<Ph<'a>>) -> Outcome<'a> {
-        ph.rendered = ph.options.iter().map(|_| OnceCell::new()).collect();
+        ph.rendered = ph.options.iter().map(|_| Rendered::default()).collect();
 
-        let answer = host_call(|| modifier.call(&ModifierInput::new(self, &ph)));
+        let answer = modifier_call(address(&ph), || {
+            modifier.call(&ModifierInput::new(self, &ph))
+        });
 
         match answer {
             Some(Ok(Some(value))) => self.answer(value, *ph),
@@ -544,25 +590,44 @@ impl<'a> Walker<'a> {
         }
     }
 
-    /// An option's value for a modifier, rendered on the first ask.
+    /// An option's value for a modifier's input, rendered on the first ask.
+    /// A read refused (section 13) answers the empty string and records
+    /// nothing.
     pub(crate) fn option_value<'p>(&self, ph: &'p Ph<'_>, at: usize) -> Option<&'p str> {
         let option = ph.options.get(at)?;
-        let cell = ph.rendered.get(at)?;
+        let rendered = ph.rendered.get(at)?;
 
-        if let Some(text) = cell.get() {
+        if let Some(text) = rendered.text.get() {
             return Some(text);
         }
 
+        let Some(producing) = Producing::begin(&rendered.in_progress, &ph.producing, address(ph))
+        else {
+            return Some("");
+        };
         let text = self.render(option.value.0, option.value.1, ph.depth.saturating_add(1));
-        let _ = cell.set(text.into_boxed_str());
 
-        Some(cell.get().map_or("", |text| text))
+        drop(producing);
+
+        let _ = rendered.text.set(text.into_boxed_str());
+
+        Some(rendered.text.get().map_or("", |text| text))
     }
 
-    /// The chain for a modifier, walked on the first ask.
+    /// The chain for a modifier's input, walked on the first ask. A read
+    /// refused (section 13) answers the empty string and records nothing.
     pub(crate) fn default_text<'p>(&self, ph: &'p Ph<'a>) -> &'p str {
         const NOTHING: &Option<Box<str>> = &None;
 
+        match (ph.links.get(), ph.default.get()) {
+            (Some(Some(text)), _) | (Some(None), Some(text)) => return text,
+            _ => {}
+        }
+
+        let Some(producing) = Producing::begin(&ph.default_in_progress, &ph.producing, address(ph))
+        else {
+            return "";
+        };
         let links = match ph.links.get() {
             Some(links) => links,
             None => {
@@ -582,16 +647,15 @@ impl<'a> Walker<'a> {
             return text;
         }
 
-        if let Some(text) = ph.default.get() {
-            return text;
-        }
-
         let text = match ph.inline_default {
             Some((from, to)) => self
                 .render(from, to, ph.depth.saturating_add(1))
                 .into_boxed_str(),
             None => Box::from(""),
         };
+
+        drop(producing);
+
         let _ = ph.default.set(text);
 
         ph.default.get().map_or("", |text| text)

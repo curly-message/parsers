@@ -188,6 +188,7 @@ jobs:
           curly-message-parser = { path = "$CRATE" }
           curly-message-conformance = { path = "$SOURCE/conformance" }
           libtest-mimic = "0.8.2"
+          scoped-tls-hkt = "0.1.5"
 
           [[test]]
           name = "conformance"
