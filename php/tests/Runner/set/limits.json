@@ -1,0 +1,9 @@
+{
+  "format": "curly-message-3",
+  "level": "core",
+  "section": "13",
+  "cases": [
+    { "id": "limits/output-over-limit", "description": "An output past the declared limit.", "generate": "output-over-limit" },
+    { "id": "limits/nesting-over-limit", "description": "A message nested past the declared limit.", "generate": "nesting-over-limit" }
+  ]
+}

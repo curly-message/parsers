@@ -1,0 +1,27 @@
+{
+  "format": "curly-message-3",
+  "level": "core",
+  "section": "14.3",
+  "cases": [
+    {
+      "id": "core/edges",
+      "description": "An output whose ends are whitespace.",
+      "section": "8",
+      "message": "edges",
+      "expected": { "output": " both ends " }
+    },
+    {
+      "id": "core/two-reports",
+      "description": "Two reports of two codes, each naming the message.",
+      "message": "two",
+      "messageId": "m",
+      "expected": {
+        "output": "two",
+        "reports": [
+          { "code": "unknown-modifier", "origin": "message", "id": "m" },
+          { "code": "unserializable-value", "origin": "payload", "id": "m" }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+{
+  "name": "curly-message/parser",
+  "version": "0.0.0",
+  "private": true,
+  "description": "What the family's benchmark harness reads of the PHP package: its name and the version the publish workflow keeps it at.",
+  "type": "module"
+}

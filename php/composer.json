@@ -1,0 +1,67 @@
+{
+    "name": "curly-message/parser",
+    "description": "PHP implementation of the Curly Message Format.",
+    "type": "library",
+    "license": "MIT",
+    "keywords": [
+        "i18n",
+        "l10n",
+        "translation",
+        "message format",
+        "interpolation",
+        "curly-message"
+    ],
+    "support": {
+        "issues": "https://github.com/curly-message/spec/issues",
+        "source": "https://github.com/curly-message/parsers/tree/main/php"
+    },
+    "require": {
+        "php": ">=8.2"
+    },
+    "suggest": {
+        "ext-intl": "The Intl level: the number, date, ago and currency modifiers and the plural and ordinal selections."
+    },
+    "require-dev": {
+        "ext-zip": "*",
+        "opis/json-schema": "^2.4",
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "CurlyMessage\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "CurlyMessage\\Conformance\\": "conformance/src/",
+            "CurlyMessage\\Tests\\": "tests/"
+        }
+    },
+    "config": {
+        "platform": {
+            "php": "8.2.0"
+        },
+        "process-timeout": 0,
+        "sort-packages": true
+    },
+    "scripts": {
+        "post-install-cmd": "@composer install --working-dir=tools/qa --no-interaction --no-progress",
+        "lint": [
+            "tools/qa/vendor/bin/php-cs-fixer fix --dry-run --diff",
+            "@php tools/check-source.php"
+        ],
+        "lint:fix": "tools/qa/vendor/bin/php-cs-fixer fix",
+        "unicode": "@php tools/unicode.php",
+        "analyse": "tools/qa/vendor/bin/phpstan analyse --no-progress --memory-limit=1G",
+        "fetch-set": "@php conformance/bin/fetch-set.php",
+        "test": [
+            "@fetch-set",
+            "@lint",
+            "@analyse",
+            "@php vendor/bin/phpunit",
+            "@test:dist"
+        ],
+        "test:dist": "@php tools/artifact.php",
+        "bench": "node bench/harness.mjs"
+    }
+}
