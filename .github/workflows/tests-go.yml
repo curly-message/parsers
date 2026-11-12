@@ -1,0 +1,247 @@
+name: Go parser tests
+
+on:
+  # A pull request from a fork pushes nothing here, so the tests run on the
+  # pull request, whatever its base, which tests a stacked one too. A rebase
+  # merge and a release commit land commits no pull request ran, so main is
+  # tested again on a push. A tag is left out: it names a tree the publish
+  # workflow has just tested, by calling this one. A branch with no pull
+  # request runs by hand.
+  push:
+    branches: [main]
+    paths: &paths
+      - go/**
+      - .github/workflows/tests-go.yml
+  pull_request:
+    paths: *paths
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+# Each leg runs the Go it set up, never one a go.mod asks the go command to
+# download, and reads no go.work.
+env:
+  GOTOOLCHAIN: local
+  GOWORK: 'off'
+
+# A leg per module directory: `go` is the core module, which requires
+# nothing and runs on the standard library alone, the Intl level included
+# against the suite's stand-in supplier; a module that supplies Intl from
+# locale data is a directory of its own, added to each `module` list.
+jobs:
+  Tests:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        # The Go the module's go.mod declares as its oldest, the latest patch
+        # of that release, and the latest release.
+        go-version: [go.mod, '1.26.x', stable]
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        module: [go]
+    defaults:
+      run:
+        shell: bash
+        working-directory: ${{ matrix.module }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go-version != 'go.mod' && matrix.go-version || '' }}
+          go-version-file: ${{ matrix.go-version == 'go.mod' && format('{0}/go.mod', matrix.module) || '' }}
+          cache: false
+
+      - name: Test
+        run: go test -count=1 ./...
+
+  Race:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [go]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Test under the race detector
+        run: go test -count=1 -race ./...
+
+  # A platform whose int is 32 bits, which every count the parser keeps is
+  # written to hold on, and every test to compile on.
+  Int32:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [go]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: stable
+          cache: false
+
+      - name: Test on 386
+        env:
+          GOARCH: '386'
+        run: go test -count=1 ./...
+
+  # The formatting contract, over every module under go/, the never-tagged
+  # dev module among them, at the oldest Go the modules support.
+  Lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: go
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Format
+        run: |
+          unformatted=$(gofmt -l .)
+          [ -z "$unformatted" ] || { echo "::error::gofmt would rewrite these files; gofmt -w . does:"; echo "$unformatted"; exit 1; }
+
+      - name: Vet, staticcheck and tidy every module
+        run: |
+          modules=$(git ls-files go.mod '*/go.mod' | sed -e 's#/\{0,1\}go.mod$##' -e 's#^$#.#')
+          for module in $modules; do
+            echo "::group::$module"
+            go -C "$module" vet ./...
+            go -C "$module" run honnef.co/go/tools/cmd/staticcheck@v0.8.2 ./...
+            go -C "$module" mod tidy -diff
+            echo "::endgroup::"
+          done
+
+      - name: Require nothing in the core module
+        run: |
+          modules=$(go list -m all)
+          [ "$modules" = github.com/curly-message/parsers/go ] || { echo "::error::The core module requires nothing; its build list is:"; echo "$modules"; exit 1; }
+
+      # A character outside ASCII is written as an escape, in generated
+      # source too.
+      - name: ASCII source
+        run: |
+          if files=$(LC_ALL=C grep -rlP '[^\x00-\x7F]' --include='*.go' .); then
+            echo "::error::These Go files hold a character outside ASCII; write it as an escape:"
+            echo "$files"
+            exit 1
+          fi
+
+      - name: The family's benchmark harness
+        run: |
+          cmp ../js/bench/harness.mjs bench/harness.mjs || { echo "::error::bench/harness.mjs differs from js/bench/harness.mjs; the harness is the same in every package."; exit 1; }
+          diff -r ../js/bench/check bench/check || { echo "::error::bench/check/ differs from js/bench/check/; the check rows are the same in every package."; exit 1; }
+
+  # Each module zipped from the commit as the module proxy zips it, through
+  # git archive, so that only what is committed enters it, then fetched by a
+  # consumer from a proxy laid out on disk and tested where the go command
+  # put it, in the module cache, which is read-only.
+  Pack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Pack
+        working-directory: go/dev
+        run: go run ./pack -repo ../.. -module go -version v0.0.0-pack -proxy "$RUNNER_TEMP/proxy"
+
+      - name: Test as a consumer
+        env:
+          GONOSUMDB: github.com/curly-message/parsers
+        run: |
+          export GOPROXY="file://$RUNNER_TEMP/proxy"
+          mkdir "$RUNNER_TEMP/consumer"
+          cd "$RUNNER_TEMP/consumer"
+          go mod init example.com/consumer
+          go get github.com/curly-message/parsers/go@v0.0.0-pack
+          modules=$(go list -m all)
+          expected=$(printf '%s\n' example.com/consumer 'github.com/curly-message/parsers/go v0.0.0-pack')
+          [ "$modules" = "$expected" ] || { echo "::error::A consumer of the core module requires nothing else; its build list is:"; echo "$modules"; exit 1; }
+          go test -count=1 github.com/curly-message/parsers/go/...
+
+  # The exported surface against the last release, once there is one: a
+  # change that breaks it fails (a prerelease promises no surface).
+  API:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [go]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Compare with the last release
+        env:
+          MODULE: ${{ matrix.module }}
+        run: |
+          base=$(git tag --list "$MODULE/v*" | sed "s#^$MODULE/##" | { grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' || true; } | sort -V | tail -n 1)
+          if [ -z "$base" ]; then
+            echo "::notice::$MODULE has no release yet, so there is no surface to compare."
+            exit 0
+          fi
+          report=$(go run golang.org/x/exp/cmd/gorelease@v0.0.0-20261014143641-f0251eb4aa3e -base="$base") || { echo "$report"; exit 1; }
+          echo "$report"
+          if grep -qx '## incompatible changes' <<< "$report"; then
+            echo "::error::The exported surface of $MODULE breaks what $base released."
+            exit 1
+          fi
