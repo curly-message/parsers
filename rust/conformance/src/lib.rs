@@ -2,8 +2,8 @@
 //!
 //! The set's `RUNNER.md` states what a runner does; this crate does it for an
 //! implementation in Rust, through an [`Adapter`] the implementation's tests
-//! supply. It carries release 4.1.0 of the set, checked against the release's
-//! digest before anything in it is read, and depends on no implementation:
+//! supply. It carries the set [`VERSION`] names, checked against [`DIGEST`]
+//! before anything in it is read, and depends on no implementation:
 //! inputs are decoded into the neutral [`Value`], which an adapter maps into
 //! its own.
 //!
@@ -35,8 +35,9 @@ mod value;
 use std::fmt;
 
 pub use adapter::{
-    Adapter, Answer, BehaviourInput, CstClaim, ExposedRequest, Limits, RNode, Report, Resolution,
-    Resolved, TreeAnswer, Unexpressible, behave,
+    Adapter, Answer, BehaviourInput, CstClaim, DESCEND, Descend, ExposedRequest, Limits, NESTED,
+    NESTED_DEFINED, NESTED_TAKING, RENESTED, RNode, Renest, Report, Resolution, Resolved,
+    TreeAnswer, Unexpressible, behave, shown,
 };
 pub use audit::{AuditOutcome, Audited, Defect, Mutated, audit};
 pub use cases::FormatRequest;
@@ -48,7 +49,8 @@ pub use plan::{
 pub use set::{
     Api, Behaviour, CATEGORIES, Case, Categories, Code, ConcreteCase, DIGEST, DefectEntry,
     Expected, ExpectedFormat, ExpectedNode, ExpectedReport, FORMAT, Fixture, FixtureFile,
-    GeneratedCase, Level, Origin, Set, TreeCase, VERSION, Verdict, load, read_fixture, vendored,
+    GeneratedCase, Keeping, Level, Origin, Set, TreeCase, VERSION, Verdict, load, read_fixture,
+    vendored,
 };
 pub use value::{Value, decode, nodes, plain};
 

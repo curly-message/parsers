@@ -186,8 +186,11 @@ pub fn by_code_units(a: &str, b: &str) -> std::cmp::Ordering {
 
 /// The text a request is compared by: its entries with keys sorted, so the
 /// order of a request's properties, which is the host's, is never compared.
+/// The sign of zero is the request's, though JSON writes both zeros alike: a
+/// relative time reads `-0` as the past and `0` as the future.
 pub fn canonical(value: &Value) -> String {
     match value {
+        Value::Number(number) if *number == 0.0 && number.is_sign_negative() => "-0".to_owned(),
         Value::Array(elements) => format!(
             "[{}]",
             elements.iter().map(canonical).collect::<Vec<_>>().join(",")
@@ -302,5 +305,13 @@ mod tests {
         assert_eq!(canonical(&one), canonical(&other));
         assert_eq!(canonical(&one), r#"{"currency":"USD","style":"currency"}"#);
         assert_ne!(canonical(&Value::Number(2.0)), canonical(&"2".into()));
+        assert_ne!(
+            canonical(&Value::Number(-0.0)),
+            canonical(&Value::Number(0.0))
+        );
+        assert_eq!(
+            canonical(&Value::array(vec![Value::Number(-0.0), "second".into()])),
+            r#"[-0,"second"]"#
+        );
     }
 }

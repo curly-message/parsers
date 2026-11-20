@@ -1,5 +1,8 @@
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use crate::js;
-use crate::set::Behaviour;
+use crate::set::{Behaviour, Keeping};
 use crate::value::Value;
 
 /// The implementation's side of the contract of the set's README: what it
@@ -35,6 +38,42 @@ pub trait Adapter: Sync {
         None
     }
 
+    /// Whether the adapter states a stand-in for the host's `undefined`: a
+    /// value its implementation reads as the caller having passed nothing.
+    /// Where it states none, the runner leaves out whatever holds
+    /// [`Value::Undefined`] before the adapter is handed it, and the
+    /// constructions at and one past the conversion limit, which count their
+    /// nodes in members that hold it.
+    fn undefined(&self) -> bool {
+        false
+    }
+
+    /// The bound section 13 lets an implementation keep on the counted reads
+    /// producing their text at once on one thread, the resolution asked for
+    /// not counted, or `None` where it states none. It builds the
+    /// constructions of kept reads; a bound below 0 is no bound, and refuses
+    /// the run.
+    fn reentry(&self) -> Option<i64> {
+        None
+    }
+
+    /// Whether a modifier can keep an input past its call (section 11.3).
+    /// `false` leaves out the cases that read a kept input after the modifier
+    /// that kept it returned.
+    fn keeps(&self) -> bool {
+        true
+    }
+
+    /// Whether the bound [`reentry`](Adapter::reentry) states counts a
+    /// resolution asked for inside another as it counts a read (section 13):
+    /// `Value::Bool(true)` builds `reentry-resolutions-over-limit`, whose
+    /// [`Renest`] the adapter registers. Unset or `false`, the claim is
+    /// unmade and that case is left out. It is typed as loosely as the other
+    /// claims: a statement that is neither refuses the run.
+    fn resolutions(&self) -> Value {
+        Value::Undefined
+    }
+
     /// The tree of a message, as an arena whose first node is the root. An
     /// `Err` is a raise.
     fn parse(&self, message: &str) -> Result<TreeAnswer, String> {
@@ -61,18 +100,20 @@ pub struct Limits {
     pub nesting: i64,
 }
 
-/// A property of a request the host's facility cannot express. With `when`
-/// empty it holds for every request of the facility, which is what release
-/// 4.1.0 of the set can state; with `when`, only for a request whose
-/// properties hold each of those values, the shape the Rust implementation
-/// proposes for a facility that expresses a property under one style and not
-/// under another.
+/// A property of a request the host's facility cannot express (section
+/// 11.2). With `values` and `when` empty it holds for every value of the
+/// property in every request of the facility; `values` narrows it to the
+/// values listed, and `when` to the requests whose other properties hold
+/// each of the values it names. An empty list is no narrowing, and an entry
+/// that names no property is no claim.
 #[derive(Clone, Debug)]
 pub struct Unexpressible {
     /// The facility, as ECMA-402 names it.
     pub api: String,
     /// The property.
     pub property: String,
+    /// The values of the property the entry holds for.
+    pub values: Vec<Value>,
     /// The values other properties of the request hold where the entry holds.
     pub when: Vec<(String, Value)>,
 }
@@ -129,6 +170,17 @@ pub struct Resolution {
     /// The host-defined modifiers to register, by name, each a behaviour of
     /// the catalogue; [`behave`] answers one.
     pub modifiers: Option<Vec<(String, Behaviour)>>,
+    /// The host-defined modifiers to register over one list of what was kept,
+    /// by name, each a behaviour of [`Keeping`]. The adapter builds them
+    /// afresh for this resolution, sharing that list among them and with the
+    /// resolution a `nest`, a `keep-nest` or a `keep-nest-ne` asks for while
+    /// its call is in progress.
+    pub keeping: Option<Vec<(String, Keeping)>>,
+    /// The `descend` to register under that name beside them, sharing their
+    /// list.
+    pub descend: Option<Descend>,
+    /// The `renest` to register under that name, alone.
+    pub renest: Option<Renest>,
 }
 
 impl Resolution {
@@ -142,6 +194,9 @@ impl Resolution {
             id: Value::Undefined,
             defaults: Value::Undefined,
             modifiers: None,
+            keeping: None,
+            descend: None,
+            renest: None,
         }
     }
 }
@@ -271,6 +326,134 @@ pub enum Answer {
     Raise(String),
     /// A value of another shape.
     Value(Value),
+}
+
+/// The message a `nest` asks a resolution of.
+pub const NESTED: &str = "{{x:take; default:F}}";
+
+/// The message a `keep-nest` asks a resolution of.
+pub const NESTED_TAKING: &str = "{{x:taking; default:F}}";
+
+/// The message a `keep-nest-ne` asks a resolution of. Its `ne` is the format's
+/// own: `x` holds the empty string, which differs from `b`, so it selects that
+/// option and produces it during its call.
+pub const NESTED_DEFINED: &str = "{{x:ne; b:{{x:taking; default:F}}}}";
+
+/// The message a [`Descend`] asks a resolution of while it has further to go.
+pub const DESCEND: &str = "{{x:descend; default:F}}";
+
+/// The `descend` of the set's README, which the two constructions built
+/// around a resolution a modifier asks for register beside the behaviours of
+/// [`Keeping`], under that name, where the adapter states that its bound
+/// counts resolutions. The adapter builds it into a modifier whose call
+/// answers what [`Descend::call`] answers, over a resolution, by its
+/// implementation and through the means it hands a modifier, of the message
+/// it is handed, with `x` holding the empty string and the same behaviours
+/// and this same `descend` registered, sharing their list of what was kept,
+/// asked for while the call is in progress. Its clones share one count of
+/// the calls in progress.
+#[derive(Clone, Debug)]
+pub struct Descend {
+    hops: usize,
+    inner: &'static str,
+    standing: Arc<AtomicUsize>,
+}
+
+impl Descend {
+    pub(crate) fn new(hops: usize, inner: &'static str) -> Self {
+        Self {
+            hops,
+            inner,
+            standing: Arc::default(),
+        }
+    }
+
+    /// What `descend` answers: the output `resolve` answers of the message it
+    /// is handed, [`DESCEND`] with fewer calls in progress than the descent
+    /// has hops and the message the descent leads to with as many, or a raise
+    /// where it answers none. A refusal that unwinds out of `resolve` passes
+    /// on.
+    pub fn call(&self, resolve: impl FnOnce(&str) -> Option<String>) -> Answer {
+        let standing = self.standing.fetch_add(1, Ordering::SeqCst) + 1;
+        let _standing = Standing(&self.standing);
+
+        match resolve(if standing < self.hops {
+            DESCEND
+        } else {
+            self.inner
+        }) {
+            Some(output) => Answer::Text(output),
+            None => {
+                Answer::Raise("The resolution descend asked for answered no output.".to_owned())
+            }
+        }
+    }
+}
+
+/// The message a [`Renest`] asks a resolution of: the one it is registered in.
+pub const RENESTED: &str = "[{{x:renest; default:F}}]";
+
+/// The `renest` of the set's README, which `reentry-resolutions-over-limit`
+/// registers alone, under that name. The adapter builds it into a modifier
+/// whose call answers what [`Renest::call`] answers, over a resolution, by
+/// its implementation and through the means it hands a modifier, of
+/// [`RENESTED`], with `x` holding the empty string and this same `renest`
+/// registered alone, asked for while the call is in progress. Its clones
+/// share one count of the calls in progress.
+#[derive(Clone, Debug)]
+pub struct Renest {
+    bound: usize,
+    standing: Arc<AtomicUsize>,
+}
+
+// One call of `renest` or `descend` in progress, counted while it lives, so a refusal
+// that unwinds through it leaves the count right.
+struct Standing<'a>(&'a AtomicUsize);
+
+impl Drop for Standing<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, Ordering::SeqCst);
+    }
+}
+
+impl Renest {
+    pub(crate) fn new(bound: usize) -> Self {
+        Self {
+            bound,
+            standing: Arc::default(),
+        }
+    }
+
+    /// What `renest` answers: the output `resolve` answers, or a raise where
+    /// it answers none. With more calls in progress than the bound the
+    /// adapter states, it calls nothing and answers `unrefused`, so an
+    /// implementation that refuses no resolution fails the case in place of
+    /// nesting until its host ends it. A refusal that unwinds out of
+    /// `resolve` passes on.
+    pub fn call(&self, resolve: impl FnOnce() -> Option<String>) -> Answer {
+        if self.standing.load(Ordering::SeqCst) > self.bound {
+            return Answer::Text("unrefused".to_owned());
+        }
+
+        self.standing.fetch_add(1, Ordering::SeqCst);
+
+        let _standing = Standing(&self.standing);
+
+        match resolve() {
+            Some(output) => Answer::Text(output),
+            None => Answer::Raise("The resolution renest asked for answered no output.".to_owned()),
+        }
+    }
+}
+
+/// A read of a kept input as `take` and `first` answer it: the text read, or
+/// `empty` for the empty string, so a modifier that did not go on shows.
+pub fn shown(text: &str) -> String {
+    if text.is_empty() {
+        "empty".to_owned()
+    } else {
+        text.to_owned()
+    }
 }
 
 /// A behaviour of the set's catalogue, answered over a modifier's input.

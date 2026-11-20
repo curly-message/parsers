@@ -1,7 +1,7 @@
 {
-  "node": "22.22.0",
-  "icu": "77.1",
-  "cldr": "47.0",
+  "node": "22.23.5",
+  "icu": "78.3",
+  "cldr": "48.0",
   "answers": [
     {
       "name": "fallback-intl/number-zero-is-present",
@@ -307,6 +307,50 @@
       "input": 1709632800000,
       "answer": {
         "text": "Mar 5, 2024, 10:00 AM"
+      }
+    },
+    {
+      "name": "intl/date-hour-cycle-in-a-style",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "timeStyle": "short",
+        "hourCycle": "h23"
+      },
+      "input": 1709643900000,
+      "answer": {
+        "text": "13:05"
+      }
+    },
+    {
+      "name": "intl/date-hour12-in-components",
+      "locale": "en",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "hour": "numeric",
+        "minute": "2-digit",
+        "hour12": false
+      },
+      "input": 1709643900000,
+      "answer": {
+        "text": "13:05"
+      }
+    },
+    {
+      "name": "intl/date-hour-cycle-in-components",
+      "locale": "en-GB",
+      "api": "DateTimeFormat",
+      "options": {
+        "timeZone": "UTC",
+        "hour": "numeric",
+        "minute": "2-digit",
+        "hourCycle": "h12"
+      },
+      "input": 1709643900000,
+      "answer": {
+        "text": "1:05 pm"
       }
     },
     {
@@ -706,6 +750,21 @@
       ],
       "answer": {
         "text": "now"
+      }
+    },
+    {
+      "name": "intl/ago-negative-under-half-second",
+      "locale": "en",
+      "api": "RelativeTimeFormat",
+      "options": {
+        "numeric": "always"
+      },
+      "input": [
+        -0,
+        "second"
+      ],
+      "answer": {
+        "text": "0 seconds ago"
       }
     },
     {

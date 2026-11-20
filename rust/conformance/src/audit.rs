@@ -5,9 +5,10 @@ use crate::adapter::{
     Adapter, CstClaim, ExposedRequest, Limits, Report, Resolution, Resolved, TreeAnswer,
     Unexpressible,
 };
+use crate::cases::{DEFINED, FRAMED, RESOLUTIONS, renested};
 use crate::js;
-use crate::plan::{Options, RunResult, run};
-use crate::set::{DefectEntry, Verdict, vendored};
+use crate::plan::{Options, RunResult, covers, run};
+use crate::set::{Case, DefectEntry, FixtureFile, Set, Verdict, vendored};
 use crate::tree::{NAMED, boundaries, spelled};
 use crate::value::Value;
 
@@ -45,12 +46,28 @@ pub enum Defect {
     ClaimsCoreOnly,
     /// `unexpressible-declared`.
     UnexpressibleDeclared,
+    /// `unexpressible-conditional-declared`.
+    UnexpressibleConditionalDeclared,
     /// `claims-no-core`.
     ClaimsNoCore,
     /// `claims-unknown-level`.
     ClaimsUnknownLevel,
     /// `claims-no-limits`.
     ClaimsNoLimits,
+    /// `conversion-limit-overstated`.
+    ConversionLimitOverstated,
+    /// `conversion-limit-understated`.
+    ConversionLimitUnderstated,
+    /// `reentry-limit-overstated`.
+    ReentryLimitOverstated,
+    /// `reentry-limit-understated`.
+    ReentryLimitUnderstated,
+    /// `claims-negative-reentry`.
+    ClaimsNegativeReentry,
+    /// `resolutions-overstated`.
+    ResolutionsOverstated,
+    /// `claims-non-boolean-resolutions`.
+    ClaimsNonBooleanResolutions,
     /// `tree-unoffered`.
     TreeUnoffered,
     /// `tree-node-dropped`.
@@ -71,7 +88,7 @@ pub enum Defect {
 
 impl Defect {
     /// Every defect this runner carries.
-    pub const ALL: [Defect; 26] = [
+    pub const ALL: [Defect; 34] = [
         Defect::OutputTruncated,
         Defect::OutputTrimmed,
         Defect::AnswersNothing,
@@ -87,9 +104,17 @@ impl Defect {
         Defect::ReportsUnobserved,
         Defect::ClaimsCoreOnly,
         Defect::UnexpressibleDeclared,
+        Defect::UnexpressibleConditionalDeclared,
         Defect::ClaimsNoCore,
         Defect::ClaimsUnknownLevel,
         Defect::ClaimsNoLimits,
+        Defect::ConversionLimitOverstated,
+        Defect::ConversionLimitUnderstated,
+        Defect::ReentryLimitOverstated,
+        Defect::ReentryLimitUnderstated,
+        Defect::ClaimsNegativeReentry,
+        Defect::ResolutionsOverstated,
+        Defect::ClaimsNonBooleanResolutions,
         Defect::TreeUnoffered,
         Defect::TreeNodeDropped,
         Defect::TreeNodeRetyped,
@@ -118,9 +143,17 @@ impl Defect {
             Self::ReportsUnobserved => "reports-unobserved",
             Self::ClaimsCoreOnly => "claims-core-only",
             Self::UnexpressibleDeclared => "unexpressible-declared",
+            Self::UnexpressibleConditionalDeclared => "unexpressible-conditional-declared",
             Self::ClaimsNoCore => "claims-no-core",
             Self::ClaimsUnknownLevel => "claims-unknown-level",
             Self::ClaimsNoLimits => "claims-no-limits",
+            Self::ConversionLimitOverstated => "conversion-limit-overstated",
+            Self::ConversionLimitUnderstated => "conversion-limit-understated",
+            Self::ReentryLimitOverstated => "reentry-limit-overstated",
+            Self::ReentryLimitUnderstated => "reentry-limit-understated",
+            Self::ClaimsNegativeReentry => "claims-negative-reentry",
+            Self::ResolutionsOverstated => "resolutions-overstated",
+            Self::ClaimsNonBooleanResolutions => "claims-non-boolean-resolutions",
             Self::TreeUnoffered => "tree-unoffered",
             Self::TreeNodeDropped => "tree-node-dropped",
             Self::TreeNodeRetyped => "tree-node-retyped",
@@ -137,12 +170,28 @@ impl Defect {
         Self::ALL.into_iter().find(|defect| defect.id() == id)
     }
 
-    /// The adapter wrapped so that it is wrong in this one way.
+    /// The adapter wrapped so that it is wrong in this one way, realized for
+    /// a run of the vendored set at every level the adapter claims.
     pub fn wrap(self, adapter: &dyn Adapter) -> Mutated<'_> {
+        self.realize(adapter, None, adapter.levels())
+    }
+
+    // The adapter wrapped for the run an audit makes, which may read another
+    // set or fewer levels than the adapter claims: whether a defect of a
+    // claim reaches the runner is read off the cases that run would hold.
+    fn realize<'a>(
+        self,
+        adapter: &'a dyn Adapter,
+        set: Option<&'a Set>,
+        levels: Vec<String>,
+    ) -> Mutated<'a> {
         Mutated {
             inner: adapter,
             defect: self,
             reached: AtomicBool::new(false),
+            observes: AtomicBool::new(false),
+            set,
+            levels,
         }
     }
 }
@@ -153,6 +202,10 @@ pub struct Mutated<'a> {
     inner: &'a dyn Adapter,
     defect: Defect,
     reached: AtomicBool,
+    // Whether a resolution the run asked for answered reports.
+    observes: AtomicBool,
+    set: Option<&'a Set>,
+    levels: Vec<String>,
 }
 
 /// What the audit made of one defect.
@@ -208,6 +261,63 @@ fn other_origin(origin: &str) -> &'static str {
     }
 }
 
+// The entry each defect of what the adapter declares it cannot express adds to
+// what the adapter declared itself, so the gaps it documents stay left out.
+fn declared_entry(defect: Defect) -> Option<Unexpressible> {
+    let property = "maximumFractionDigits".to_owned();
+    let api = "NumberFormat".to_owned();
+
+    match defect {
+        Defect::UnexpressibleDeclared => Some(Unexpressible {
+            api,
+            property,
+            values: Vec::new(),
+            when: Vec::new(),
+        }),
+        Defect::UnexpressibleConditionalDeclared => Some(Unexpressible {
+            api,
+            property,
+            values: vec![Value::Number(2.0)],
+            when: vec![("useGrouping".to_owned(), Value::Bool(false))],
+        }),
+        _ => None,
+    }
+}
+
+// The constructions a defect of a declared number is read by: only the
+// construction at the conversion limit visits a node more than the limit the
+// implementation imposes where the limit is stated one higher, and only those
+// past it visit no node more where it is stated one lower. Every construction
+// of kept reads that stands at the bound asks for one read more than the
+// implementation lets stand where the bound is stated one higher, and only
+// those past it let one through that the case expects refused where it is
+// stated one lower. The two built around a resolution a modifier asks for are
+// read as `Mutated::shows` says.
+fn read_by(defect: Defect) -> &'static [&'static str] {
+    match defect {
+        Defect::ConversionLimitOverstated => &["conversion-at-limit"],
+        Defect::ConversionLimitUnderstated => {
+            &["conversion-over-limit", "conversion-over-limit-continues"]
+        }
+        Defect::ReentryLimitOverstated => &[
+            "reentry-at-limit",
+            "reentry-over-limit",
+            "reentry-refused-not-recorded",
+            "reentry-own-reads-free",
+            "reentry-over-limit-by-a-conversion",
+            "reentry-own-read-in-a-nested-resolution",
+            DEFINED,
+        ],
+        Defect::ReentryLimitUnderstated => &[
+            "reentry-over-limit",
+            "reentry-refused-not-recorded",
+            "reentry-over-limit-by-a-conversion",
+            DEFINED,
+        ],
+        _ => &[],
+    }
+}
+
 // A request the set states nowhere, so a case compared on one fails on it.
 fn other_request() -> ExposedRequest {
     ExposedRequest {
@@ -228,15 +338,180 @@ impl Mutated<'_> {
             | Defect::Raises
             | Defect::ClaimsNoCore
             | Defect::ClaimsUnknownLevel
-            | Defect::ClaimsNoLimits => true,
-            Defect::FormatsWrong | Defect::UnexpressibleDeclared => {
-                inner.levels().iter().any(|level| level == "intl")
+            | Defect::ClaimsNoLimits
+            | Defect::ClaimsNegativeReentry
+            | Defect::ClaimsNonBooleanResolutions => true,
+            Defect::FormatsWrong => inner.levels().iter().any(|level| level == "intl"),
+            Defect::UnexpressibleDeclared | Defect::UnexpressibleConditionalDeclared => {
+                self.leaves_out()
+            }
+            Defect::ConversionLimitOverstated | Defect::ConversionLimitUnderstated => {
+                self.runs_any(&self.conversions())
+            }
+            Defect::ReentryLimitOverstated | Defect::ReentryLimitUnderstated => {
+                self.bound().is_some()
+                    && self.runs_where(|construction| {
+                        read_by(self.defect).contains(&construction) && self.shows(construction)
+                    })
+            }
+            // The construction of resolutions one inside another then runs
+            // over an implementation that refuses none of them, and the one
+            // whose read is refused beneath a modifier of the format is built
+            // from resolutions that take no place, so above a bound of 1 its
+            // read is let through. An adapter that states the claim itself
+            // carries nothing to alter; the first is left out all the same
+            // where it states no bound or its output limit does not hold it,
+            // and the second shows nothing where it states none, 0 or 1.
+            Defect::ResolutionsOverstated => {
+                !matches!(inner.resolutions(), Value::Bool(true))
+                    && inner.reentry().is_some_and(|bound| {
+                        let brackets = renested(usize::try_from(bound).unwrap_or(usize::MAX)).len();
+                        let held =
+                            i64::try_from(brackets).unwrap_or(i64::MAX) <= inner.limits().output;
+
+                        self.runs_where(|construction| {
+                            (construction == RESOLUTIONS && held)
+                                || (construction == DEFINED && bound > 1)
+                        })
+                    })
             }
             Defect::ClaimsCoreOnly => inner.levels().len() > 1,
-            Defect::TreeUnoffered | Defect::TreeUnitUnknown => inner.cst().is_some(),
-            Defect::TreeUnitChanged => inner.cst().is_some_and(|claim| claim.unit != "code-point"),
+            Defect::TreeUnoffered | Defect::TreeUnitUnknown | Defect::TreeUnitChanged => {
+                inner.cst().is_some()
+            }
             _ => self.reached.load(Ordering::Relaxed),
         }
+    }
+
+    fn run_set(&self) -> Option<&Set> {
+        self.set.or_else(|| vendored().ok())
+    }
+
+    // The resolution cases of the run, at the levels it runs.
+    fn cases(&self) -> impl Iterator<Item = &Case> {
+        self.run_set()
+            .into_iter()
+            .flat_map(|set| &set.fixtures)
+            .filter_map(|fixture| match &fixture.file {
+                FixtureFile::Resolution { level, cases, .. }
+                    if self.levels.iter().any(|run| run == level.as_str()) =>
+                {
+                    Some(cases)
+                }
+                _ => None,
+            })
+            .flatten()
+    }
+
+    // Whether the run holds one of the stated constructions.
+    fn runs_any(&self, constructions: &[&str]) -> bool {
+        self.runs_where(|construction| constructions.contains(&construction))
+    }
+
+    // Whether the run holds a construction `wanted` takes.
+    fn runs_where(&self, wanted: impl Fn(&str) -> bool) -> bool {
+        self.cases()
+            .any(|case| matches!(case, Case::Generated(case) if wanted(&case.generate)))
+    }
+
+    // Whether a construction of kept reads shows a defect of the bound
+    // stated. Those built from kept reads run where the adapter states that
+    // a modifier can keep an input. The two built inside a resolution a
+    // modifier asks for run at a bound above 0, and from resolutions,
+    // whatever the adapter states of keeping, where it states that its bound
+    // counts them. The one whose read is refused shows a bound stated one
+    // lower however it is built, by a read let through, and one stated one
+    // higher only built from resolutions: built from kept reads it stands a
+    // place short of the bound where the bound counts reads alone, which the
+    // adapter need not say. The other answers the same text where the
+    // resolution is refused, and shows only a bound stated one higher, built
+    // from resolutions, in the report of the modifier that asked, which
+    // reaches the runner where that modifier sits in the resolution the case
+    // asks for, at a stated bound of 1, and the adapter observes reports.
+    fn shows(&self, construction: &str) -> bool {
+        if !FRAMED.contains(&construction) {
+            return self.inner.keeps();
+        }
+
+        let counts = matches!(self.inner.resolutions(), Value::Bool(true));
+        let higher = self.defect == Defect::ReentryLimitOverstated;
+        let declared = self.bound().unwrap_or(0);
+
+        declared > 0
+            && if construction == DEFINED {
+                counts || (!higher && self.inner.keeps())
+            } else {
+                counts && higher && declared == 1 && self.observes.load(Ordering::Relaxed)
+            }
+    }
+
+    // The constructions a defect of the conversion limit is read by, of
+    // those the adapter runs: one that states no stand-in for `undefined`
+    // runs none at or one past the limit, only the one that continues.
+    fn conversions(&self) -> Vec<&'static str> {
+        read_by(self.defect)
+            .iter()
+            .copied()
+            .filter(|name| self.inner.undefined() || *name == "conversion-over-limit-continues")
+            .collect()
+    }
+
+    // The bound a defect of the bound on counted reads states, where the
+    // adapter states one and the defect leaves it a count of 0 or more.
+    fn bound(&self) -> Option<i64> {
+        let by = match self.defect {
+            Defect::ReentryLimitOverstated => 1,
+            Defect::ReentryLimitUnderstated => -1,
+            _ => return None,
+        };
+
+        self.inner
+            .reentry()
+            .map(|bound| bound.saturating_add(by))
+            .filter(|bound| *bound >= 0)
+    }
+
+    // Whether a case of the run states a request the defect's entry covers
+    // and no entry of the adapter's own covers: a case only a runner that
+    // reads the entry leaves out.
+    fn leaves_out(&self) -> bool {
+        let Some(entry) = declared_entry(self.defect) else {
+            return false;
+        };
+        let own: Vec<Unexpressible> = self
+            .inner
+            .unexpressible()
+            .unwrap_or_default()
+            .into_iter()
+            .filter(|declared| declared.api == entry.api && !declared.property.is_empty())
+            .collect();
+        let empty = serde_json::Map::new();
+
+        self.cases().any(|case| {
+            let Case::Concrete(case) = case else {
+                return false;
+            };
+            let Some(format) = case
+                .expected
+                .format
+                .as_ref()
+                .filter(|format| format.api.as_str() == entry.api)
+            else {
+                return false;
+            };
+            let options = match &format.options {
+                Some(options) => match options.as_object() {
+                    Some(options) => options,
+                    None => return false,
+                },
+                None => &empty,
+            };
+
+            covers(&entry, &entry.api, options).is_some()
+                && !own
+                    .iter()
+                    .any(|declared| covers(declared, &entry.api, options).is_some())
+        })
     }
 
     fn mark(&self) {
@@ -455,18 +730,56 @@ impl Adapter for Mutated<'_> {
                 nesting: 0,
                 ..limits
             },
+            Defect::ConversionLimitOverstated => Limits {
+                conversion: limits.conversion.saturating_add(1),
+                ..limits
+            },
+            Defect::ConversionLimitUnderstated => Limits {
+                conversion: limits.conversion.saturating_sub(1),
+                ..limits
+            },
             _ => limits,
         }
     }
 
     fn unexpressible(&self) -> Option<Vec<Unexpressible>> {
+        let own = self.inner.unexpressible();
+
+        match declared_entry(self.defect) {
+            Some(entry) => {
+                let mut declared = own.unwrap_or_default();
+
+                declared.push(entry);
+
+                Some(declared)
+            }
+            None => own,
+        }
+    }
+
+    fn undefined(&self) -> bool {
+        self.inner.undefined()
+    }
+
+    fn reentry(&self) -> Option<i64> {
         match self.defect {
-            Defect::UnexpressibleDeclared => Some(vec![Unexpressible {
-                api: "NumberFormat".to_owned(),
-                property: "maximumFractionDigits".to_owned(),
-                when: Vec::new(),
-            }]),
-            _ => self.inner.unexpressible(),
+            Defect::ClaimsNegativeReentry => Some(-1),
+            Defect::ReentryLimitOverstated | Defect::ReentryLimitUnderstated => {
+                self.bound().or_else(|| self.inner.reentry())
+            }
+            _ => self.inner.reentry(),
+        }
+    }
+
+    fn keeps(&self) -> bool {
+        self.inner.keeps()
+    }
+
+    fn resolutions(&self) -> Value {
+        match self.defect {
+            Defect::ResolutionsOverstated => Value::Bool(true),
+            Defect::ClaimsNonBooleanResolutions => "true".into(),
+            _ => self.inner.resolutions(),
         }
     }
 
@@ -475,8 +788,16 @@ impl Adapter for Mutated<'_> {
 
         match self.defect {
             Defect::TreeUnoffered => None,
-            Defect::TreeUnitChanged => claim.map(|_| CstClaim {
-                unit: "code-point".to_owned(),
+            // A declaration of the adapter's own unit would alter nothing, so a
+            // code-point adapter is misdeclared as UTF-16 and every other as
+            // code points.
+            Defect::TreeUnitChanged => claim.map(|claim| CstClaim {
+                unit: if claim.unit == "code-point" {
+                    "utf-16"
+                } else {
+                    "code-point"
+                }
+                .to_owned(),
             }),
             Defect::TreeUnitUnknown => claim.map(|_| CstClaim {
                 unit: "utf-32".to_owned(),
@@ -512,6 +833,10 @@ impl Adapter for Mutated<'_> {
         let Some(resolved) = resolved else {
             return Ok(None);
         };
+
+        if resolved.reports.is_some() {
+            self.observes.store(true, Ordering::Relaxed);
+        }
 
         match self.answer(&resolved) {
             Some(changed) => {
@@ -553,6 +878,15 @@ pub fn audit(adapter: &dyn Adapter, options: &Options<'_>) -> Result<Vec<Audited
         )));
     }
 
+    let levels: Vec<String> = adapter
+        .levels()
+        .into_iter()
+        .filter(|level| {
+            options
+                .levels
+                .is_none_or(|chosen| chosen.contains(&level.as_str()))
+        })
+        .collect();
     let catalogue = match options.set {
         Some(set) => &set.defects,
         None => &vendored()?.defects,
@@ -567,7 +901,7 @@ pub fn audit(adapter: &dyn Adapter, options: &Options<'_>) -> Result<Vec<Audited
                     js::quote(&entry.id)
                 ))
             })?;
-            let mutated = defect.wrap(adapter);
+            let mutated = defect.realize(adapter, options.set, levels.clone());
             let observed = match run(&mutated, options) {
                 Ok(result) => verdict(&result, &baseline),
                 Err(_) => Some(Verdict::Error),

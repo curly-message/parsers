@@ -16,10 +16,11 @@ use std::path::Path;
 use std::sync::OnceLock;
 
 use curly_message_conformance::{
-    Adapter, Answer, AuditOutcome, Behaviour, BehaviourInput, Case, CstClaim, Defect, ExpectedNode,
-    ExposedRequest, FixtureFile, FormatHost, FormatRequest, GoldenHost, Level, Limits, Options,
-    RNode, Report, Resolution, Resolved, RunError, Set, TreeAnswer, Unexpressible, Value, Verdict,
-    audit, behave, check, decode, load, plan, read_fixture, run, summarize, vendored,
+    Adapter, Answer, AuditOutcome, Behaviour, BehaviourInput, Case, CstClaim, DESCEND, Defect,
+    ExpectedNode, ExposedRequest, FixtureFile, FormatHost, FormatRequest, GoldenHost, Keeping,
+    Level, Limits, Options, RENESTED, RNode, Renest, Report, Resolution, Resolved, RunError, Set,
+    TreeAnswer, Unexpressible, Value, Verdict, audit, behave, check, decode, load, plan,
+    read_fixture, run, summarize, vendored,
 };
 
 fn mini() -> &'static Set {
@@ -59,6 +60,26 @@ fn payload_text(input: &Resolution, name: &str) -> Option<String> {
 
 fn any(_: &Resolution) -> bool {
     true
+}
+
+fn members(input: &Resolution, name: &str) -> Option<usize> {
+    input.payload.get(name)?.as_object().map(<[_]>::len)
+}
+
+// The inputs of a construction of kept reads: `x` holds the empty string, and
+// the behaviours over what was kept are registered beside `read`.
+fn kept(input: &Resolution) -> bool {
+    payload_text(input, "x").as_deref() == Some("")
+        && input.keeping.as_ref().is_some_and(|keeping| {
+            keeping
+                .iter()
+                .any(|(name, behaviour)| name == "take" && *behaviour == Keeping::Take)
+        })
+        && input.modifiers.as_ref().is_some_and(|modifiers| {
+            modifiers
+                .iter()
+                .any(|(name, behaviour)| name == "read" && *behaviour == Behaviour::Default)
+        })
 }
 
 // The toy implementation: what each message resolves to.
@@ -145,16 +166,123 @@ fn table() -> HashMap<&'static str, Entry> {
             },
         ),
         (
+            "{{v:ne; nomatch:ok; default:refused;}}",
+            Entry {
+                output: "ok",
+                reports: vec![],
+                formats: None,
+                // A value visiting two nodes: the root and one empty object.
+                input: |input| members(input, "v") == Some(1),
+            },
+        ),
+        (
             "{{v; default:D}}",
             Entry {
                 output: "D",
                 reports: limit("unserializable-value", "payload", None),
                 formats: None,
-                // Two levels of the doubling tree visit seven nodes, the
-                // first count past a conversion limit of 2 that it reaches.
+                // A value visiting three nodes, the third one holding the
+                // host's undefined, which the toy states a stand-in for.
+                input: |input| {
+                    members(input, "v") == Some(2)
+                        && input
+                            .payload
+                            .get("v")
+                            .and_then(|v| v.get("u0"))
+                            .is_some_and(Value::is_undefined)
+                },
+            },
+        ),
+        (
+            "{{v; default:D}}{{w}}",
+            Entry {
+                output: "Dtail",
+                reports: limit("unserializable-value", "payload", None),
+                formats: None,
                 input: |input| match input.payload.get("v") {
-                    Some(Value::Array(outer)) => outer.len() == 2,
+                    Some(Value::Array(elements)) => elements.len() == 2,
                     _ => false,
+                },
+            },
+        ),
+        (
+            "{{x:keep; default:{{x:take; default:F}}}}{{x:take; default:F}}",
+            Entry {
+                output: "none",
+                reports: vec![],
+                formats: None,
+                input: kept,
+            },
+        ),
+        (
+            "{{x:keep; default:{{x:take; default:F}}}}{{x:keep; default:[{{x:take; default:F}}]}}{{x:take; default:F}}",
+            Entry {
+                output: "[empty]",
+                reports: vec![],
+                formats: None,
+                input: kept,
+            },
+        ),
+        (
+            "{{x:keep; default:{{x:take; default:F}}}}{{x:keep; default:[{{x:take; default:F}}]}}{{x:take; default:F}}{{x:first; default:F}}",
+            Entry {
+                output: "[empty]none",
+                reports: vec![],
+                formats: None,
+                input: kept,
+            },
+        ),
+        (
+            "{{x:keep; default:{{x:read; default:z}}}}{{x:take; default:F}}",
+            Entry {
+                output: "z",
+                reports: vec![],
+                formats: None,
+                input: kept,
+            },
+        ),
+        (
+            "{{x:keep; default:{{x:take; default:F}}}}{{x:keep; default:[{{x:taking; default:F}}]}}{{x:take; default:F}}",
+            Entry {
+                output: "[empty]",
+                reports: vec![],
+                formats: None,
+                input: kept,
+            },
+        ),
+        // At a bound of 1, the `keep-nest` alone.
+        (
+            "{{x:keep-nest; default:z}}",
+            Entry {
+                output: "z",
+                reports: vec![],
+                formats: None,
+                input: |input| {
+                    kept(input)
+                        && input.keeping.as_ref().is_some_and(|keeping| {
+                            keeping.iter().any(|(name, behaviour)| {
+                                name == "keep-nest" && *behaviour == Keeping::KeepNest
+                            })
+                        })
+                },
+            },
+        ),
+        // At a bound of 1, the `keep-nest-ne` alone, with nothing registered
+        // under the name of the format's own `ne`.
+        (
+            "<{{x:keep-nest-ne; default:{{x:keep-nest-ne; default:z}}}}>",
+            Entry {
+                output: "<empty>",
+                reports: vec![],
+                formats: None,
+                input: |input| {
+                    kept(input)
+                        && input.keeping.as_ref().is_some_and(|keeping| {
+                            keeping.iter().any(|(name, behaviour)| {
+                                name == "keep-nest-ne" && *behaviour == Keeping::KeepNestNe
+                            }) && keeping.iter().all(|(name, _)| name != "ne")
+                        })
+                        && input.descend.is_none()
                 },
             },
         ),
@@ -188,6 +316,23 @@ fn table() -> HashMap<&'static str, Entry> {
                     category: None,
                 }),
                 input: |input| input.locale.as_deref() == Some("en"),
+            },
+        ),
+        (
+            "{{n:number; maximumFractionDigits:2; useGrouping:false}}",
+            Entry {
+                output: "1234.57",
+                reports: vec![],
+                formats: Some(|| ExposedRequest {
+                    api: "NumberFormat".to_owned(),
+                    options: object(&[
+                        ("maximumFractionDigits", Value::Number(2.0)),
+                        ("useGrouping", Value::Bool(false)),
+                    ]),
+                    input: Value::Number(1234.5678),
+                    category: None,
+                }),
+                input: any,
             },
         ),
         (
@@ -297,10 +442,12 @@ fn trees(set: &Set) -> HashMap<String, TreeAnswer> {
 }
 
 // A property the toy states it cannot express: the facility, the property,
-// and the values other properties hold where it holds.
+// the values it cannot express (every value where none is named), and the
+// values other properties hold where it holds.
 type Declared = (
     &'static str,
     &'static str,
+    &'static [f64],
     &'static [(&'static str, &'static str)],
 );
 
@@ -308,6 +455,9 @@ struct Toy {
     expose: bool,
     levels: &'static [&'static str],
     unexpressible: Vec<Declared>,
+    undefined: bool,
+    reentry: Option<i64>,
+    keeps: bool,
     table: HashMap<&'static str, Entry>,
     trees: HashMap<String, TreeAnswer>,
 }
@@ -318,6 +468,9 @@ impl Toy {
             expose,
             levels: &["core", "intl"],
             unexpressible: Vec::new(),
+            undefined: true,
+            reentry: Some(1),
+            keeps: true,
             table: table(),
             trees: trees(mini()),
         }
@@ -345,16 +498,29 @@ impl Adapter for Toy {
         Some(
             self.unexpressible
                 .iter()
-                .map(|(api, property, when)| Unexpressible {
+                .map(|(api, property, values, when)| Unexpressible {
                     api: (*api).to_owned(),
                     property: (*property).to_owned(),
                     when: when
                         .iter()
                         .map(|(key, value)| ((*key).to_owned(), (*value).into()))
                         .collect(),
+                    values: values.iter().copied().map(Value::Number).collect(),
                 })
                 .collect(),
         )
+    }
+
+    fn undefined(&self) -> bool {
+        self.undefined
+    }
+
+    fn reentry(&self) -> Option<i64> {
+        self.reentry
+    }
+
+    fn keeps(&self) -> bool {
+        self.keeps
     }
 
     fn cst(&self) -> Option<CstClaim> {
@@ -411,9 +577,11 @@ impl FormatHost for MiniHost {
             _ => return None,
         };
         let style = request.options.get("style").and_then(Value::as_str);
+        let grouped = !matches!(request.options.get("useGrouping"), Some(Value::Bool(false)));
 
         Some(Ok(match (request.api.as_str(), style, input) {
-            ("NumberFormat", None, 1234.5678) => "1,234.57".to_owned(),
+            ("NumberFormat", None, 1234.5678) if grouped => "1,234.57".to_owned(),
+            ("NumberFormat", None, 1234.5678) => "1234.57".to_owned(),
             ("NumberFormat", Some("currency"), 2.0) => "$2".to_owned(),
             ("PluralRules", None, 1.0) => "one".to_owned(),
             _ => return None,
@@ -445,7 +613,7 @@ fn the_toy_passes_the_mini_set_on_both_readings() {
     for (adapter, options) in [(Toy::new(true), exposure()), (Toy::new(false), text())] {
         let result = run(&adapter, &options).unwrap();
 
-        assert_eq!(summarize(&result), "18 passed, 0 failed, 0 skipped");
+        assert_eq!(summarize(&result), "28 passed, 0 failed, 0 skipped");
         assert!(check(&adapter, &options).is_ok());
     }
 }
@@ -507,7 +675,12 @@ fn a_request_with_no_host_or_no_answer_fails_rather_than_passes() {
             .iter()
             .map(|(identity, _)| identity.clone())
             .collect::<Vec<_>>()),
-        ["mini/number", "mini/currency", "mini/plural"]
+        [
+            "mini/number",
+            "mini/ungrouped",
+            "mini/currency",
+            "mini/plural"
+        ]
     );
     assert!(result.failed.iter().all(|(_, failure)| {
         failure.reason
@@ -528,7 +701,7 @@ fn a_request_with_no_host_or_no_answer_fails_rather_than_passes() {
     };
     let result = run(&adapter, &options).unwrap();
 
-    assert_eq!(result.failed.len(), 3);
+    assert_eq!(result.failed.len(), 4);
     assert_eq!(
         result.failed[0].1.reason,
         "The runner's host holds no answer recorded for the request."
@@ -601,6 +774,7 @@ fn an_exposed_request_is_compared_by_its_entries_and_its_count() {
         reasons,
         [
             ("mini/number", "Expected one formatting request, got 2."),
+            ("mini/ungrouped", "Expected one formatting request, got 2."),
             ("mini/currency", "The properties of the request differ."),
             (
                 "mini/plural",
@@ -610,17 +784,23 @@ fn an_exposed_request_is_compared_by_its_entries_and_its_count() {
     );
 }
 
+// But the claim that the bound counts resolutions, read by a construction the
+// mini set does not hold: the toy resolves from a table, and asks for none.
 #[test]
 fn every_defect_is_caught_against_the_toy_on_both_readings() {
     for (adapter, options) in [(Toy::new(true), exposure()), (Toy::new(false), text())] {
         let audited = audit(&adapter, &options).unwrap();
 
-        assert_eq!(audited.len(), 26);
+        assert_eq!(audited.len(), 34);
 
         for entry in &audited {
             assert_eq!(
                 entry.outcome,
-                AuditOutcome::Caught,
+                if entry.entry.id == "resolutions-overstated" {
+                    AuditOutcome::Unreachable
+                } else {
+                    AuditOutcome::Caught
+                },
                 "{} observed {:?}, expects {:?}",
                 entry.entry.id,
                 entry.observed,
@@ -628,6 +808,398 @@ fn every_defect_is_caught_against_the_toy_on_both_readings() {
             );
         }
     }
+}
+
+// An implementation of `[{{x:renest; default:F}}]` alone, which keeps its
+// count of resolutions in progress on a thread, refusing one past `counts`
+// where it is set, and states `resolutions` as it is told.
+struct Renesting {
+    reentry: i64,
+    counts: Option<usize>,
+    resolutions: fn() -> Value,
+    output: i64,
+}
+
+thread_local! {
+    static IN_PROGRESS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+impl Renesting {
+    // The output of one resolution, and whether its placeholder failed; none
+    // where it is refused.
+    fn renest(&self, renest: &Renest) -> Option<(String, bool)> {
+        let held = IN_PROGRESS.get();
+
+        if self.counts.is_some_and(|bound| held > bound) {
+            return None;
+        }
+
+        IN_PROGRESS.set(held + 1);
+
+        let answer = renest.call(|| self.renest(renest).map(|(output, _)| output));
+
+        IN_PROGRESS.set(held);
+
+        Some(match answer {
+            Answer::Text(text) => (format!("[{text}]"), false),
+            _ => ("[F]".to_owned(), true),
+        })
+    }
+}
+
+impl Adapter for Renesting {
+    fn levels(&self) -> Vec<String> {
+        vec!["core".to_owned(), "extensions".to_owned()]
+    }
+
+    fn limits(&self) -> Limits {
+        Limits {
+            output: self.output,
+            read: 3,
+            conversion: 2,
+            nesting: 2,
+        }
+    }
+
+    fn reentry(&self) -> Option<i64> {
+        Some(self.reentry)
+    }
+
+    fn resolutions(&self) -> Value {
+        (self.resolutions)()
+    }
+
+    fn resolve(&self, input: &Resolution) -> Result<Option<Resolved>, String> {
+        let renest = input.renest.as_ref().ok_or("The adapter renests alone.")?;
+
+        if input.message.as_str() != Some(RENESTED) || input.modifiers.is_some() {
+            return Err("The adapter was handed other inputs.".to_owned());
+        }
+
+        let (output, failed) = self.renest(renest).ok_or("The resolution was refused.")?;
+        let reports = if failed {
+            vec![report("failed-modifier", "payload", "limits", None)]
+        } else {
+            vec![]
+        };
+
+        Ok(Some(Resolved {
+            output,
+            reports: Some(reports),
+            formats: None,
+        }))
+    }
+}
+
+fn renesting() -> Set {
+    let fixture = read_fixture(
+        "renest.json",
+        r#"{ "format": "curly-message-3", "level": "extensions", "section": "13", "cases": [
+            { "id": "renest/over-limit", "description": "Resolutions past the bound.", "generate": "reentry-resolutions-over-limit" }
+        ] }"#,
+    )
+    .unwrap();
+
+    Set {
+        fixtures: vec![fixture],
+        defects: vendored().unwrap().defects.clone(),
+    }
+}
+
+#[test]
+fn resolutions_one_inside_another_stand_as_deep_as_the_bound() {
+    let set = renesting();
+    let options = Options {
+        set: Some(&set),
+        ..Options::default()
+    };
+    let summary = |adapter: &Renesting| summarize(&run(adapter, &options).unwrap());
+    let mut adapter = Renesting {
+        reentry: 2,
+        counts: Some(2),
+        resolutions: || Value::Bool(true),
+        output: 7,
+    };
+
+    // `[[[F]]]`, and at a bound of 0, `[F]` with the failure reported.
+    assert_eq!(summary(&adapter), "1 passed, 0 failed, 0 skipped");
+    adapter.reentry = 0;
+    adapter.counts = Some(0);
+    assert_eq!(summary(&adapter), "1 passed, 0 failed, 0 skipped");
+
+    // A bound understated fails short; one overstated, or none at all, fails
+    // on the `unrefused` of the call past the bound rather than nesting on.
+    adapter.reentry = 2;
+    adapter.counts = Some(1);
+    assert!(summary(&adapter).contains(r#"Expected "[[[F]]]", actual "[[F]]""#));
+    for refuses in [Some(3), None] {
+        adapter.counts = refuses;
+        assert!(summary(&adapter).contains(r#"Expected "[[[F]]]", actual "[[[[unrefused]]]]""#));
+    }
+    adapter.counts = Some(2);
+
+    adapter.output = 6;
+    assert!(summary(&adapter).ends_with(
+        "SKIP renest/over-limit (section 13): The output limit the adapter states does not hold the brackets of as many resolutions as its bound lets stand.\n0 passed, 0 failed, 1 skipped"
+    ), "{}", summary(&adapter));
+
+    adapter.output = 7;
+    for unmade in [|| Value::Undefined, || Value::Bool(false)] {
+        adapter.resolutions = unmade;
+        assert!(summary(&adapter).contains(
+            "The adapter does not state that its bound counts a resolution asked for inside another."
+        ));
+    }
+
+    adapter.resolutions = || "true".into();
+    assert_eq!(
+        refusal(&adapter, &options),
+        "The adapter must state whether its bound counts a resolution asked for inside another, resolutions, as true or false."
+    );
+}
+
+#[test]
+fn a_claim_that_the_bound_counts_resolutions_is_audited() {
+    let set = renesting();
+    let options = Options {
+        set: Some(&set),
+        ..Options::default()
+    };
+    let outcome = |adapter: &Renesting, id: &str| {
+        audit(adapter, &options)
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.entry.id == id)
+            .unwrap()
+            .outcome
+    };
+    let mut adapter = Renesting {
+        reentry: 2,
+        counts: None,
+        resolutions: || Value::Undefined,
+        output: 7,
+    };
+
+    // Stated over an implementation that refuses no resolution, the claim
+    // fails the case; an adapter that states it carries nothing to alter.
+    assert_eq!(
+        outcome(&adapter, "resolutions-overstated"),
+        AuditOutcome::Caught
+    );
+    assert_eq!(
+        outcome(&adapter, "claims-non-boolean-resolutions"),
+        AuditOutcome::Caught
+    );
+
+    adapter.counts = Some(2);
+    adapter.resolutions = || Value::Bool(true);
+    assert_eq!(
+        outcome(&adapter, "resolutions-overstated"),
+        AuditOutcome::Unreachable
+    );
+    adapter.output = 6;
+    adapter.resolutions = || Value::Undefined;
+    assert_eq!(
+        outcome(&adapter, "resolutions-overstated"),
+        AuditOutcome::Unreachable
+    );
+}
+
+// An implementation of the two constructions built around a resolution a
+// modifier asks for, as they are built where the adapter states that its
+// bound counts resolutions: it follows each `descend` it is handed, records
+// the message of each resolution asked for, and answers `output` for the one
+// the descent leads to.
+struct Descending {
+    reentry: i64,
+    resolutions: fn() -> Value,
+    keeps: bool,
+    output: &'static str,
+    asked: std::sync::Mutex<Vec<String>>,
+}
+
+impl Descending {
+    fn new(reentry: i64, output: &'static str) -> Self {
+        Self {
+            reentry,
+            resolutions: || Value::Bool(true),
+            keeps: false,
+            output,
+            asked: std::sync::Mutex::default(),
+        }
+    }
+
+    fn asked(&self) -> Vec<String> {
+        std::mem::take(&mut *self.asked.lock().unwrap())
+    }
+
+    fn follow(&self, message: &str, input: &Resolution) -> Option<String> {
+        self.asked.lock().unwrap().push(message.to_owned());
+
+        if message != DESCEND {
+            return Some(self.output.to_owned());
+        }
+
+        match input
+            .descend
+            .as_ref()?
+            .call(|next| self.follow(next, input))
+        {
+            Answer::Text(text) => Some(text),
+            _ => None,
+        }
+    }
+}
+
+impl Adapter for Descending {
+    fn levels(&self) -> Vec<String> {
+        vec!["core".to_owned(), "extensions".to_owned()]
+    }
+
+    fn limits(&self) -> Limits {
+        Limits {
+            output: 7,
+            read: 3,
+            conversion: 2,
+            nesting: 3,
+        }
+    }
+
+    fn reentry(&self) -> Option<i64> {
+        Some(self.reentry)
+    }
+
+    fn keeps(&self) -> bool {
+        self.keeps
+    }
+
+    fn resolutions(&self) -> Value {
+        (self.resolutions)()
+    }
+
+    fn resolve(&self, input: &Resolution) -> Result<Option<Resolved>, String> {
+        let registered: Vec<Keeping> = input
+            .keeping
+            .iter()
+            .flatten()
+            .map(|(name, behaviour)| {
+                assert_eq!(name, behaviour.as_str());
+                *behaviour
+            })
+            .collect();
+
+        if registered != Keeping::ALL
+            || input.descend.is_none()
+            || input.modifiers.is_some()
+            || payload_text(input, "x").as_deref() != Some("")
+        {
+            return Err("The adapter was handed other inputs.".to_owned());
+        }
+
+        let message = input
+            .message
+            .as_str()
+            .ok_or("The adapter reads text alone.")?;
+        let output = self
+            .follow(message, input)
+            .ok_or("A descent answered nothing.")?;
+
+        Ok(Some(Resolved {
+            output,
+            reports: Some(vec![]),
+            formats: None,
+        }))
+    }
+}
+
+fn framed() -> Set {
+    let fixture = read_fixture(
+        "framed.json",
+        r#"{ "format": "curly-message-3", "level": "extensions", "section": "13", "cases": [
+            { "id": "framed/own", "description": "An own read at the bound.", "generate": "reentry-own-read-in-a-nested-resolution" },
+            { "id": "framed/defined", "description": "A read beneath the format's own modifier.", "generate": "reentry-over-limit-beneath-a-defined-modifier" }
+        ] }"#,
+    )
+    .unwrap();
+
+    Set {
+        fixtures: vec![fixture],
+        defects: vendored().unwrap().defects.clone(),
+    }
+}
+
+#[test]
+fn the_two_built_around_a_nested_resolution_stand_by_resolutions_where_the_bound_counts_them() {
+    let set = framed();
+    let options = Options {
+        set: Some(&set),
+        ..Options::default()
+    };
+    let nest = "{{x:keep-nest; default:z}}";
+    let defined = "<{{x:keep-nest-ne; default:{{x:keep-nest-ne; default:z}}}}>";
+    let outcome = |adapter: &Descending, id: &str| {
+        let result = run(adapter, &options).unwrap();
+        let line = summarize(&result);
+
+        (
+            result.passed.iter().any(|case| case.id == id),
+            line,
+            adapter.asked(),
+        )
+    };
+
+    // `B − 1` resolutions one inside another, the innermost of the message
+    // that holds the modifier, run whatever the adapter states of keeping.
+    for (id, inner, output) in [
+        ("framed/own", nest, "z"),
+        ("framed/defined", defined, "<empty>"),
+    ] {
+        let adapter = Descending::new(3, output);
+        let (passed, line, asked) = outcome(&adapter, id);
+
+        assert!(passed, "{line}");
+        assert!(
+            asked
+                .windows(3)
+                .any(|three| three == [DESCEND, DESCEND, inner]),
+            "{asked:?}"
+        );
+        assert_eq!(asked.iter().filter(|message| *message == inner).count(), 1);
+
+        // At a bound of 1 the message alone.
+        let adapter = Descending::new(1, output);
+        let (passed, line, asked) = outcome(&adapter, id);
+
+        assert!(passed, "{line}");
+        assert!(asked.contains(&inner.to_owned()) && !asked.contains(&DESCEND.to_owned()));
+    }
+
+    // A read beneath `ne` left to `keep-nest-ne` fails the second.
+    let adapter = Descending::new(3, "<z>");
+    let (passed, line, _) = outcome(&adapter, "framed/defined");
+
+    assert!(!passed);
+    assert!(
+        line.contains(r#"Expected "<empty>", actual "<z>""#),
+        "{line}"
+    );
+
+    // Unstated, the two are built from kept reads, which an adapter whose
+    // modifiers keep no input leaves out.
+    let mut adapter = Descending::new(3, "z");
+
+    adapter.resolutions = || Value::Undefined;
+    assert!(summarize(&run(&adapter, &options).unwrap()).ends_with(
+        "SKIP framed/defined (section 13): The adapter states that a modifier cannot keep an input past its call.\n0 passed, 0 failed, 2 skipped"
+    ));
+
+    // At a bound of 0 the resolution a modifier asks for may be refused.
+    let adapter = Descending::new(0, "z");
+
+    assert!(
+        summarize(&run(&adapter, &options).unwrap()).ends_with("0 passed, 0 failed, 2 skipped")
+    );
+    assert!(adapter.asked().is_empty());
 }
 
 #[test]
@@ -661,6 +1233,11 @@ fn a_defect_the_adapter_carries_nothing_for_is_unreachable() {
             "formats-wrong",
             "claims-core-only",
             "unexpressible-declared",
+            "unexpressible-conditional-declared",
+            "conversion-limit-overstated",
+            "reentry-limit-overstated",
+            "reentry-limit-understated",
+            "resolutions-overstated",
             "tree-unoffered",
             "tree-node-dropped",
             "tree-node-retyped",
@@ -683,13 +1260,14 @@ fn the_audit_needs_an_adapter_that_passes() {
     let failing = Defect::Raises.wrap(&Toy::new(true)).reached();
 
     assert!(failing);
+    let refused = audit(&Defect::OutputTruncated.wrap(&Toy::new(true)), &exposure()).unwrap_err();
+
     assert!(
-        audit(&Defect::OutputTruncated.wrap(&Toy::new(true)), &exposure())
-            .unwrap_err()
-            .message()
-            .starts_with(
-                "The audit needs an adapter that passes the set; this one fails 12 of 18 cases."
-            )
+        refused.message().starts_with(
+            "The audit needs an adapter that passes the set; this one fails 21 of 28 cases."
+        ),
+        "{}",
+        refused.message()
     );
 }
 
@@ -714,7 +1292,7 @@ fn the_catalogue_is_the_one_this_runner_carries() {
             .iter()
             .filter(|entry| entry.expects == Verdict::Error)
             .count(),
-        4
+        6
     );
 }
 
@@ -768,7 +1346,7 @@ fn a_claim_outside_the_vocabulary_refuses_the_run() {
     );
 
     toy.levels = &["core", "intl"];
-    toy.unexpressible = vec![("Collator", "usage", ALWAYS)];
+    toy.unexpressible = vec![("Collator", "usage", &[], ALWAYS)];
     assert_eq!(
         refusal(&toy, &exposure()),
         r#"The adapter names the facility "Collator"; the facilities are NumberFormat, DateTimeFormat, RelativeTimeFormat, PluralRules."#
@@ -820,8 +1398,8 @@ fn every_case_left_out_is_listed_with_its_reason() {
     let mut toy = Toy::new(true);
 
     toy.unexpressible = vec![
-        ("NumberFormat", "maximumFractionDigits", CURRENCY),
-        ("PluralRules", "localeMatcher", ALWAYS),
+        ("NumberFormat", "maximumFractionDigits", &[], CURRENCY),
+        ("PluralRules", "localeMatcher", &[], ALWAYS),
     ];
 
     let only_core = Options {
@@ -835,12 +1413,16 @@ fn every_case_left_out_is_listed_with_its_reason() {
         .map(|skipped| (skipped.identity.id.as_str(), skipped.reason.as_str()))
         .collect();
 
-    assert_eq!(planned.cases.len(), 15);
+    assert_eq!(planned.cases.len(), 24);
     assert_eq!(
         skipped,
         [
             (
                 "mini/number",
+                "The intl level is not among the levels being run."
+            ),
+            (
+                "mini/ungrouped",
                 "The intl level is not among the levels being run."
             ),
             (
@@ -865,8 +1447,23 @@ fn every_case_left_out_is_listed_with_its_reason() {
             .collect::<Vec<_>>(),
         [(
             "mini/currency",
-            "The adapter cannot express the maximumFractionDigits property of a NumberFormat request."
+            "The adapter cannot express the maximumFractionDigits property of a NumberFormat request whose style is \"currency\"."
         )]
+    );
+
+    // An entry with `values` leaves out only the requests that hold one of
+    // them.
+    toy.unexpressible = vec![("NumberFormat", "maximumFractionDigits", &[0.0], ALWAYS)];
+
+    let planned = plan(&toy, &exposure()).unwrap();
+
+    assert_eq!(
+        planned
+            .skipped
+            .iter()
+            .map(|skipped| skipped.identity.id.as_str())
+            .collect::<Vec<_>>(),
+        ["mini/currency"]
     );
 
     toy.levels = &["core"];
@@ -885,6 +1482,7 @@ fn every_case_left_out_is_listed_with_its_reason() {
             "The adapter does not claim the intl level.",
             "The adapter does not claim the intl level.",
             "The adapter does not claim the intl level.",
+            "The adapter does not claim the intl level.",
             "The adapter offers no concrete syntax tree.",
             "The adapter offers no concrete syntax tree.",
             "The adapter offers no concrete syntax tree.",
@@ -898,7 +1496,63 @@ fn every_case_left_out_is_listed_with_its_reason() {
         "SKIP mini/astral-escape (CST.md section 7): The adapter offers no concrete syntax tree."
     ));
     assert!(summary.contains("SKIP mini/plural (section 11.5): The adapter does not claim"));
-    assert!(summary.ends_with("11 passed, 0 failed, 7 skipped"));
+    assert!(summary.ends_with("20 passed, 0 failed, 8 skipped"));
+}
+
+#[test]
+fn a_construction_the_claims_cannot_build_is_left_out() {
+    let skipped = |toy: &Toy| -> Vec<(String, String)> {
+        plan(toy, &exposure())
+            .unwrap()
+            .skipped
+            .into_iter()
+            .map(|skipped| (skipped.identity.id, skipped.reason))
+            .collect()
+    };
+    let each = |ids: &[&str], reason: &str| -> Vec<(String, String)> {
+        ids.iter()
+            .map(|id| ((*id).to_owned(), reason.to_owned()))
+            .collect()
+    };
+    let counted = [
+        "mini/reentry-at-limit",
+        "mini/reentry-over-limit",
+        "mini/reentry-refused-not-recorded",
+        "mini/reentry-own-reads-free",
+        "mini/reentry-over-limit-by-a-conversion",
+        "mini/reentry-own-read-in-a-nested-resolution",
+        "mini/reentry-over-limit-beneath-a-defined-modifier",
+    ];
+    let mut toy = Toy::new(true);
+
+    toy.undefined = false;
+    assert_eq!(
+        skipped(&toy),
+        each(
+            &["mini/conversion-at-limit", "mini/conversion-over-limit"],
+            "The adapter states no stand-in for undefined, which the construction counts its nodes in."
+        )
+    );
+
+    toy.undefined = true;
+    toy.reentry = None;
+    assert_eq!(
+        skipped(&toy),
+        each(&counted, "The adapter states no bound on counted reads.")
+    );
+
+    toy.keeps = false;
+    assert_eq!(
+        skipped(&toy),
+        each(
+            &counted,
+            "The adapter states that a modifier cannot keep an input past its call."
+        )
+    );
+
+    toy.keeps = true;
+    toy.reentry = Some(-1);
+    assert!(plan(&toy, &exposure()).is_err());
 }
 
 #[test]
@@ -1001,8 +1655,10 @@ fn a_raise_or_a_panic_fails_its_case_and_the_run_goes_on() {
             ("mini/padded", "The adapter raised.", r#""the toy raised""#),
         ]
     );
-    // The four tree cases are left out: this adapter offers no tree.
-    assert_eq!(result.passed.len(), 12);
+    // The four tree cases are left out: this adapter offers no tree. So are
+    // the two constructions that count nodes in the host's undefined and the
+    // five built from a bound on counted reads, which it states neither of.
+    assert_eq!(result.passed.len(), 13);
 }
 
 #[test]
@@ -1125,10 +1781,10 @@ fn reports_are_compared_in_order_and_by_the_fields_both_sides_carry() {
     )
     .unwrap();
 
-    assert_eq!(unobserved.unobserved.len(), 14);
+    assert_eq!(unobserved.unobserved.len(), 24);
     assert!(
         summarize(&unobserved)
-            .ends_with("18 passed, 0 failed, 0 skipped, 14 passed with reports unobserved")
+            .ends_with("28 passed, 0 failed, 0 skipped, 24 passed with reports unobserved")
     );
 }
 
@@ -1235,9 +1891,9 @@ fn the_behaviours_answer_as_the_catalogue_states() {
     );
 }
 
-// Release 4.1.0 holds 771 cases: 459 at the Core level, eight of them built
-// from the adapter's limits, 53 at the Extensions level, 215 at the Intl
-// level, and 44 that pin the tree.
+// The set vendored holds 812 cases: 479 at the Core level, 70 at the
+// Extensions level, 219 at the Intl level, and 44 that pin the tree; 24 of
+// them are built from the adapter's limits or its bound on counted reads.
 #[test]
 fn the_vendored_set_is_the_release() {
     let set = vendored().unwrap();
@@ -1261,15 +1917,15 @@ fn the_vendored_set_is_the_release() {
     assert_eq!(
         counts,
         HashMap::from([
-            ("core", 459),
-            ("extensions", 53),
-            ("intl", 215),
+            ("core", 479),
+            ("extensions", 70),
+            ("intl", 219),
             ("tree", 44)
         ])
     );
-    assert_eq!(generated, 8);
-    assert_eq!(set.fixtures.len(), 18);
-    assert_eq!(set.defects.len(), 26);
+    assert_eq!(generated, 24);
+    assert_eq!(set.fixtures.len(), 19);
+    assert_eq!(set.defects.len(), 34);
     assert_eq!(Level::Core.as_str(), "core");
 }
 
@@ -1316,10 +1972,10 @@ fn every_request_of_the_set_has_its_recorded_answer() {
         .collect();
 
     assert!(recorded.iter().all(|name| names.contains(name)));
-    assert_eq!(names.len(), 154);
-    assert_eq!(recorded.len(), 119);
+    assert_eq!(names.len(), 157);
+    assert_eq!(recorded.len(), 123);
     assert_eq!(
         (host.node(), host.icu(), host.cldr()),
-        ("22.22.0", "77.1", "47.0")
+        ("22.23.5", "78.3", "48.0")
     );
 }

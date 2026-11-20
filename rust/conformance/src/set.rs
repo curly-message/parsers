@@ -13,11 +13,17 @@ use crate::RunError;
 /// The versioned identifier of the format this runner reads.
 pub const FORMAT: &str = "curly-message-3";
 
-/// The release of the set this runner carries.
+/// The release of the set this runner carries, as its manifest names it.
 pub const VERSION: &str = "4.1.0";
 
-/// The sha256 of `conformance-4.1.0.zip`, as the release notes state it.
-pub const DIGEST: &str = "9011c603dd2a87f563557c60f32a8216f99cb1935dfcf54199f309e31496fbfd";
+// BRANCH-ONLY SCAFFOLDING, to be replaced before this branch merges. The
+// archive is no release: it is built, as the set's publish workflow builds
+// one, from `conformance/` of `spec`'s main at 89d6cab, whose manifest still
+// names 4.1.0, and this is its sha256. The next release of the set replaces
+// the archive, `VERSION`, this digest and the golden file of Node's answers,
+// re-recorded from that release's requests.
+/// The sha256 of the vendored `conformance-4.1.0.zip`.
+pub const DIGEST: &str = "058ce17bda224d386ea3aa5924a61afc623ddab889f023de225ec9289ef68bfb";
 
 const ARCHIVE: &[u8] = include_bytes!("../set/conformance-4.1.0.zip");
 
@@ -120,6 +126,9 @@ pub struct ConcreteCase {
     pub message_id: Option<Json>,
     /// Host-defined modifiers, by name, in the order the case writes them.
     pub modifiers: Option<Vec<(String, Behaviour)>>,
+    /// Host-defined modifiers over one list of what was kept, by name, in
+    /// the order the case writes them.
+    pub keeping: Option<Vec<(String, Keeping)>>,
     /// The implementation-configured defaults.
     pub defaults: Option<Json>,
     /// What the resolution must produce.
@@ -335,6 +344,72 @@ pub enum Behaviour {
     Object,
 }
 
+/// A behaviour of the catalogue over one list of what host-defined modifiers
+/// kept (section 11.3). The behaviours registered for one resolution share
+/// that list with it, and with the resolution a `nest`, a `keep-nest` or a
+/// `keep-nest-ne` among them asks for while its call is in progress.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Keeping {
+    /// Keeps its default unread, and answers the empty string.
+    Keep,
+    /// Keeps its default, and answers it, read.
+    KeepDefault,
+    /// Claims the input kept last that no `take` has claimed and answers it,
+    /// read and [`shown`](crate::shown), or `none` where there is none.
+    Take,
+    /// Answers the input kept first, read and shown, or `none`.
+    First,
+    /// Answers a host value whose ordinary string conversion (section 4)
+    /// does what `take` does: in Rust, [`Display`](std::fmt::Display) of a
+    /// type of the host's own, whose `fmt` makes the read.
+    Taking,
+    /// Answers what the implementation resolves [`NESTED`](crate::NESTED)
+    /// to, asked for while its call is in progress, with the eight behaviours
+    /// over the same list as its modifiers, under their own names. It raises
+    /// where that resolution raises or answers no text.
+    Nest,
+    /// Keeps its default unread, then answers what `nest` answers, of
+    /// [`NESTED_TAKING`](crate::NESTED_TAKING): the conversion of `taking`'s
+    /// answer there reads the default it kept while it is the current
+    /// modifier.
+    KeepNest,
+    /// Does what `keep-nest` does, of
+    /// [`NESTED_DEFINED`](crate::NESTED_DEFINED): the format's own `ne`
+    /// selects the option that holds `taking` and produces it during its
+    /// call, so the conversion reads the default kept while `ne` is the
+    /// current modifier. Nothing is registered under `ne`.
+    KeepNestNe,
+}
+
+impl Keeping {
+    /// Every behaviour over a list of what was kept.
+    pub const ALL: [Keeping; 8] = [
+        Keeping::Keep,
+        Keeping::KeepDefault,
+        Keeping::Take,
+        Keeping::First,
+        Keeping::Taking,
+        Keeping::Nest,
+        Keeping::KeepNest,
+        Keeping::KeepNestNe,
+    ];
+
+    /// The behaviour as the catalogue spells it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Keep => "keep",
+            Self::KeepDefault => "keep-default",
+            Self::Take => "take",
+            Self::First => "first",
+            Self::Taking => "taking",
+            Self::Nest => "nest",
+            Self::KeepNest => "keep-nest",
+            Self::KeepNestNe => "keep-nest-ne",
+        }
+    }
+}
+
 /// A case that puts a message to the implementation's tree.
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -456,6 +531,7 @@ struct RawCase {
     #[serde(default, deserialize_with = "present")]
     message_id: Option<Json>,
     modifiers: Option<Map<String, Json>>,
+    keeping: Option<Map<String, Json>>,
     #[serde(default, deserialize_with = "present")]
     defaults: Option<Json>,
     expected: Option<Expected>,
@@ -505,6 +581,7 @@ impl RawCase {
             locale,
             message_id,
             modifiers,
+            keeping,
             defaults,
             expected,
             generate,
@@ -517,6 +594,7 @@ impl RawCase {
                 || locale.is_some()
                 || message_id.is_some()
                 || modifiers.is_some()
+                || keeping.is_some()
                 || defaults.is_some()
                 || expected.is_some();
 
@@ -542,16 +620,10 @@ impl RawCase {
             ));
         };
         let modifiers = modifiers
-            .map(|named| {
-                named
-                    .into_iter()
-                    .map(|(name, behaviour)| {
-                        Behaviour::deserialize(behaviour)
-                            .map(|behaviour| (name, behaviour))
-                            .map_err(|error| malformed(file, error))
-                    })
-                    .collect::<Result<Vec<_>, _>>()
-            })
+            .map(|named| registered::<Behaviour>(named, file))
+            .transpose()?;
+        let keeping = keeping
+            .map(|named| registered::<Keeping>(named, file))
             .transpose()?;
 
         Ok(Case::Concrete(Box::new(ConcreteCase {
@@ -564,10 +636,27 @@ impl RawCase {
             locale,
             message_id,
             modifiers,
+            keeping,
             defaults,
             expected,
         })))
     }
+}
+
+// Modifiers to register, by name, in the order the case writes them, each a
+// behaviour of one of the catalogues.
+fn registered<B: for<'de> Deserialize<'de>>(
+    named: Map<String, Json>,
+    file: &str,
+) -> Result<Vec<(String, B)>, RunError> {
+    named
+        .into_iter()
+        .map(|(name, behaviour)| {
+            B::deserialize(behaviour)
+                .map(|behaviour| (name, behaviour))
+                .map_err(|error| malformed(file, error))
+        })
+        .collect()
 }
 
 /// Reads one fixture file. A file targeting another format is kept as
@@ -731,7 +820,7 @@ fn vendored_set() -> Result<Set, RunError> {
 
     if digest != DIGEST {
         return Err(RunError::new(format!(
-            "The vendored archive is not the released set {VERSION}: its sha256 is {digest}, the release states {DIGEST}."
+            "The vendored archive is not the set {VERSION} this runner pins: its sha256 is {digest}, where {DIGEST} is pinned."
         )));
     }
 
@@ -761,9 +850,9 @@ fn vendored_set() -> Result<Set, RunError> {
     })
 }
 
-/// The set this runner carries, release 4.1.0, read once: its archive is
-/// checked against the release's digest before anything in it is read, and
-/// its manifest against the files it holds.
+/// The set this runner carries, read once: its archive is checked against
+/// [`DIGEST`] before anything in it is read, and its manifest against the
+/// files it holds.
 pub fn vendored() -> Result<&'static Set, RunError> {
     static SET: OnceLock<Result<Set, RunError>> = OnceLock::new();
 

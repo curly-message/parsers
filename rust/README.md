@@ -509,34 +509,67 @@ resolution resolves.
 
 The specification is normative: where this implementation and the
 specification disagree, this implementation is wrong. The specification's
-conformance set holds it to that. Release 4.1.0 of the set is vendored in the
-repository, checked against its digest before it is read, and
-`cargo test -p curly-message-parser` runs every case it ships through the
-adapter of section 14.3 (`tests/conformance/adapter.rs`), one test per case on each reading below:
+conformance set holds it to that. The set is vendored in the repository,
+checked against its digest before it is read, and
+`cargo test -p curly-message-parser` runs its cases through the adapter of
+section 14.3 (`tests/conformance/adapter.rs`), one test per case that runs on
+each reading below, the cases the table counts as left out aside:
 
 | Level | Cases | Without `intl` | With `intl` |
 | --- | --- | --- | --- |
-| Core | 459, 8 of them built from the limits | 459 passed | 459 passed |
-| Extensions | 53 | 53 passed | 53 passed |
-| Intl | 215 | left out: the parser claims no Intl level | 215 passed |
+| Core | 479, 16 of them built from the limits | 479 passed | 479 passed |
+| Extensions | 70, 8 of them built from the bound on counted reads | 59 passed, 11 left out | 59 passed, 11 left out |
+| Intl | 219 | left out: the parser claims no Intl level | 215 passed, 4 left out |
 | The tree of `CST.md` | 44 | 44 passed | 44 passed |
+
+The adapter states what the runner builds and leaves out by. It states a
+stand-in for the host's `undefined`, `Value::Undefined`, and a bound of
+`MAX_REENTRY - 1` on counted reads: the resolution a case asks for is the
+first in progress. It states that the bound counts a resolution asked for
+inside another, `resolutions`, since `MAX_REENTRY` counts the resolutions in
+progress on the thread as it counts the reads, so the two cases built around
+a resolution a modifier asks for stand at the bound by resolutions one inside
+another. It states that a modifier cannot keep an input past its call, since
+a `ModifierInput` lives only for the call it is lent to, so the six cases
+that read a kept input after its modifier returned are left out:
+`limits-extensions/kept-default-read-again` and five of those built from the
+bound. So are the six whose inputs hold a `refusing` tag, a value whose
+entries raise where they are read, which the runner's plain data cannot
+hold: five at the Extensions level and `plural/refusing-props-report-once`
+at the Intl level. The adapter states what `IcuIntl` cannot express, its
+`UNEXPRESSIBLE`, so the three cases whose request names `hourCycle`,
+`hour12` or a component such as `hour` are left out:
+`intl/date-hour-cycle-in-a-style`, `intl/date-hour12-in-components` and
+`intl/date-hour-cycle-in-components`.
+
+No defect of the catalogue is an implementation in which a modifier the
+format defines is not current, so a test holds the runner to failing one:
+`limits-extensions/reentry-over-limit-beneath-a-defined-modifier` answers
+`<z>` for it where the case expects `<empty>`.
 
 A case that states a formatting request rather than its text is read two
 ways with `intl`, and passes on both. On the first, the parser exposes the
 requests it made and each is compared with the one the case states: the
 facility, the properties and the input. On the second, the output is held to
-the text Node 22.22.0 (ICU 77.1, CLDR 47.0) made of the case's request,
+the text Node 22.23.5 (ICU 78.3, CLDR 48.0) made of the case's request,
 recorded in `conformance/set/golden-4.1.0.json` by `conformance/golden.mjs`.
-One of the set's requests is spelled otherwise by ICU4X than by V8: in
+Of the set's requests that `IcuIntl` can express, one is spelled otherwise
+by ICU4X than by V8: in
 `intl/date-layers-compose`, CLDR writes a narrow no-break space before `AM`,
 which V8 writes as a space. That case is measured on its request on both
 readings, and a test holds that list to exactly the requests whose text
-differs.
+differs among those of every case but the ones left out for a property the
+adapter cannot express.
 
-The runner is audited too. Each of the 26 defects of the set's catalogue,
-wrapped around the adapter, must fail a case: with `intl` all 26 do, on both
-readings; without it, 24 do, and the two that concern formatting requests
-(an extra request, a property declared unexpressible) reach no case.
+The runner is audited too. Each of the 34 defects of the set's catalogue,
+wrapped around the adapter, must be caught: the run ends as the catalogue
+expects of it, with a case failed or left out, the run in error, or reports
+said to have gone unchecked. With `intl`, 33 are, on both readings. One
+reaches no case: the one that states `resolutions` where the adapter does
+not, since this adapter states it. Without `intl`, 30 are: the three
+that concern formatting requests (an extra request, a property declared
+unexpressible, a value of one declared unexpressible where another property
+holds a given value) reach no case either.
 
 ## Benchmark
 

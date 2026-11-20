@@ -93,34 +93,6 @@ struct RawAnswer {
 
 const RECORDED: &str = include_str!("../set/golden-4.1.0.json");
 
-// The text a request is looked up by: its entries, as the runner compares
-// them, except that the sign of a zero is kept, since a host writes `-0` and
-// `0` apart.
-fn exact(value: &Value) -> String {
-    match value {
-        Value::Number(number) if *number == 0.0 && number.is_sign_negative() => "-0".to_owned(),
-        Value::Array(elements) => format!(
-            "[{}]",
-            elements.iter().map(exact).collect::<Vec<_>>().join(",")
-        ),
-        Value::Object(members) => {
-            let mut sorted: Vec<_> = members.iter().collect();
-
-            sorted.sort_by(|a, b| js::by_code_units(&a.0, &b.0));
-
-            format!(
-                "{{{}}}",
-                sorted
-                    .iter()
-                    .map(|(key, member)| format!("{}:{}", js::quote(key), exact(member)))
-                    .collect::<Vec<_>>()
-                    .join(",")
-            )
-        }
-        other => js::canonical(other),
-    }
-}
-
 fn options_or_empty(options: &Value) -> Value {
     match options {
         Value::Undefined | Value::Null => Value::object(Vec::new()),
@@ -134,8 +106,8 @@ pub(crate) fn key(locale: Option<&str>, request: &FormatRequest) -> String {
         "{}\n{}\n{}\n{}",
         locale.map_or_else(|| "-".to_owned(), |locale| format!("={locale}")),
         request.api.as_str(),
-        exact(&options_or_empty(&request.options)),
-        exact(&request.input)
+        js::canonical(&options_or_empty(&request.options)),
+        js::canonical(&request.input)
     )
 }
 
@@ -200,7 +172,7 @@ impl GoldenHost {
         })
     }
 
-    /// Node's answers to the requests of release 4.1.0 of the set, read once.
+    /// Node's answers to the requests of the vendored set, read once.
     pub fn recorded() -> Result<&'static Self, RunError> {
         static HOST: OnceLock<Result<GoldenHost, RunError>> = OnceLock::new();
 

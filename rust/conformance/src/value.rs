@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::rc::Rc;
 
 use serde_json::Value as Json;
@@ -7,6 +8,9 @@ use crate::RunError;
 /// A value of the set's inputs, decoded: JSON's shapes, plus what the tags of
 /// the README stand for. The runner depends on no implementation, so it
 /// decodes into this neutral value and an adapter maps it into its own.
+///
+/// It is plain data: reading an entry never runs code, so the `refusing` tag
+/// has no value here, and the plan leaves out the cases that hold one.
 #[derive(Clone, Debug)]
 pub enum Value {
     /// The host's absence: the `undefined` tag, or an input a case leaves out.
@@ -152,8 +156,67 @@ fn tagged(tag: &Json, count: Option<&Json>) -> Result<Value, RunError> {
             Some(count) => Ok(nodes(count)),
             None => Err(RunError::new("A nodes tag needs a numeric count.")),
         },
+        Some(REFUSING) => Err(RunError::new(
+            "A refusing tag has no value here, so its case is left out rather than run.",
+        )),
         _ => Err(RunError::new(format!("Unknown tag {tag}."))),
     }
+}
+
+const REFUSING: &str = "refusing";
+
+/// Whether an input holds a `refusing` tag, at any depth.
+pub(crate) fn refuses(json: &Json) -> bool {
+    match json {
+        Json::Array(elements) => elements.iter().any(refuses),
+        Json::Object(members) => match members.get(TAG) {
+            Some(tag) => tag.as_str() == Some(REFUSING),
+            None => members.values().any(refuses),
+        },
+        _ => false,
+    }
+}
+
+/// A value with every member that holds the host's absence left out, at
+/// every depth: what the runner hands an adapter that states no stand-in
+/// for `undefined`, for which an entry that holds it is an entry not there.
+/// A shared array or object is rebuilt once and shared again, so a value the
+/// `nodes` tag built stays as small as it was.
+pub(crate) fn without_undefined(value: &Value) -> Value {
+    strip(value, &mut HashMap::new())
+}
+
+fn strip(value: &Value, built: &mut HashMap<usize, Value>) -> Value {
+    let address = match value {
+        Value::Array(elements) => Rc::as_ptr(elements) as usize,
+        Value::Object(members) => Rc::as_ptr(members) as usize,
+        other => return other.clone(),
+    };
+
+    if let Some(stripped) = built.get(&address) {
+        return stripped.clone();
+    }
+
+    let stripped = match value {
+        Value::Array(elements) => Value::array(
+            elements
+                .iter()
+                .map(|element| strip(element, built))
+                .collect(),
+        ),
+        Value::Object(members) => Value::object(
+            members
+                .iter()
+                .filter(|(_, member)| !member.is_undefined())
+                .map(|(key, member)| (key.clone(), strip(member, built)))
+                .collect(),
+        ),
+        other => other.clone(),
+    };
+
+    built.insert(address, stripped.clone());
+
+    stripped
 }
 
 /// An input a case may leave out: decoded where it is written, and the
