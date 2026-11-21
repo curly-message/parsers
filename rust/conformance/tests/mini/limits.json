@@ -1,0 +1,24 @@
+{
+  "format": "curly-message-3",
+  "level": "core",
+  "section": "13",
+  "cases": [
+    { "id": "mini/output-at-limit", "description": "At the output limit.", "generate": "output-at-limit" },
+    { "id": "mini/output-over-limit", "description": "Past the output limit.", "generate": "output-over-limit" },
+    { "id": "mini/output-over-limit-continues", "description": "Past the output limit, and on.", "generate": "output-over-limit-continues" },
+    { "id": "mini/read-at-limit", "description": "At the read limit.", "generate": "read-at-limit" },
+    { "id": "mini/read-over-limit", "description": "Past the read limit.", "generate": "read-over-limit" },
+    { "id": "mini/conversion-at-limit", "description": "At the conversion limit.", "generate": "conversion-at-limit" },
+    { "id": "mini/conversion-over-limit", "description": "Past the conversion limit.", "generate": "conversion-over-limit" },
+    { "id": "mini/conversion-over-limit-continues", "description": "Past the conversion limit, and on.", "generate": "conversion-over-limit-continues" },
+    { "id": "mini/nesting-at-limit", "description": "At the nesting limit.", "generate": "nesting-at-limit" },
+    { "id": "mini/nesting-over-limit", "description": "Past the nesting limit.", "generate": "nesting-over-limit" },
+    { "id": "mini/reentry-at-limit", "description": "At the bound on counted reads.", "generate": "reentry-at-limit" },
+    { "id": "mini/reentry-over-limit", "description": "Past the bound on counted reads.", "generate": "reentry-over-limit" },
+    { "id": "mini/reentry-refused-not-recorded", "description": "A refused read, read again.", "generate": "reentry-refused-not-recorded" },
+    { "id": "mini/reentry-own-reads-free", "description": "Own reads inside counted reads.", "generate": "reentry-own-reads-free" },
+    { "id": "mini/reentry-over-limit-by-a-conversion", "description": "Past the bound, by a conversion.", "generate": "reentry-over-limit-by-a-conversion" },
+    { "id": "mini/reentry-own-read-in-a-nested-resolution", "description": "An own read in a nested resolution.", "generate": "reentry-own-read-in-a-nested-resolution" },
+    { "id": "mini/reentry-over-limit-beneath-a-defined-modifier", "description": "A read beneath a modifier the format defines.", "generate": "reentry-over-limit-beneath-a-defined-modifier" }
+  ]
+}
