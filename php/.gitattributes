@@ -1,0 +1,15 @@
+* text=auto eol=lf
+
+/tests export-ignore
+/conformance export-ignore
+/bench export-ignore
+/tools export-ignore
+/package.json export-ignore
+/.php-version export-ignore
+/composer.lock export-ignore
+/phpunit.xml export-ignore
+/phpstan.neon export-ignore
+/.php-cs-fixer.dist.php export-ignore
+/BENCH.md export-ignore
+/.gitattributes export-ignore
+/.gitignore export-ignore

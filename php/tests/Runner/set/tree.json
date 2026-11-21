@@ -1,0 +1,35 @@
+{
+  "format": "curly-message-3",
+  "kind": "tree",
+  "section": "6",
+  "cases": [
+    {
+      "id": "tree/escaped-key",
+      "description": "A key whose name is unescaped, beside text outside ASCII.",
+      "message": "\u00e9{{k\\;:m}}",
+      "expected": [
+        { "type": "text", "text": "\u00e9" },
+        {
+          "type": "placeholder",
+          "text": "{{k\\;:m}}",
+          "nodes": [
+            { "type": "open", "text": "{{" },
+            {
+              "type": "key",
+              "text": "k\\;",
+              "name": "k;",
+              "nodes": [
+                { "type": "text", "text": "k" },
+                { "type": "escape", "text": "\\;", "cancels": true }
+              ]
+            },
+            { "type": "separator", "text": ":" },
+            { "type": "modifier", "text": "m", "name": "m", "nodes": [{ "type": "text", "text": "m" }] },
+            { "type": "close", "text": "}}" }
+          ]
+        }
+      ],
+      "resolves": "\u00e9"
+    }
+  ]
+}
