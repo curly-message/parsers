@@ -40,6 +40,7 @@ export const contextOf = ({ payload, props, locale, id }: Input): Parser.Context
 export const adapter: Adapter = {
   levels: ['core', 'intl', 'extensions'],
   limits: { output: 100000, read: 100000, conversion: 100000, nesting: 8 },
+  reentry: 32,
   // CST.md section 4 lets an implementation count its spans in whatever unit
   // its strings are indexed by, and asks it to say which: these are ECMAScript
   // string indices, so UTF-16 code units.

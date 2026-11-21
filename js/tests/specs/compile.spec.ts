@@ -18,27 +18,39 @@ const resolved = (input: Input, context: Parser.Context) => {
 // Every case of the set compiled once, and its compiled message resolved
 // first with the context of the case before it, then twice with its own:
 // each resolution returns and reports what `resolve` does for the message
-// and that context.
+// and that context. A resolution a modifier of the set asks for from inside
+// one is resolved once, as the modifier asked: it reads what the modifiers
+// kept, which a second resolution of it would find spent.
 let previous: Input | undefined;
+let inside = false;
 
 const compiled: Adapter = {
   ...adapter,
   resolve: (input) => {
-    const reports: Report[] = [];
-    const { compile } = parserFor(input, reports);
-    const message = compile(input.message);
-    const resolution = (context: Parser.Context) => ({ output: message.resolve(context), reports: reports.splice(0) });
+    if (inside) return adapter.resolve(input);
 
-    if (previous) expect(resolution(contextOf(previous))).toEqual(resolved(input, contextOf(previous)));
+    inside = true;
 
-    previous = input;
+    try {
+      const reports: Report[] = [];
+      const { compile } = parserFor(input, reports);
+      const message = compile(input.message);
+      const resolution = (context: Parser.Context) => ({ output: message.resolve(context), reports: reports.splice(0) });
 
-    const runs = [0, 1].map(() => resolution(contextOf(input)));
+      if (previous) expect(resolution(contextOf(previous))).toEqual(resolved(input, contextOf(previous)));
 
-    expect(runs[0]).toEqual(resolved(input, contextOf(input)));
-    expect(runs[1]).toEqual(runs[0]);
+      previous = input;
 
-    return runs[1];
+      const runs = [0, 1].map(() => resolution(contextOf(input)));
+
+      expect(runs[0]).toEqual(resolved(input, contextOf(input)));
+      expect(runs[1]).toEqual(runs[0]);
+
+      return runs[1];
+    }
+    finally {
+      inside = false;
+    }
   },
 };
 

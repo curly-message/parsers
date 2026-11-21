@@ -149,6 +149,15 @@
   three refusing entries reported three times on every call. The registry is
   one input of the call, so it reports once, naming the message. The entries
   that refuse are still not registered, and the ones that answer still are.
+* **The package is larger.** `compile` and the bound on kept reads bring the
+  minified entry point from 15 576 bytes in 3.1.2 to 17 970, and from about
+  6.2 kB to about 7.2 kB gzipped.
+* **The adapter states the bound on kept reads.** The conformance set 4.2.0
+  builds its cases of section 13's counted reads from the `reentry` an
+  adapter states, so the adapter states 32 and the package tests against
+  `@curly-message/conformance` 4.2.0. The set leaves out one case, built from
+  a bound that counts a resolution asked for inside another: this bound
+  counts kept reads alone.
 
 ## 3.1.2
 
