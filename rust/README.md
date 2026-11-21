@@ -98,8 +98,9 @@ text, with:
   built with by `modifier_defaults`, then the context's, then the wrapper's,
   each overriding the properties it names. `Undefined` names nothing, and
   `Null` is a property like any other. They are a [`Props`], read where the
-  layers hold them and never copied, so what they hold costs a placeholder
-  nothing; `to_object` makes an object of them.
+  layers hold them and never copied, so composing them costs a placeholder
+  nothing, whatever they hold (see [Limits](#limits)); `to_object` makes an
+  object of them.
 * the locale, as the caller wrote it.
 
 Every accessor borrows the input alone, so a modifier may hold any number of
@@ -425,6 +426,28 @@ formatting in a zone name the process has not used yet, runs on a thread of
 zone name needs. On x86-64 Linux with Rust 1.97 it takes about 600 KiB in a
 debug build (about 580 KiB with Rust 1.88), and about 120 KiB in a release
 build.
+
+No limit counts the work done on what a modifier is handed before it
+answers (section 13). In this crate it grows as follows:
+
+* Removing the padding around an option's value or an inline default reads
+  the padding alone, from either end, each time the walk reads the
+  placeholder: it grows with the padding, and an option holding nested
+  placeholders is not read again at each level.
+* An option key is read as a number by StringToNumber, which grows with the
+  key. `plural` and `ordinal` read each key once for the placeholder, before
+  any category is asked for; `lt`, `lte`, `gt` and `gte` read each key once
+  and sort the keys that are numbers, so they grow with the keys' length,
+  and with their count by `n log n`.
+* Props are composed by reference, at most six layers for a placeholder,
+  whatever the layers hold. A property a formatting modifier converts
+  itself, `minimumFractionDigits` for `number` and `plural` and `ratio` for
+  `currency`, is converted once per resolution from the parser's and the
+  context's layers, and once per placeholder where a wrapper adds props of
+  its own. `IcuIntl` converts each property it reads as a number at each
+  request it is handed: `minimumFractionDigits` written as text is converted
+  again at every `number`, `currency` and `plural` placeholder, since
+  `plural` reads `number`'s digits. Converting text grows with its length.
 
 ## Values
 
