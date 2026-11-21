@@ -1,6 +1,6 @@
 # Changelog
 
-### 3.2.0 (Unreleased)
+## 3.2.0
 
 * **A message can be compiled once and resolved many times.** What
   `createParser()` returns has `compile(message)` beside `resolve`: a compiled
