@@ -158,18 +158,31 @@ describe('what a parser keeps of a message', () => {
 
 // Every case of the set resolved twice by one parser, the second time from
 // what the first kept, and once more from it: the outputs and the reports
-// agree with the first.
+// agree with the first. A resolution a modifier of the set asks for from
+// inside one is resolved once, as the modifier asked: it reads what the
+// modifiers kept, which a second resolution of it would find spent.
+let inside = false;
+
 const thrice: Adapter = {
   ...adapter,
   resolve: (input) => {
-    const reports: Report[] = [];
-    const { resolve } = parserFor(input, reports);
-    const runs = [0, 1, 2].map(() => ({ output: resolve(input.message, contextOf(input)), reports: reports.splice(0) }));
+    if (inside) return adapter.resolve(input);
 
-    expect(runs[1]).toEqual(runs[0]);
-    expect(runs[2]).toEqual(runs[0]);
+    inside = true;
 
-    return runs[2];
+    try {
+      const reports: Report[] = [];
+      const { resolve } = parserFor(input, reports);
+      const runs = [0, 1, 2].map(() => ({ output: resolve(input.message, contextOf(input)), reports: reports.splice(0) }));
+
+      expect(runs[1]).toEqual(runs[0]);
+      expect(runs[2]).toEqual(runs[0]);
+
+      return runs[2];
+    }
+    finally {
+      inside = false;
+    }
   },
 };
 
