@@ -93,6 +93,17 @@ fn nested(depth: usize) -> String {
     format!("{}x{}", "{{v; a:".repeat(depth), "}}".repeat(depth))
 }
 
+// Numbers as a payload most often holds them: integers and short decimals.
+const NUMBERS: &str = "{{a}} {{b}} {{c}} {{d}}";
+
+fn numbers() -> Object {
+    Object::new()
+        .with("a", 0.5)
+        .with("b", 15.0)
+        .with("c", 1.0)
+        .with("d", 2.75)
+}
+
 fn flat(count: usize) -> String {
     (0..count)
         .map(|index| format!("{{{{p{index}}}}}"))
@@ -226,6 +237,17 @@ const ROWS: &[Row] = &[
 
             allocations(|| {
                 black_box(parser.resolve(message.as_str(), &Context::new().payload(&payload)));
+            })
+        }),
+    },
+    Row {
+        name: "allocations: resolving four numbers written as text",
+        measure: Measure::Count(|| {
+            let parser = Parser::new();
+            let payload = numbers();
+
+            allocations(|| {
+                black_box(parser.resolve(NUMBERS, &Context::new().payload(&payload)));
             })
         }),
     },
@@ -380,6 +402,13 @@ const ROWS: &[Row] = &[
                     }
                 })
             },
+        },
+    },
+    Row {
+        name: "resolve: four numbers written as text",
+        measure: Measure::Time {
+            batch: 10_000,
+            setup: || resolving(Parser::new(), NUMBERS.to_owned(), numbers()),
         },
     },
     Row {
