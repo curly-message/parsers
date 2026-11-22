@@ -121,6 +121,38 @@ fn ordinal_selects_a_position() {
 }
 
 #[test]
+fn a_deprecated_tag_reads_as_the_tag_that_replaced_it() {
+    let (parser, reports) = recording();
+    let plural = "{{n:plural; zero:zero; one:one; two:two; few:few; many:many; other:other}}";
+    let select = |n: i32, locale: &str| {
+        parser.resolve(
+            plural,
+            &Context::new()
+                .payload(&Object::new().with("n", n))
+                .locale(locale),
+        )
+    };
+    let payload = Object::new()
+        .with("when", "2024-03-05T10:00:00Z")
+        .with("delta", -86_400_000);
+    let format = |locale: &str| {
+        parser.resolve(
+            "{{when:date}} | {{delta:ago}}",
+            &Context::new().payload(&payload).locale(locale),
+        )
+    };
+
+    assert_eq!([select(1, "he"), select(2, "he")], ["one", "two"]);
+    assert_eq!([select(1, "iw"), select(2, "iw")], ["one", "two"]);
+    assert_eq!(select(0, "fil"), "one");
+    assert_eq!(select(0, "tl"), "one");
+    assert_eq!(format("iw"), format("he"));
+    assert_eq!(format("iw-IL"), format("he-IL"));
+    assert_eq!(format("en-GB"), "05/03/2024 | yesterday");
+    assert!(reports.lock().unwrap().is_empty());
+}
+
+#[test]
 fn a_request_the_facility_refuses_takes_the_chain() {
     let (parser, reports) = recording();
     let payload = Object::new().with("n", 1);

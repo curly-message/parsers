@@ -20,6 +20,7 @@ intl = [
     "dep:icu_datetime",
     "dep:icu_decimal",
     "dep:icu_experimental",
+    "dep:icu_locale",
     "dep:icu_locale_core",
     "dep:icu_plurals",
     "dep:icu_provider",
@@ -34,6 +35,7 @@ icu_calendar = { version = "2.3", optional = true }
 icu_datetime = { version = "2.3", optional = true }
 icu_decimal = { version = "2.3", optional = true }
 icu_experimental = { version = "0.6", optional = true }
+icu_locale = { version = "2.3", optional = true }
 icu_locale_core = { version = "2.3", optional = true }
 icu_plurals = { version = "2.3", optional = true }
 # Its `logging` feature sends what ICU4X has to say about missing data to the
