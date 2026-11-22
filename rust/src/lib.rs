@@ -30,6 +30,9 @@ pub use depth::ReentryLimit;
 pub use icu::{IcuIntl, UNEXPRESSIBLE};
 pub use intl::{Api, Category, Input, Intl, Refusal, Request, Unexpressible, Unit};
 pub use modifier::{Modifier, ModifierError, ModifierInput};
+pub use number::{
+    modifier_input, to_js_string as string_conversion, to_number as numeric_conversion,
+};
 pub use parser::{Context, Level, Message, Parser, ParserBuilder};
 pub use props::Props;
 pub use report::{Code, Origin, Report};

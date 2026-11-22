@@ -514,6 +514,14 @@ The second bound is what a container naming one large child many times meets,
 which visits few nodes. A value
 is converted once per resolution however many placeholders read it.
 
+The crate exports the conversions it reads numbers with, so a tool can read
+a message as the parser does: `string_conversion`, the text a number
+converts to (section 4: `1e+21`); `numeric_conversion`, what `lt`, `lte`,
+`gt` and `gte` read the value and each key as (sections 4 and 11.1: blank
+text is 0, `1e999` an infinity, `NaN` no number); and `modifier_input`, what
+a formatting modifier formats and `plural` and `ordinal` select for
+(sections 11.2 and 11.5: blank text and an infinity are no number).
+
 A payload entry holding only `value`, `default` and `props` is a wrapper: it
 configures the value it holds rather than being one (section 4.1). A caller
 whose payload holds entries it did not write turns that off with

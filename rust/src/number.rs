@@ -2,16 +2,31 @@ use crate::convert::display;
 use crate::scan::is_blank;
 use crate::value::Value;
 
-/// A double as ECMAScript's `Number::toString` writes it: `1e+21`, `1e-7`,
-/// `0.000001`, `0` for `-0`, `Infinity`, `NaN`. Rust's `{:e}` gives the
-/// shortest digits that read back as the same double, and the digits are laid
-/// out by that operation's rules, so a number renders the same text here as in
-/// JavaScript.
+/// The ordinary string conversion of a number (section 4): the text a
+/// [`Value::Number`] converts to, and so the text an option key or a
+/// comparison meets for it. The conversion is ECMAScript's
+/// `Number::toString`: the shortest digits that read back as the same
+/// double, laid out by that operation's rules, so a number writes the same
+/// text here as in JavaScript.
+///
+/// ```
+/// use curly_message_parser::string_conversion;
+///
+/// assert_eq!(string_conversion(0.5), "0.5");
+/// assert_eq!(string_conversion(1e20), "100000000000000000000");
+/// assert_eq!(string_conversion(1e21), "1e+21");
+/// assert_eq!(string_conversion(1e-7), "1e-7");
+/// assert_eq!(string_conversion(2516583712.37890625), "2516583712.3789062");
+/// assert_eq!(string_conversion(0.000001), "0.000001");
+/// assert_eq!(string_conversion(-0.0), "0");
+/// assert_eq!(string_conversion(f64::NEG_INFINITY), "-Infinity");
+/// assert_eq!(string_conversion(f64::NAN), "NaN");
+/// ```
 #[expect(
     clippy::arithmetic_side_effects,
     reason = "a double's decimal exponent and digit count lie within a few hundred"
 )]
-pub(crate) fn to_js_string(number: f64) -> String {
+pub fn to_js_string(number: f64) -> String {
     if number.is_nan() {
         return "NaN".to_owned();
     }
@@ -141,15 +156,36 @@ fn exact_digits(number: f64) -> Option<u128> {
     }
 }
 
-/// ECMAScript's StringToNumber: the number text denotes, or NaN.
+/// The ordinary numeric conversion of text (section 4): what a numeric
+/// comparison, `lt`, `lte`, `gt` or `gte`, reads the value and each option
+/// key as (section 11.1). NaN is no number, and a key that reads as NaN is
+/// never selected by one; an infinity is a number there.
 ///
-/// Members of section 6's whitespace class are removed from both ends, which
-/// is exactly ECMAScript's StrWhiteSpaceChar; empty text is 0; `0x`, `0o` and
+/// The conversion is ECMAScript's StringToNumber. Members of section 6's
+/// whitespace class are removed from both ends, which is exactly
+/// ECMAScript's StrWhiteSpaceChar; empty or blank text is 0; `0x`, `0o` and
 /// `0b` introduce an unsigned integer in that base; `Infinity` is spelled
-/// exactly; anything else must be a StrDecimalLiteral. So `" 12 "` is 12,
-/// `0x10` is 16, and `1_000`, `inf` and `nan` are NaN, as `Number()` reads
-/// them.
-pub(crate) fn to_number(text: &str) -> f64 {
+/// exactly; anything else must be a StrDecimalLiteral, and one past the
+/// largest double is an infinity. What a formatting modifier or a plural
+/// selection reads is [`modifier_input`], which reads blank text and an
+/// infinity as no number.
+///
+/// ```
+/// use curly_message_parser::numeric_conversion;
+///
+/// assert_eq!(numeric_conversion(" 12 "), 12.0);
+/// assert_eq!(numeric_conversion("2.0"), 2.0);
+/// assert_eq!(numeric_conversion("0x10"), 16.0);
+/// assert_eq!(numeric_conversion(""), 0.0);
+/// assert_eq!(numeric_conversion("  "), 0.0);
+/// assert_eq!(numeric_conversion("1e999"), f64::INFINITY);
+/// assert_eq!(numeric_conversion("-Infinity"), f64::NEG_INFINITY);
+/// assert!(numeric_conversion("NaN").is_nan());
+/// assert!(numeric_conversion("inf").is_nan());
+/// assert!(numeric_conversion("1_000").is_nan());
+/// assert!(numeric_conversion("12px").is_nan());
+/// ```
+pub fn to_number(text: &str) -> f64 {
     let text = text.trim_matches(is_blank);
 
     match text {
@@ -320,10 +356,29 @@ fn civil_from_days(days: i64) -> (i64, i64, i64) {
     (year, month, day)
 }
 
-/// The number a formatting modifier formats (section 11.2): none for text
-/// that is blank, since `""` reads as 0 and would format a number nobody
-/// wrote, and none for text that is not a finite number.
-pub(crate) fn modifier_input(text: &str) -> Option<f64> {
+/// The number section 11.2's test reads text as: what a formatting modifier
+/// formats (section 11.2), and what `plural` and `ordinal` select for, the
+/// value and an option key that is a number alike (section 11.5).
+///
+/// It is the [`numeric_conversion`](crate::numeric_conversion) of the text
+/// where that is finite, and none where the text is empty or blank
+/// (section 11.2), which the conversion reads as 0 and would format a number
+/// nobody wrote, or where the conversion yields NaN or an infinity.
+///
+/// ```
+/// use curly_message_parser::modifier_input;
+///
+/// assert_eq!(modifier_input(" 12 "), Some(12.0));
+/// assert_eq!(modifier_input("+1e3"), Some(1000.0));
+/// assert_eq!(modifier_input("0"), Some(0.0));
+/// assert_eq!(modifier_input(""), None);
+/// assert_eq!(modifier_input("  "), None);
+/// assert_eq!(modifier_input("1e999"), None);
+/// assert_eq!(modifier_input("Infinity"), None);
+/// assert_eq!(modifier_input("NaN"), None);
+/// assert_eq!(modifier_input("12px"), None);
+/// ```
+pub fn modifier_input(text: &str) -> Option<f64> {
     if text.chars().all(is_blank) {
         return None;
     }
