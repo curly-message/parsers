@@ -193,6 +193,9 @@ ECMA-402 reads them, coercions included: a property ECMA-402 raises a
 `RangeError` or a `TypeError` for is a refusal, a `currency` style naming no
 well-formed `currency` among them. So is a locale ECMA-402 reads as no
 structurally valid language tag (`en_US`, `i-klingon`, `en-fonipa-fonipa`).
+Before any data is read, a locale is canonicalized by the alias data ICU4X
+carries, so a tag CLDR lists as an alias reads as the tag it names (`iw` as
+`he`).
 A well-formed locale ICU4X holds no data for (`zz`) formats with the data its
 locale fallback finds, the root locale's at last, as ECMA-402 falls back to a
 locale it holds. `IcuIntl` reads a property as
@@ -207,7 +210,13 @@ hands it each one with the locale as the caller wrote it.
   modifier used), most of it time zones and their names. ICU4X 2.3 is a
   locked dependency: with `intl`, an application's graph must hold ICU4X
   2.3.x. What ICU4X has to say about data it lacks goes to the
-  [`log`](https://docs.rs/log) facade, which the application routes.
+  [`log`](https://docs.rs/log) facade, which the application routes. The
+  locale data and rules of the Intl level are ICU4X's, and so are its
+  aliases and its locale fallback: a tag whose alias names a locale ICU4X
+  holds no data for reads the data that locale falls back to. Where ICU4X's
+  data, aliases or fallback differ from another host's,
+  `IcuIntl` answers as ICU4X does, and its output differs by locale data
+  alone (section 11.2).
 * **Dates** are read as a timestamp first, as section 11.2 orders it, and
   otherwise by this grammar: `YYYY[-MM[-DD]]`, or `+YYYYYY[-MM[-DD]]` or
   `-YYYYYY[-MM[-DD]]`; then optionally `T`, `t` or one space and

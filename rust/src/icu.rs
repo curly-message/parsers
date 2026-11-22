@@ -19,6 +19,7 @@ use icu_experimental::dimension::percent::formatter::PercentFormatter;
 use icu_experimental::dimension::percent::options::Display;
 use icu_experimental::relativetime::RelativeTimeFormatter;
 use icu_experimental::relativetime::options::{Numeric, RelativeTimeFormatterOptions};
+use icu_locale::LocaleCanonicalizer;
 use icu_locale_core::Locale;
 use icu_locale_core::extensions::unicode::{Value as Keyword, key};
 use icu_plurals::{PluralCategory, PluralRules};
@@ -172,14 +173,18 @@ fn refused(error: impl std::fmt::Display) -> Refusal {
     Refusal::new(error.to_string())
 }
 
-// A locale ECMA-402 would read: a BCP 47 tag, with the numbering system and
-// the calendar a request names set as its Unicode extension keywords.
+// A locale ECMA-402 would read: a BCP 47 tag, canonicalized by the alias data
+// ICU4X carries, so an alias reaches the data under the tag it names, with
+// the numbering system and the calendar a request names set as its Unicode
+// extension keywords.
 fn parse_locale(
     tag: &str,
     numbering_system: Option<&str>,
     calendar: Option<&str>,
 ) -> Result<Locale, Refusal> {
     let mut locale = Locale::try_from_str(tag).map_err(refused)?;
+
+    LocaleCanonicalizer::new_extended().canonicalize(&mut locale);
 
     if let Some(system) = numbering_system {
         let system = Keyword::try_from_str(system).map_err(refused)?;
