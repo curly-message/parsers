@@ -122,6 +122,43 @@ fn a_value_converts_by_section_4() {
     }
 }
 
+// Each row was read off Node 22: `String(x)`. The first two lie exactly
+// halfway between their two nearest shortest digit strings, and ECMAScript
+// takes the even one; the rest lie off a tie.
+#[test]
+#[expect(
+    clippy::excessive_precision,
+    reason = "each tie is written as the exact value it is"
+)]
+fn a_number_halfway_between_two_shortest_texts_takes_the_even_one() {
+    let cases = [
+        (2_516_583_712.378_906_25, "2516583712.3789062"),
+        (-1_600_987_034_202_908.25, "-1600987034202908.2"),
+        (2_516_583_712.378_906_7, "2516583712.3789067"),
+        (2_516_583_712.378_906, "2516583712.378906"),
+        (-1_600_987_034_202_908.5, "-1600987034202908.5"),
+        (0.1 + 0.2, "0.30000000000000004"),
+        (2.5, "2.5"),
+        (1e23, "1e+23"),
+    ];
+
+    for (number, text) in cases {
+        let payload = Object::new().with("v", number);
+
+        assert_eq!(resolve("{{v}}", &payload), text, "{number:?}");
+    }
+
+    let payload = Object::new().with("v", 2_516_583_712.378_906_25);
+
+    assert_eq!(
+        resolve(
+            "{{v; 2516583712.3789062:even; 2516583712.3789063:up}}",
+            &payload
+        ),
+        "even"
+    );
+}
+
 #[test]
 fn a_value_nobody_passed_takes_the_chain_and_one_no_conversion_describes_reports() {
     let (parser, reports) = recording();

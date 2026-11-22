@@ -33,6 +33,7 @@ pub(crate) fn to_js_string(number: f64) -> String {
     let (mantissa, exponent) = scientific.split_once('e').unwrap_or((&scientific, "0"));
     let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
     let exponent: i64 = exponent.parse().unwrap_or(0);
+    let digits = even_at_a_tie(number.abs(), digits, exponent);
     // `k` digits with the decimal point after the `n`th, as ECMAScript names
     // them.
     let k = digits.len() as i64;
@@ -57,6 +58,87 @@ pub(crate) fn to_js_string(number: f64) -> String {
     };
 
     format!("{sign}{body}")
+}
+
+// Of two shortest digit strings equally close to the double, ECMAScript's
+// `Number::toString` takes the even one, where Rust's `{:e}` takes the upper.
+// They tie only where the double's exact decimal expansion is the shortest
+// digits and one more, a 5; that expansion is read off the double exactly,
+// and the even string is taken where it reads back as the double.
+fn even_at_a_tie(number: f64, digits: String, exponent: i64) -> String {
+    let Some(exact) = exact_digits(number) else {
+        return digits;
+    };
+
+    // Decided before anything is allocated, since most numbers written, the
+    // integers and short decimals, are their own shortest digits.
+    let one_digit_more = exact
+        .checked_ilog10()
+        .and_then(|log| usize::try_from(log).ok())
+        == Some(digits.len());
+
+    if !one_digit_more || exact.checked_rem(10) != Some(5) {
+        return digits;
+    }
+
+    let truncated = exact.checked_div(10).unwrap_or(0);
+    let even = if truncated.checked_rem(2) == Some(0) {
+        Some(truncated)
+    } else {
+        truncated.checked_add(1)
+    };
+    let shortest = digits.parse::<u128>().ok();
+    let is_candidate = shortest == Some(truncated) || shortest == truncated.checked_add(1);
+    let places = i64::try_from(digits.len())
+        .ok()
+        .and_then(|k| exponent.checked_sub(k)?.checked_add(1));
+
+    match (even, places) {
+        (Some(even), Some(places)) if is_candidate && shortest != Some(even) => {
+            let even = even.to_string();
+
+            if even.len() == digits.len() && format!("{even}e{places}").parse::<f64>() == Ok(number)
+            {
+                even
+            } else {
+                digits
+            }
+        }
+        _ => digits,
+    }
+}
+
+// The digits of a finite, non-zero double's exact decimal expansion as an
+// integer `N`, the double being `N` times a power of ten, where `N` holds
+// fewer than 39 digits; a tie needs at most 18. The double is `m * 2^q` with
+// `m` odd: for a negative `q` that is `m * 5^-q * 10^q`, and for a positive
+// one `m / 5^q * 10^q`, where `5^q` divides `m`, and otherwise its digits end
+// in an even one.
+fn exact_digits(number: f64) -> Option<u128> {
+    let bits = number.to_bits();
+    let fraction = bits & ((1 << 52) - 1);
+    let biased = (bits >> 52) & 0x7ff;
+    let (significand, power) = if biased == 0 {
+        (fraction, -1074)
+    } else {
+        (
+            fraction | (1 << 52),
+            i64::try_from(biased).ok()?.checked_sub(1075)?,
+        )
+    };
+    let zeros = significand.trailing_zeros();
+    let odd = significand.checked_shr(zeros)?;
+    let power = power.checked_add(i64::from(zeros))?;
+
+    if power >= 0 {
+        let five = 5_u64.checked_pow(u32::try_from(power).ok()?)?;
+
+        (odd.checked_rem(five)? == 0).then(|| u128::from(odd.checked_div(five).unwrap_or(0)))
+    } else {
+        5_u128
+            .checked_pow(u32::try_from(power.unsigned_abs()).ok()?)?
+            .checked_mul(u128::from(odd))
+    }
 }
 
 /// ECMAScript's StringToNumber: the number text denotes, or NaN.
