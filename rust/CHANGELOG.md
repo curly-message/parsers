@@ -10,3 +10,6 @@
   locale falls back to. The locale data, aliases, rules and fallback of the
   Intl level are ICU4X's: where they differ from another host's, `IcuIntl`
   answers as ICU4X does.
+* **The number conversions are public.** `string_conversion` (section 4),
+  `numeric_conversion` (sections 4 and 11.1) and `modifier_input`
+  (sections 11.2 and 11.5) read and write a number as the parser does.
