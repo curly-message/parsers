@@ -1,5 +1,8 @@
 # curly-message for Go
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/curly-message/parsers/go.svg)](https://pkg.go.dev/github.com/curly-message/parsers/go)
+[![tests](https://github.com/curly-message/parsers/actions/workflows/tests-go.yml/badge.svg?branch=main)](https://github.com/curly-message/parsers/actions/workflows/tests-go.yml)
+
 The Go implementation of the
 [Curly Message Format](https://github.com/curly-message/spec),
 `curly-message-3`.

@@ -1,5 +1,8 @@
 # curly-message-parser
 
+[![crates.io](https://img.shields.io/crates/v/curly-message-parser)](https://crates.io/crates/curly-message-parser)
+[![tests](https://github.com/curly-message/parsers/actions/workflows/tests-rust.yml/badge.svg?branch=main)](https://github.com/curly-message/parsers/actions/workflows/tests-rust.yml)
+
 The Rust implementation of the
 [Curly Message Format](https://github.com/curly-message/spec).
 
