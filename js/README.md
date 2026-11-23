@@ -1,5 +1,8 @@
 # @curly-message/parser
 
+[![npm](https://img.shields.io/npm/v/@curly-message/parser)](https://www.npmjs.com/package/@curly-message/parser)
+[![tests](https://github.com/curly-message/parsers/actions/workflows/tests-js.yml/badge.svg?branch=main)](https://github.com/curly-message/parsers/actions/workflows/tests-js.yml)
+
 The JavaScript implementation of the
 [Curly Message Format](https://github.com/curly-message/spec).
 

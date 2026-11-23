@@ -1,5 +1,8 @@
 # curly-message/parser
 
+[![Packagist](https://img.shields.io/packagist/v/curly-message/parser?include_prereleases)](https://packagist.org/packages/curly-message/parser)
+[![tests](https://github.com/curly-message/parsers/actions/workflows/tests-php.yml/badge.svg?branch=main)](https://github.com/curly-message/parsers/actions/workflows/tests-php.yml)
+
 The PHP implementation of the
 [Curly Message Format](https://github.com/curly-message/spec).
 

@@ -1,5 +1,8 @@
 # curly-message
 
+[![PyPI](https://img.shields.io/pypi/v/curly-message)](https://pypi.org/project/curly-message/)
+[![tests](https://github.com/curly-message/parsers/actions/workflows/tests-python.yml/badge.svg?branch=main)](https://github.com/curly-message/parsers/actions/workflows/tests-python.yml)
+
 The Python implementation of the
 [Curly Message Format](https://github.com/curly-message/spec).
 
