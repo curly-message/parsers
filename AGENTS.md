@@ -77,7 +77,10 @@ Official implementations of the
   jobs at once, so on macOS each test workflow runs only the oldest and the
   newest version of its runtime or toolchain, and one variant of an axis
   Linux runs both ways (Python and PHP with Intl, Rust with `intl`); Linux
-  and Windows run the whole matrix.
+  and Windows run the whole matrix. A job GitHub never places ends cancelled
+  with no runner and no step: `rerun.yml` re-runs the failed jobs of a test
+  workflow's first attempt once, where every job that neither succeeded nor
+  was skipped is such a job, and leaves alone a run with one that ran.
 - Issues live in the family's
   [shared tracker](https://github.com/curly-message/spec/issues).
 
