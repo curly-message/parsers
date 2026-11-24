@@ -70,19 +70,21 @@ func widenedKeys[Z comparable](boxed bool, n int) any {
 // without memory, and the budget of a value fmt prints, twice
 // MaxSerializedLength, is spent within the tenth of the narrower keys here
 // and within the first of the wider. A map within the budget is sorted on
-// one stack, not an allocation per comparison.
+// one stack, not an allocation per comparison. The two counts compared are
+// each taken over several runs: the count is the process's, so one run also
+// holds whatever the runtime allocated beside it.
 func TestMapSortCostStopsAtTheBudget(t *testing.T) {
 	if raceEnabled {
 		t.Skip("allocations are not the parser's under the race detector")
 	}
 
-	resolve := func(v any) (string, []curly.Code, float64) {
+	resolve := func(runs int, v any) (string, []curly.Code, float64) {
 		var out string
 
 		var codes []curly.Code
 
 		p := curly.New(curly.Options{OnReport: func(r curly.Report, _ curly.Resolver) { codes = append(codes, r.Code) }})
-		allocs := testing.AllocsPerRun(1, func() {
+		allocs := testing.AllocsPerRun(runs, func() {
 			codes = nil
 			out = p.Resolve("{{v; default:D}}", curly.Context{Payload: map[string]any{"v": v}})
 		})
@@ -97,7 +99,7 @@ func TestMapSortCostStopsAtTheBudget(t *testing.T) {
 			widenedKeys[[curly.MaxSerializedLength / 5]struct{}](boxed, 40),
 			widenedKeys[[100 * curly.MaxSerializedLength]struct{}](boxed, 40),
 		} {
-			out, codes, a := resolve(v)
+			out, codes, a := resolve(3, v)
 
 			if out != "D" || len(codes) != 1 || codes[0] != curly.UnserializableValue {
 				t.Errorf("keys in interfaces %v, %d: %q %v", boxed, i, out, codes)
@@ -119,7 +121,7 @@ func TestMapSortCostStopsAtTheBudget(t *testing.T) {
 		within[pair{i % 7, -i}] = i
 	}
 
-	out, codes, allocs := resolve(within)
+	out, codes, allocs := resolve(1, within)
 
 	if out != fmt.Sprint(within) || codes != nil {
 		t.Errorf("within the budget: %d bytes, %v", len(out), codes)
