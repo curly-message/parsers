@@ -32,28 +32,23 @@ particular to PHP.
 
 ## Installation
 
-The package is **unreleased**: nothing is on Packagist yet, and
-`composer require curly-message/parser` finds nothing until the first release.
-Releases will be served from
+```sh
+composer require curly-message/parser
+```
+
+Until `1.0.0` is released the package has release candidates only, which
+Composer installs where the requirement allows them:
+
+```sh
+composer require "curly-message/parser:^1.0@RC"
+```
+
+Composer reads the package from
 [`curly-message/parser-php`](https://github.com/curly-message/parser-php),
 tagged `vX.Y.Z` there: a read-only repository that holds the history of this
 directory alone and is written only by the release workflow of
 [`curly-message/parsers`](https://github.com/curly-message/parsers), where the
 package is developed and each release is tagged `php-vX.Y.Z`.
-
-Until then, install it from a checkout of
-[`curly-message/parsers`](https://github.com/curly-message/parsers) through a
-`path` repository in your project's `composer.json`, which links the checkout's
-`php/` directory into `vendor/`:
-
-```json
-{
-  "repositories": [
-    { "type": "path", "url": "../parsers/php" }
-  ],
-  "require": { "curly-message/parser": "*@dev" }
-}
-```
 
 It requires PHP 8.2 or newer and no extension beyond those PHP always carries
 (`json`, `pcre`, `spl`): no mbstring, no ctype, no iconv. **ext-intl** is
