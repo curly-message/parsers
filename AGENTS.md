@@ -73,6 +73,11 @@ Official implementations of the
   prepared and compared only where its commit has the package's
   `bench/rows.mjs`; where it has none, as on the PR that adds the package or
   its benchmark, or one that renames its directory, nothing is compared.
+- **macOS runs the ends of each test matrix.** GitHub places few macOS
+  jobs at once, so on macOS each test workflow runs only the oldest and the
+  newest version of its runtime or toolchain, and one variant of an axis
+  Linux runs both ways (Python and PHP with Intl, Rust with `intl`); Linux
+  and Windows run the whole matrix.
 - Issues live in the family's
   [shared tracker](https://github.com/curly-message/spec/issues).
 

@@ -13,7 +13,9 @@ jobs:
   # tests that bound it run where it is tightest, on every system. Each crate
   # of the suite is tested on its own: a workspace-wide build would unify a
   # member's features into the leg without `intl`, and the conformance suite
-  # holds the leg to what CURLY_EXPECT_INTL says it is.
+  # holds the leg to what CURLY_EXPECT_INTL says it is. GitHub places few
+  # macOS jobs at once, so macOS runs each toolchain with `intl` alone, and
+  # Linux and Windows run each both ways, the runner's own tests included.
   Tests:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 45
@@ -23,6 +25,8 @@ jobs:
         toolchain: ['1.88', stable]
         os: [ubuntu-latest, windows-latest, macOS-latest]
         features: ['', intl]
+        exclude:
+          - { os: macOS-latest, features: '' }
     defaults:
       run:
         shell: bash

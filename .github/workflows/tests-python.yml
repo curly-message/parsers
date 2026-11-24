@@ -23,7 +23,9 @@ defaults:
 
 jobs:
   # Each leg states whether it expects Intl, so a supplier that failed to
-  # install cannot pass as a leg that never asked for one.
+  # install cannot pass as a leg that never asked for one. GitHub places few
+  # macOS jobs at once, so macOS runs the oldest and the newest Python with
+  # Intl, and Linux and Windows run every Python both ways.
   Tests:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -31,6 +33,11 @@ jobs:
         python: ['3.11', '3.12', '3.13', '3.14', '3.15']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         intl: [with, without]
+        exclude:
+          - { os: macOS-latest, python: '3.12' }
+          - { os: macOS-latest, python: '3.13' }
+          - { os: macOS-latest, python: '3.14' }
+          - { os: macOS-latest, intl: without }
     env:
       UV_PYTHON: ${{ matrix.python }}
       CURLY_MESSAGE_EXPECT_INTL: ${{ matrix.intl == 'with' && '1' || '0' }}
