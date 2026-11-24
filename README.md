@@ -30,7 +30,8 @@ The Python implementation, `curly-message` on PyPI, implements the same
 version and is released as a release candidate, `1.0.0rc0`.
 
 The PHP implementation, `curly-message/parser` for Composer, implements the
-same version and is not yet released. It is developed in `php/` and served
+same version and is released as a release candidate, `1.0.0-RC.0`. It is
+developed in `php/` and served
 to Composer from
 [`curly-message/parser-php`](https://github.com/curly-message/parser-php),
 which only its publish workflow writes to (see *Releasing*).
@@ -43,7 +44,7 @@ which only its publish workflow writes to (see *Releasing*).
 | [`go/`](./go) | `github.com/curly-message/parsers/go` | Prerelease, `v1.0.0-next.0` |
 | [`rust/`](./rust) | `curly-message-parser` | Prerelease, `1.0.0-next.0` |
 | [`python/`](./python) | `curly-message` (PyPI) | Release candidate, `1.0.0rc0` |
-| [`php/`](./php) | `curly-message/parser` (Packagist) | Unreleased |
+| [`php/`](./php) | `curly-message/parser` (Packagist) | Release candidate, `1.0.0-RC.0` |
 
 One directory per language, each a standalone package with its own build,
 tests and version line. Release tags are namespaced by directory: `js-v1.0.0`,
