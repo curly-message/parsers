@@ -21,15 +21,13 @@ format, which the specification states is stable.
 It resolves over the format's own inputs and depends on no host library.
 
 The Go implementation, `github.com/curly-message/parsers/go`, implements the
-same version and is not yet released.
+same version and is released as a prerelease, `v1.0.0-next.0`.
 
 The Rust implementation, `curly-message-parser`, implements the same version
-and is not yet released: its first version, `1.0.0-next.0`, is published to
-crates.io by hand.
+and is on crates.io as a prerelease, `1.0.0-next.0`.
 
 The Python implementation, `curly-message` on PyPI, implements the same
-version and is not yet released: its first version, `1.0.0rc0`, is published
-by its workflow through a pending trusted publisher.
+version and is released as a release candidate, `1.0.0rc0`.
 
 The PHP implementation, `curly-message/parser` for Composer, implements the
 same version and is not yet released. It is developed in `php/` and served
@@ -42,9 +40,9 @@ which only its publish workflow writes to (see *Releasing*).
 | Path | Package | State |
 | --- | --- | --- |
 | [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
-| [`go/`](./go) | `github.com/curly-message/parsers/go` | Unreleased |
-| [`rust/`](./rust) | `curly-message-parser` | Unreleased |
-| [`python/`](./python) | `curly-message` (PyPI) | Unreleased |
+| [`go/`](./go) | `github.com/curly-message/parsers/go` | Prerelease, `v1.0.0-next.0` |
+| [`rust/`](./rust) | `curly-message-parser` | Prerelease, `1.0.0-next.0` |
+| [`python/`](./python) | `curly-message` (PyPI) | Release candidate, `1.0.0rc0` |
 | [`php/`](./php) | `curly-message/parser` (Packagist) | Unreleased |
 
 One directory per language, each a standalone package with its own build,
@@ -181,7 +179,7 @@ registered in the crate's settings on crates.io (repository
 `curly-message/parsers`, workflow `publish-rust.yml`, environment
 `release`), and `rust-lang/crates-io-auth-action` exchanges the job's OIDC
 token for a token it revokes when the job ends. A trusted publisher can be registered only for
-a crate that exists, so the first version, `1.0.0-next.0`, is published by
+a crate that exists, so the first version, `1.0.0-next.0`, was published by
 hand from `main` by an owner with an API token
 (`cd rust && cargo publish --locked -p curly-message-parser`); the workflow
 refuses to run for a crate crates.io does not know.
@@ -214,7 +212,7 @@ the project exists, as a *pending publisher* in the PyPI account of a
 maintainer, naming the project `curly-message`, the repository
 `curly-message/parsers`, the workflow `publish-python.yml` and the
 environment `release`; the first release, `1.0.0rc0` under `next`, then
-creates the project, so no version is published by hand. Before anything is
+created the project, so no version was published by hand. Before anything is
 pushed, the release job checks that PyPI does not hold the version and makes
 the OIDC exchange the publish step will make, so a publisher that is missing
 or names something else fails the run before a tag exists.

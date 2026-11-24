@@ -205,7 +205,7 @@ Tech stack of `go/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Module | `github.com/curly-message/parsers/go`, package `curly`, unreleased; tags `go/vX.Y.Z` |
+| Module | `github.com/curly-message/parsers/go`, package `curly`, released as a prerelease, `v1.0.0-next.0`; tags `go/vX.Y.Z` |
 | Language | Go 1.26+ |
 | Build | the go command; no build step ships |
 | Tests | `go test`, examples included; the conformance set vendored and checked by its sha256 (`internal/conformance/set/`) |
@@ -310,7 +310,7 @@ Tech stack of `rust/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Crate | `curly-message-parser`, library `curly_message_parser`, unreleased; the first version, `1.0.0-next.0`, is published by hand |
+| Crate | `curly-message-parser`, library `curly_message_parser`, released as a prerelease; the first version, `1.0.0-next.0`, was published by hand |
 | Language | Rust, edition 2024, MSRV 1.88 |
 | Package manager | cargo, one workspace rooted at `rust/` (the parser, `conformance/`, `bench/`), `Cargo.lock` committed and every command `--locked` |
 | Build | `cargo build`; `cargo package` builds the `.crate` from the files it ships |
@@ -481,7 +481,7 @@ Tech stack of `python/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Package | `curly-message` on PyPI, imported as `curly_message`, unreleased; the first version, `1.0.0rc0`, is published by the workflow through a pending trusted publisher |
+| Package | `curly-message` on PyPI, imported as `curly_message`, released as a release candidate; the first version, `1.0.0rc0`, was published by the workflow through a pending trusted publisher |
 | Language | Python, typed (`py.typed`) |
 | Package manager | uv, one lockfile (`uv.lock`); the commands are `tasks.py`'s |
 | Build | hatchling, pinned by hash in `build-constraints.txt`: an sdist and a pure wheel |
