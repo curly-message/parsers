@@ -616,7 +616,7 @@ Tech stack of `php/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Package | `curly-message/parser` for Composer, unreleased; served from `curly-message/parser-php`, which only `publish-php.yml` writes to |
+| Package | `curly-message/parser` for Composer, released as a release candidate, `1.0.0-RC.0`; served from `curly-message/parser-php`, which only `publish-php.yml` writes to |
 | Language | PHP with `declare(strict_types=1)`, namespace `CurlyMessage\` (PSR-4 over `src/`) |
 | Package manager | Composer: `composer.lock` for the package and its suite, and `tools/qa/composer.lock` for php-cs-fixer and PHPStan |
 | Build | none: what a release ships is `git archive` of `php/` under its `.gitattributes`, which `composer test:dist` installs by copy and tests |
