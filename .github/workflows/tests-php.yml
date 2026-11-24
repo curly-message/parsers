@@ -23,7 +23,8 @@ permissions:
 jobs:
   # The suite on every supported PHP and OS with ext-intl, and on every
   # supported PHP without it, where the Intl level is not claimed and its
-  # modifiers fall back as the specification says.
+  # modifiers fall back as the specification says. GitHub places few macOS
+  # jobs at once, so macOS runs the oldest and the newest PHP alone.
   Tests:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -31,6 +32,9 @@ jobs:
         php: ['8.2', '8.3', '8.4', '8.5']
         os: [ubuntu-latest, windows-latest, macOS-latest]
         intl: ['on']
+        exclude:
+          - { os: macOS-latest, php: '8.3' }
+          - { os: macOS-latest, php: '8.4' }
         include:
           - { php: '8.2', os: ubuntu-latest, intl: 'off' }
           - { php: '8.3', os: ubuntu-latest, intl: 'off' }
