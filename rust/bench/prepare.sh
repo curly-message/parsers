@@ -22,8 +22,13 @@ mkdir bench/dist
 cargo build --release --locked -p curly-message-bench --bin hello
 cp "$target/release/hello" bench/dist/hello
 
-cargo build --release --locked -p curly-message-bench --features intl --bin hello-intl --bin curly-message-bench
-cp "$target/release/hello-intl" "$target/release/curly-message-bench" bench/dist/
+cargo build --release --locked -p curly-message-bench --features intl --bin hello-intl
+cp "$target/release/hello-intl" bench/dist/
+
+# The stack rows count the bytes a frame takes, which moves with how rustc
+# splits a crate into codegen units; at one unit, it does not.
+CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 cargo build --release --locked -p curly-message-bench --features intl --bin curly-message-bench
+cp "$target/release/curly-message-bench" bench/dist/
 
 # The tests verify the package; this weighs it. A local tree may be dirty.
 cargo package --locked --no-verify --allow-dirty -p curly-message-parser

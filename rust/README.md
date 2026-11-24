@@ -632,17 +632,23 @@ of `bench/rows.mjs` on it; `--compare <dir>` sets each row beside the same row
 of the crate checked out and prepared at `<dir>`. The harness is the family's,
 the same file in every package, and runs on Node; the rows read the build
 through `curly-message-bench`, a program of this workspace that runs a row's
-workload a fixed number of times per request, named in the row.
+workload a fixed number of times per request, named in the row. The programs
+the size rows weigh are built at the default release profile;
+`curly-message-bench`, which every count but the crates' and every time is
+read off, is built at one codegen unit, so that what it reads does not move
+with how rustc splits the crate.
 
 * **Sizes:** the `.crate` a release ships, and a stripped program resolving
   one message, without `intl` and with every Intl modifier and `timeStyle`
   used.
 * **Counts**, which a change must not grow: the allocations of resolving and
   describing catalogue messages, the `Display` calls of a value many
-  placeholders read, and the crates in the parser's dependency tree, without
-  features (the parser alone) and with `intl`. No public type computes over
-  what a caller passes, so nothing costs a consumer's compiler more as their
-  code grows; the dependency tree is what the crate adds to their build.
+  placeholders read, the bytes of stack a level of nesting and a resolution
+  a modifier starts take, and the crates in the parser's dependency tree,
+  without features (the parser alone) and with `intl`. No public type
+  computes over what a caller passes, so nothing costs a consumer's compiler
+  more as their code grows; the dependency tree is what the crate adds to
+  their build.
 * **Times**, per batch, of the workloads every implementation of the family
   is measured on: catalogue messages, thousands of placeholders and options,
   long blanks and keys, deep nesting.
