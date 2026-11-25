@@ -571,6 +571,19 @@ GitHub App whose client ID and private key the repository holds as the
 environment. No token publishes anything and nothing is published by hand:
 the first version is a tag like every other.
 
+A release that stops after its tag exists is finished by **Re-run failed
+jobs** on its run, before any further release of the module and within 30
+days of the run or the build artifact's retention, whichever ends first: the
+re-run reuses the run's version and build, makes the same commit, finds it
+tagged, pushes nothing, asks the proxy for the version again, and publishes
+the GitHub release unless it is published already. Re-running all jobs does
+not finish it, since the job that settles the version refuses one already
+tagged, before anything is built. A release that stops before its tag exists
+is dispatched again, and cuts the same version. A release that cannot be
+finished this way — a defect in the workflow's own steps after the push, or a
+run past that window — has no GitHub release, and the next version is
+released.
+
 ## License
 
 [MIT](./LICENSE)

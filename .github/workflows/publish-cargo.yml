@@ -296,9 +296,21 @@ jobs:
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           permission-contents: write
 
+      # No stored token: crates.io trusts the dispatched workflow's OIDC
+      # identity (the crate's trusted publisher names its filename and this
+      # environment) and hands back a token that the action revokes once the
+      # job ends. Before the push, so that an identity crates.io refuses ends
+      # the run with no commit and no tag on main.
+      - name: Authenticate to crates.io
+        id: crates-io
+        uses: rust-lang/crates-io-auth-action@v1
+
       # One atomic push carries the commit and the tag: either both land or
       # neither, and --follow-tags would have left a lightweight tag behind.
       # The token reaches git through the environment of this step alone.
+      # Where the tag is on origin already, a re-run of this job finishes the
+      # release it names: the commit made here holds the tagged tree, and the
+      # steps after this one run on the tagged commit with nothing pushed.
       - name: Commit, tag and push
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -311,31 +323,59 @@ jobs:
           git config user.name "$APP[bot]"
           git config user.email "$id+$APP[bot]@users.noreply.github.com"
           git commit --all --message "chore($PACKAGE): release $NAME@$VERSION"
-          git tag --annotate --message "$NAME@$VERSION" "$PACKAGE-v$VERSION"
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           export GIT_CONFIG_VALUE_0
-          git push --atomic origin main "$PACKAGE-v$VERSION"
-
-      # No stored token: crates.io trusts the dispatched workflow's OIDC
-      # identity (the crate's trusted publisher names its filename and this
-      # environment) and hands back a token that the action revokes once the
-      # job ends.
-      - name: Authenticate to crates.io
-        id: crates-io
-        uses: rust-lang/crates-io-auth-action@v1
+          prefix="$PACKAGE-v"
+          tag="$prefix$VERSION"
+          tags=$(git ls-remote --tags origin "refs/tags/$prefix*")
+          versions=$(sed -n "s|^[0-9a-f]*[[:space:]]refs/tags/$prefix\([^^]*\)$|\1|p" <<< "$tags")
+          if ! grep -qxF "$VERSION" <<< "$versions"; then
+            git tag --annotate --message "$NAME@$VERSION" "$tag"
+            git push --atomic origin main "$tag"
+          else
+            git fetch --no-tags --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+            [ "$(git rev-parse "$tag^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ] || { echo "::error::$tag holds another release than the one this run commits."; exit 1; }
+            # A stable release is held to the stable releases alone, and a
+            # prerelease to every release. A `~` makes sort -V read a
+            # prerelease before its release.
+            compared=$versions
+            case "$VERSION" in *-*|*rc*) ;; *) compared=$(sed -E '/-|rc/d' <<< "$versions") ;; esac
+            newest=$({ echo "$compared"; echo "$VERSION"; } | sed -E 's/-|rc/~&/' | sort -V | tail -n 1)
+            [ "${newest//\~/}" = "$VERSION" ] || { echo "::error::$prefix${newest//\~/} is tagged after $tag, and a release is finished before the next one is released."; exit 1; }
+            git reset --soft "$tag^{commit}"
+            echo "::notice::$tag holds this release already, so the run finishes it from there and pushes nothing."
+          fi
 
       # After the commit, on a clean tree, so the crate records the release
-      # commit. What it packages is what was held to the build above.
+      # commit. What it packages is what was held to the build above. A
+      # version crates.io holds already passes where it is this build, which
+      # the run this job re-runs published, and fails the release where it
+      # is not.
       - name: Publish to crates.io
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.crates-io.outputs.token }}
           NAME: ${{ needs.version.outputs.name }}
-        run: cargo publish --no-verify --locked -p "$NAME"
+          VERSION: ${{ needs.version.outputs.version }}
+          DIGEST: ${{ needs.build.outputs.digest }}
+        run: |
+          status=$(curl -sS -o /dev/null -w '%{http_code}' -A curly-message-release "https://crates.io/api/v1/crates/$NAME/$VERSION")
+          case "$status" in
+            404) cargo publish --no-verify --locked -p "$NAME" ;;
+            200)
+              curl -sSfL -o "$RUNNER_TEMP/published.crate" -A curly-message-release "https://crates.io/api/v1/crates/$NAME/$VERSION/download"
+              unpacked=$(mktemp -d)
+              tar -xzf "$RUNNER_TEMP/published.crate" -C "$unpacked"
+              published=$(cd "$unpacked" && find . -type f ! -name .cargo_vcs_info.json -print0 | LC_ALL=C sort -z | xargs -0 sha256sum | sha256sum | cut -d' ' -f1)
+              [ "$published" = "$DIGEST" ] || { echo "::error::crates.io holds $NAME@$VERSION as $published, and this build packaged $DIGEST."; exit 1; }
+              echo "::notice::crates.io holds $NAME@$VERSION as this build already, so nothing is published." ;;
+            *) echo "::error::crates.io answers $status for $NAME@$VERSION, where a version it holds answers 200 and one it does not 404."; exit 1 ;;
+          esac
 
       # The release notes are the changelog section this release names: the one
       # just cut, or, for a prerelease, the pending one it leaves open. The
-      # repository's latest release stays the JavaScript parser's.
+      # repository's latest release stays the JavaScript parser's. A published
+      # release passes.
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -345,6 +385,15 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           SECTION: ${{ needs.version.outputs.section }}
         run: |
+          tag="$PACKAGE-v$VERSION"
+          if ! release=$(gh release view "$tag" --json isDraft 2> "$RUNNER_TEMP/release.err"); then
+            grep -qx 'release not found' "$RUNNER_TEMP/release.err" || { cat "$RUNNER_TEMP/release.err" >&2; exit 1; }
+          fi
+          if [ -n "$release" ]; then
+            [ "$(jq -r .isDraft <<< "$release")" = false ] || { echo "::error::The GitHub release $tag is a draft, which this workflow does not leave: publish or delete it, then re-run."; exit 1; }
+            echo "::notice::The GitHub release $tag is published already."
+            exit 0
+          fi
           awk -v heading="$SECTION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           [ "$TAG" = next ] && prerelease=--prerelease || prerelease=
-          gh release create "$PACKAGE-v$VERSION" --verify-tag --latest=false --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" $prerelease
+          gh release create "$tag" --verify-tag --latest=false --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" $prerelease

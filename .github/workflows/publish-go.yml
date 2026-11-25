@@ -289,6 +289,9 @@ jobs:
       # The tree is compared before anything is pushed: the hash depends on
       # the files alone, so this commit hashes as the build's did exactly
       # when the two trees are one. Once pushed, the version is the proxy's.
+      # Where the tag is on origin already, a re-run of this job finishes the
+      # release it names: the commit made here holds the tagged tree, and the
+      # steps after this one run on the tagged commit with nothing pushed.
       - name: Commit, tag and push
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -296,7 +299,6 @@ jobs:
           MODULE: ${{ inputs.module }}
           NAME: ${{ needs.version.outputs.name }}
           VERSION: ${{ needs.version.outputs.version }}
-          TAG: ${{ needs.version.outputs.tag }}
           TREE: ${{ needs.build.outputs.tree }}
         run: |
           bot="${APP}[bot]"
@@ -307,11 +309,29 @@ jobs:
           git commit --all --message "chore($MODULE): release $NAME@v$VERSION"
           tree=$(git rev-parse 'HEAD^{tree}')
           [ "$tree" = "$TREE" ] || { echo "::error::The release commit holds tree $tree and the build hashed tree $TREE."; exit 1; }
-          git tag --annotate --message "$NAME@v$VERSION" "$TAG"
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           export GIT_CONFIG_VALUE_0
-          git push --atomic origin main "$TAG"
+          prefix="$MODULE/v"
+          tag="$prefix$VERSION"
+          tags=$(git ls-remote --tags origin "refs/tags/$prefix*")
+          versions=$(sed -n "s|^[0-9a-f]*[[:space:]]refs/tags/$prefix\([^^]*\)$|\1|p" <<< "$tags")
+          if ! grep -qxF "$VERSION" <<< "$versions"; then
+            git tag --annotate --message "$NAME@v$VERSION" "$tag"
+            git push --atomic origin main "$tag"
+          else
+            git fetch --no-tags --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+            [ "$(git rev-parse "$tag^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ] || { echo "::error::$tag holds another release than the one this run commits."; exit 1; }
+            # A stable release is held to the stable releases alone, and a
+            # prerelease to every release. A `~` makes sort -V read a
+            # prerelease before its release.
+            compared=$versions
+            case "$VERSION" in *-*|*rc*) ;; *) compared=$(sed -E '/-|rc/d' <<< "$versions") ;; esac
+            newest=$({ echo "$compared"; echo "$VERSION"; } | sed -E 's/-|rc/~&/' | sort -V | tail -n 1)
+            [ "${newest//\~/}" = "$VERSION" ] || { echo "::error::$prefix${newest//\~/} is tagged after $tag, and a release is finished before the next one is released."; exit 1; }
+            git reset --soft "$tag^{commit}"
+            echo "::notice::$tag holds this release already, so the run finishes it from there and pushes nothing."
+          fi
 
       # Asking the proxy for the version records it, and the checksum
       # database with it, and shows it on pkg.go.dev. By now it cannot be
@@ -339,6 +359,7 @@ jobs:
           echo "::error::The module proxy did not serve $NAME@v$VERSION."
           exit 1
 
+      # A published release passes.
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -348,6 +369,14 @@ jobs:
           CHANNEL: ${{ needs.version.outputs.channel }}
           SECTION: ${{ needs.version.outputs.section }}
         run: |
+          if ! release=$(gh release view "$TAG" --json isDraft 2> "$RUNNER_TEMP/release.err"); then
+            grep -qx 'release not found' "$RUNNER_TEMP/release.err" || { cat "$RUNNER_TEMP/release.err" >&2; exit 1; }
+          fi
+          if [ -n "$release" ]; then
+            [ "$(jq -r .isDraft <<< "$release")" = false ] || { echo "::error::The GitHub release $TAG is a draft, which this workflow does not leave: publish or delete it, then re-run."; exit 1; }
+            echo "::notice::The GitHub release $TAG is published already."
+            exit 0
+          fi
           awk -v heading="$SECTION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           prerelease=()
           [ "$CHANNEL" = next ] && prerelease=(--prerelease)
