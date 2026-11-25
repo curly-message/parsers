@@ -95,6 +95,23 @@ branch's own benchmark can fail the check.
 Each implementation is released from `main` by a workflow of its own, with a
 tag namespaced by its directory.
 
+A release of the JavaScript, Go, Rust or Python parser that stops after its
+tag exists is finished by **Re-run failed jobs** on its run, before any
+further release of that implementation and within 30 days of the run or the
+build artifact's retention, whichever ends first: the re-run reuses the run's
+version and build, makes the same commit, finds it tagged, pushes nothing, and
+publishes to the registry and to GitHub what is not there yet. Re-running all
+jobs does not finish it: the Go workflow refuses a version already tagged
+before it builds, and in the others a new build writes another benchmark than
+the tag holds. A release that stops before its tag exists is dispatched again,
+and cuts the same version. A publish that fails saying the version is
+published already, right after the registry took it, is re-run once more. A
+release that cannot be finished this way — a defect in the workflow's own
+steps after the push, or a run past that window — stays as far as it got, its
+tag and whatever the registry took, and the next version is released. The PHP
+workflow finishes a stopped release through its `mirror` input instead
+(below).
+
 ### JavaScript
 
 A release is cut from `main` by the **JavaScript parser publish** workflow
@@ -214,9 +231,10 @@ maintainer, naming the project `curly-message`, the repository
 `curly-message/parsers`, the workflow `publish-python.yml` and the
 environment `release`; the first release, `1.0.0rc0` under `next`, then
 created the project, so no version was published by hand. Before anything is
-pushed, the release job checks that PyPI does not hold the version and makes
-the OIDC exchange the publish step will make, so a publisher that is missing
-or names something else fails the run before a tag exists.
+pushed, the release job checks that PyPI does not hold the version, unless
+origin holds its tag for a re-run to finish, and makes the OIDC exchange the
+publish step will make, so a publisher that is missing or names something
+else fails the run before a tag exists.
 
 ### PHP
 

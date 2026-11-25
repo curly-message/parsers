@@ -296,19 +296,26 @@ jobs:
           [ "$digests" = "$DIGESTS" ] || { echo "::error::dist holds $(base64 -d <<< "$digests") here and held $(base64 -d <<< "$DIGESTS") where it was built."; exit 1; }
 
       # Before anything is pushed, so that a tag never names a version PyPI
-      # would refuse. The exchange is the one the publish step makes: PyPI
-      # mints a token only where a publisher, pending or registered, names this
-      # repository, this workflow and the release environment, and it refuses a
-      # pending publisher whose project someone else registered first. On the
-      # first release, this exchange is what creates the project. The token it
-      # answers with is masked and dropped; the publish step mints its own.
+      # would refuse; a version PyPI holds passes only where origin holds its
+      # tag, as when this job is re-run to finish a release. The exchange is
+      # the one the publish step makes: PyPI mints a token only where a
+      # publisher, pending or registered, names this repository, this workflow
+      # and the release environment, and it refuses a pending publisher whose
+      # project someone else registered first. On the first release, this
+      # exchange is what creates the project. The token it answers with is
+      # masked and dropped; the publish step mints its own.
       - name: Check PyPI will take the release
         env:
           NAME: ${{ needs.version.outputs.name }}
           VERSION: ${{ needs.version.outputs.version }}
         run: |
           status=$(curl -sS -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/$NAME/$VERSION/json")
-          [ "$status" = 404 ] || { echo "::error::PyPI answers $status for $NAME $VERSION, where a version it does not hold answers 404."; exit 1; }
+          if [ "$status" = 200 ]; then
+            tagged=$(git ls-remote --tags origin "refs/tags/python-v$VERSION")
+            [ -n "$tagged" ] || { echo "::error::PyPI holds $NAME $VERSION, and origin holds no python-v$VERSION for this run to finish."; exit 1; }
+          else
+            [ "$status" = 404 ] || { echo "::error::PyPI answers $status for $NAME $VERSION, where a version it does not hold answers 404."; exit 1; }
+          fi
           audience=$(curl -sSf https://pypi.org/_/oidc/audience | jq -r .audience)
           identity=$(curl -sSf --get --data-urlencode "audience=$audience" -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" "$ACTIONS_ID_TOKEN_REQUEST_URL" | jq -r .value)
           echo "::add-mask::$identity"
@@ -331,6 +338,9 @@ jobs:
       # One atomic push carries the commit and the tag: either both land or
       # neither, and --follow-tags would have left a lightweight tag behind.
       # The token reaches git through the environment of this step alone.
+      # Where the tag is on origin already, a re-run of this job finishes the
+      # release it names: the commit made here holds the tagged tree, and the
+      # steps after this one run on the tagged commit with nothing pushed.
       - name: Commit, tag and push
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -342,17 +352,35 @@ jobs:
           git config user.name "$APP[bot]"
           git config user.email "$id+$APP[bot]@users.noreply.github.com"
           git commit --all --message "chore(python): release $NAME@$VERSION"
-          git tag --annotate --message "$NAME@$VERSION" "python-v$VERSION"
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           export GIT_CONFIG_VALUE_0
-          git push --atomic origin main "python-v$VERSION"
+          prefix="python-v"
+          tag="$prefix$VERSION"
+          tags=$(git ls-remote --tags origin "refs/tags/$prefix*")
+          versions=$(sed -n "s|^[0-9a-f]*[[:space:]]refs/tags/$prefix\([^^]*\)$|\1|p" <<< "$tags")
+          if ! grep -qxF "$VERSION" <<< "$versions"; then
+            git tag --annotate --message "$NAME@$VERSION" "$tag"
+            git push --atomic origin main "$tag"
+          else
+            git fetch --no-tags --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+            [ "$(git rev-parse "$tag^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ] || { echo "::error::$tag holds another release than the one this run commits."; exit 1; }
+            # A stable release is held to the stable releases alone, and a
+            # prerelease to every release. A `~` makes sort -V read a
+            # prerelease before its release.
+            compared=$versions
+            case "$VERSION" in *-*|*rc*) ;; *) compared=$(sed -E '/-|rc/d' <<< "$versions") ;; esac
+            newest=$({ echo "$compared"; echo "$VERSION"; } | sed -E 's/-|rc/~&/' | sort -V | tail -n 1)
+            [ "${newest//\~/}" = "$VERSION" ] || { echo "::error::$prefix${newest//\~/} is tagged after $tag, and a release is finished before the next one is released."; exit 1; }
+            git reset --soft "$tag^{commit}"
+            echo "::notice::$tag holds this release already, so the run finishes it from there and pushes nothing."
+          fi
 
       # No token: PyPI trusts this workflow's OIDC identity (the project's
       # trusted publisher names its filename), and the action uploads an
       # attestation of each file. What it uploads is the build taken above.
-      # Should it fail now, the tag just pushed names a version PyPI does not
-      # hold: delete the tag before dispatching again.
+      # PyPI takes a file it holds already as long as it is the same file, and
+      # refuses another under that name.
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
@@ -360,7 +388,8 @@ jobs:
 
       # The release notes are the changelog section this release names: the one
       # just cut, or, for a release candidate, the pending one it leaves open.
-      # The repository's latest release stays the JavaScript parser's.
+      # The repository's latest release stays the JavaScript parser's. A
+      # published release passes.
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -369,6 +398,15 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           SECTION: ${{ needs.version.outputs.section }}
         run: |
+          tag="python-v$VERSION"
+          if ! release=$(gh release view "$tag" --json isDraft 2> "$RUNNER_TEMP/release.err"); then
+            grep -qx 'release not found' "$RUNNER_TEMP/release.err" || { cat "$RUNNER_TEMP/release.err" >&2; exit 1; }
+          fi
+          if [ -n "$release" ]; then
+            [ "$(jq -r .isDraft <<< "$release")" = false ] || { echo "::error::The GitHub release $tag is a draft, which this workflow does not leave: publish or delete it, then re-run."; exit 1; }
+            echo "::notice::The GitHub release $tag is published already."
+            exit 0
+          fi
           awk -v heading="$SECTION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           [ "$TAG" = next ] && prerelease=--prerelease || prerelease=
-          gh release create "python-v$VERSION" --verify-tag --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest=false $prerelease
+          gh release create "$tag" --verify-tag --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" --latest=false $prerelease

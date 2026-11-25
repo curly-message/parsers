@@ -256,6 +256,9 @@ jobs:
       # One atomic push carries the commit and the tag: either both land or
       # neither, and --follow-tags would have left a lightweight tag behind.
       # The token reaches git through the environment of this step alone.
+      # Where the tag is on origin already, a re-run of this job finishes the
+      # release it names: the commit made here holds the tagged tree, and the
+      # steps after this one run on the tagged commit with nothing pushed.
       - name: Commit, tag and push
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -268,22 +271,55 @@ jobs:
           git config user.name "$APP[bot]"
           git config user.email "$id+$APP[bot]@users.noreply.github.com"
           git commit --all --message "chore($PACKAGE): release $NAME@$VERSION"
-          git tag --annotate --message "$NAME@$VERSION" "$PACKAGE-v$VERSION"
           export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader
           GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
           export GIT_CONFIG_VALUE_0
-          git push --atomic origin main "$PACKAGE-v$VERSION"
+          prefix="$PACKAGE-v"
+          tag="$prefix$VERSION"
+          tags=$(git ls-remote --tags origin "refs/tags/$prefix*")
+          versions=$(sed -n "s|^[0-9a-f]*[[:space:]]refs/tags/$prefix\([^^]*\)$|\1|p" <<< "$tags")
+          if ! grep -qxF "$VERSION" <<< "$versions"; then
+            git tag --annotate --message "$NAME@$VERSION" "$tag"
+            git push --atomic origin main "$tag"
+          else
+            git fetch --no-tags --depth=1 origin "refs/tags/$tag:refs/tags/$tag"
+            [ "$(git rev-parse "$tag^{tree}")" = "$(git rev-parse 'HEAD^{tree}')" ] || { echo "::error::$tag holds another release than the one this run commits."; exit 1; }
+            # A stable release is held to the stable releases alone, and a
+            # prerelease to every release. A `~` makes sort -V read a
+            # prerelease before its release.
+            compared=$versions
+            case "$VERSION" in *-*|*rc*) ;; *) compared=$(sed -E '/-|rc/d' <<< "$versions") ;; esac
+            newest=$({ echo "$compared"; echo "$VERSION"; } | sed -E 's/-|rc/~&/' | sort -V | tail -n 1)
+            [ "${newest//\~/}" = "$VERSION" ] || { echo "::error::$prefix${newest//\~/} is tagged after $tag, and a release is finished before the next one is released."; exit 1; }
+            git reset --soft "$tag^{commit}"
+            echo "::notice::$tag holds this release already, so the run finishes it from there and pushes nothing."
+          fi
 
       # No token: the registry trusts the calling workflow's OIDC identity (the
       # package's trusted publisher names its filename) and adds provenance.
-      # What it packs is the build taken above.
+      # What it packs is the build taken above. A version the registry holds
+      # already passes where it is this build, which the run this job re-runs
+      # published, and fails the release where it is not.
       - name: Publish to npm
         env:
+          NAME: ${{ needs.version.outputs.name }}
+          VERSION: ${{ needs.version.outputs.version }}
           TAG: ${{ needs.version.outputs.tag }}
-        run: npm publish --ignore-scripts --access public --tag "$TAG"
+          INTEGRITY: ${{ needs.build.outputs.integrity }}
+        run: |
+          status=$(curl -sS -o "$RUNNER_TEMP/published.json" -w '%{http_code}' "https://registry.npmjs.org/$NAME/$VERSION")
+          case "$status" in
+            404) npm publish --ignore-scripts --access public --tag "$TAG" ;;
+            200)
+              published=$(jq -r .dist.integrity "$RUNNER_TEMP/published.json")
+              [ "$published" = "$INTEGRITY" ] || { echo "::error::The registry holds $NAME@$VERSION as $published, and this build packs as $INTEGRITY."; exit 1; }
+              echo "::notice::The registry holds $NAME@$VERSION as this build already, so nothing is published." ;;
+            *) echo "::error::The registry answers $status for $NAME@$VERSION, where a version it holds answers 200 and one it does not 404."; exit 1 ;;
+          esac
 
       # The release notes are the changelog section this release names: the one
-      # just cut, or, for a prerelease, the pending one it leaves open.
+      # just cut, or, for a prerelease, the pending one it leaves open. A
+      # published release passes.
       - name: Publish the GitHub release
         env:
           GH_TOKEN: ${{ steps.app.outputs.token }}
@@ -293,6 +329,15 @@ jobs:
           TAG: ${{ needs.version.outputs.tag }}
           SECTION: ${{ needs.version.outputs.section }}
         run: |
+          tag="$PACKAGE-v$VERSION"
+          if ! release=$(gh release view "$tag" --json isDraft 2> "$RUNNER_TEMP/release.err"); then
+            grep -qx 'release not found' "$RUNNER_TEMP/release.err" || { cat "$RUNNER_TEMP/release.err" >&2; exit 1; }
+          fi
+          if [ -n "$release" ]; then
+            [ "$(jq -r .isDraft <<< "$release")" = false ] || { echo "::error::The GitHub release $tag is a draft, which this workflow does not leave: publish or delete it, then re-run."; exit 1; }
+            echo "::notice::The GitHub release $tag is published already."
+            exit 0
+          fi
           awk -v heading="$SECTION" '$0 == heading { on = 1; next } /^## / { on = 0 } on' CHANGELOG.md > "$RUNNER_TEMP/notes.md"
           [ "$TAG" = next ] && prerelease=--prerelease || prerelease=
-          gh release create "$PACKAGE-v$VERSION" --verify-tag --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" $prerelease
+          gh release create "$tag" --verify-tag --title "$NAME@$VERSION" --notes-file "$RUNNER_TEMP/notes.md" $prerelease
