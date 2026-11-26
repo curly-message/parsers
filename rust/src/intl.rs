@@ -89,6 +89,7 @@ impl<'a> Request<'a> {
 
 /// The facilities of ECMA-402 the format's modifiers delegate to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Api {
     /// `Intl.NumberFormat`: `number` and `currency`.
     NumberFormat,
@@ -114,6 +115,7 @@ impl Api {
 
 /// What a request formats or selects for.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[non_exhaustive]
 pub enum Input {
     /// A number, or for `DateTimeFormat` milliseconds since the epoch.
     Number(f64),
@@ -123,6 +125,7 @@ pub enum Input {
 
 /// The units `ago` counts in, the rungs of its ladder.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Unit {
     /// Seconds.
     Second,

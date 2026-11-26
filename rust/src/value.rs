@@ -14,6 +14,7 @@ use std::sync::Arc;
 /// [`Value::Undefined`] is the host's "nothing": an entry holding it is an
 /// entry nobody passed, and `None` converts to it.
 #[derive(Clone, Default)]
+#[non_exhaustive]
 pub enum Value {
     /// No value: an absent entry, a wrapper without a value, an answer that is
     /// nothing.

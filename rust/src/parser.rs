@@ -62,6 +62,7 @@ pub enum Message<'a> {
 
 /// A conformance level of section 2.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Level {
     /// The syntax, the resolution and the comparisons.
     Core,

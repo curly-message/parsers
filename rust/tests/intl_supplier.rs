@@ -48,6 +48,7 @@ fn input(input: Input) -> String {
     match input {
         Input::Number(number) => format!("{number:?}"),
         Input::Relative(count, unit) => format!("{count:?} {}", unit.as_str()),
+        _ => format!("{input:?}"),
     }
 }
 

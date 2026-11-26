@@ -27,6 +27,7 @@ pub struct Report {
 
 /// The conditions a resolution reports (section 14.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Code {
     /// A placeholder named a modifier the parser does not know.
     UnknownModifier,
