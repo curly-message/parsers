@@ -1,8 +1,11 @@
 """The Intl modifiers (sections 11.2 and 11.5), driven through ``create_parser(...).resolve``.
 
-The texts were rendered by Node 22.22.0 (ICU 77.1, CLDR 47) for the request
-each placeholder makes. A text the supplier's data writes otherwise is left
-out here and stated in the README as a reading of section 11.2.
+The texts are this package's renderings, each checked once against what
+Node 22.22.0 (ICU 77.1, CLDR 47) wrote for the request the placeholder
+makes. They claim no parity with every release of Node or ICU, whose data
+moves: a few already differ on another release of Node 22. A text the
+supplier's data writes otherwise is left out here and stated in the README
+as a reading of section 11.2.
 """
 
 from __future__ import annotations
@@ -744,6 +747,24 @@ print(ascii([parser.resolve("{{v:date}}", {"v": "0"}, props=props, locale=tag)
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
     ).stdout
     assert output.strip() == ascii(["\u05d9\u05e0\u05d5\u05d0\u05e8", "enero", "1\u6708"])
+
+
+def test_a_locale_read_through_the_supplier_first_leaves_the_package_s_alone() -> None:
+    # Reading ``he`` through the supplier's own locale objects writes what
+    # its alias resolves to into data ``es`` shares, so the supplier's ``es``
+    # then holds Hebrew stand-alone months; the package reads its locales'
+    # data apart from those objects.
+    probe = """
+import babel
+babel.Locale.parse("he").months["stand-alone"]["wide"][1]
+from curly_message import create_parser
+props = {"date": {"timeZone": "UTC", "month": "long"}}
+print(ascii(create_parser().resolve("{{v:date}}", {"v": "0"}, props=props, locale="es")))
+"""
+    output = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    ).stdout
+    assert output.strip() == ascii("enero")
 
 
 @pytest.mark.parametrize(
