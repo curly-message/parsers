@@ -24,6 +24,7 @@ from curly_message import (
     UNDEFINED,
     CstMessage,
     CstNode,
+    Level,
     Modifier,
     ModifierInput,
     Option,
@@ -54,6 +55,7 @@ EXPORTED = {
     "CstPunctuation",
     "CstSpace",
     "CstText",
+    "Level",
     "Modifier",
     "ModifierInput",
     "Option",
@@ -144,5 +146,6 @@ def test_constants_and_the_sentinel() -> None:
     assert issubclass(ReentryLimitError, RecursionError)
     assert_type(UNDEFINED, Literal[Undefined.UNDEFINED])
     assert_type(levels(), frozenset[Literal["core", "intl", "extensions"]])
+    assert_type(levels(), frozenset[Level])
     assert {"core", "extensions"} <= levels()
     assert not UNDEFINED

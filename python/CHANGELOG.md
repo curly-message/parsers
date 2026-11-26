@@ -11,3 +11,4 @@
   that hand over a modifier's layer of props refusing to be read: a `dict`
   entry raises only where it is looked up by name, and a layer is enumerated,
   but for the digit entries `plural` looks up by name in the `number` layer.
+* **`Level` is exported**: the type `levels()` answers members of.
