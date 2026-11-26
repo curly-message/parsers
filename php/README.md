@@ -275,9 +275,11 @@ numeric string (`is_numeric`): ` 2\n` is `2`, while `2` padded with whitespace
 outside ASCII, `U+3000` or `U+00A0`, is no number, and the placeholder takes
 its fallback chain and reports `failed-modifier`.
 
-**Dates.** `date` reads a number as milliseconds since the epoch. Text is read
-in two steps, the first that reads it deciding: ECMAScript's date time string
-format, as `Date.parse` reads it (`2024`, `2024-03`, `2024-03-05` at UTC,
+**Dates.** `date` reads a value as milliseconds since the epoch first
+wherever it reads as a number (SPEC.md section 11.2), so `2024`, ` 2024 ` and
+`+002024` are each the 2024th millisecond, never a year. Other text is read in
+two steps, the first that reads it deciding: ECMAScript's date time string
+format, as `Date.parse` reads it (`2024-03`, `2024-03-05` at UTC,
 `2024-03-05T10:00` in PHP's default time zone, `2024-03-05T10:00:00.123Z`);
 then PHP's own date parser, for text that names a date: `date_parse` reads it
 without an error or a warning, with a year, a month and a day, and with nothing
