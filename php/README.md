@@ -205,6 +205,9 @@ read-only: writing into them throws a `LogicException`, which fails the
 modifier that tried as any raise of its own does. A shared layer host code
 changes while a resolution is in progress is read as it was when a
 placeholder first composed it; the next resolution reads it afresh.
+A host builds its own `Props` from its layers, the uppermost first, to hand
+a modifier it tests: `new Props([['style' => 'percent'], $defaults])`, where
+`Undefined::Value` under a name leaves the property to the layers beneath.
 
 ## Comparisons
 

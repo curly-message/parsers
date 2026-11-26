@@ -86,7 +86,7 @@ final class Modifiers
     {
         $number = self::formattable($input->value);
 
-        return self::ask(Api::NumberFormat, $locale, self::shownDigits($input->props, $numbers), $number, $observe, $numbers);
+        return self::ask(Api::NumberFormat, $locale, new Options($input->props, self::shownDigits($input->props, $numbers)), $number, $observe, $numbers);
     }
 
     /** @param \Closure(Request): void $observe */
@@ -100,7 +100,7 @@ final class Modifiers
             throw new \ValueError('The value is not a date');
         }
 
-        return self::ask(Api::DateTimeFormat, $locale, $input->props, $instant, $observe, $numbers);
+        return self::ask(Api::DateTimeFormat, $locale, new Options($input->props), $instant, $observe, $numbers);
     }
 
     /** @param \Closure(Request): void $observe */
@@ -117,7 +117,7 @@ final class Modifiers
 
         // The style is what the modifier is rather than a property it
         // layers, so it is pinned over every layer.
-        return self::ask(Api::NumberFormat, $locale, $props->with(['style' => 'currency'], ['ratio']), $product, $observe, $numbers);
+        return self::ask(Api::NumberFormat, $locale, new Options($props, ['style' => 'currency'], ['ratio' => true]), $product, $observe, $numbers);
     }
 
     /**
@@ -152,7 +152,7 @@ final class Modifiers
             throw new \ValueError('The format names no rung of the ladder');
         }
 
-        return self::ask(Api::RelativeTimeFormat, $locale, $props->with(['numeric' => $numeric], ['format']), self::climbed((float) $milliseconds, $format), $observe, $numbers);
+        return self::ask(Api::RelativeTimeFormat, $locale, new Options($props, ['numeric' => $numeric], ['format' => true]), self::climbed((float) $milliseconds, $format), $observe, $numbers);
     }
 
     /**
@@ -255,8 +255,8 @@ final class Modifiers
             }
         }
 
-        $props = $type === 'cardinal' ? self::shownDigits($input->props, $numbers) : $input->props;
-        $category = self::ask(Api::PluralRules, $locale, $props->with(['type' => $type]), $number, $observe, $numbers);
+        $shown = $type === 'cardinal' ? self::shownDigits($input->props, $numbers) : [];
+        $category = self::ask(Api::PluralRules, $locale, new Options($input->props, ['type' => $type] + $shown), $number, $observe, $numbers);
 
         foreach ($input->options as $option) {
             if ($option->key === $category) {
@@ -270,14 +270,16 @@ final class Modifiers
     /**
      * The digits `number` shows where no layer names a maximum: two fraction
      * digits, widened to a larger minimum a layer names, as ECMAScript
-     * widens its own default.
+     * widens its own default. It is what the modifier pins over its props.
+     *
+     * @return array{}|array{maximumFractionDigits: int|float}
      */
-    private static function shownDigits(Props $props, Numbers $numbers): Props
+    private static function shownDigits(Props $props, Numbers $numbers): array
     {
         $digits = $props->only(self::FRACTION_DIGITS);
 
         if (array_key_exists('maximumFractionDigits', $digits)) {
-            return $props;
+            return [];
         }
 
         $minimum = 0.0;
@@ -290,7 +292,7 @@ final class Modifiers
         }
 
         $maximum = is_nan($minimum) || $minimum < 2 ? 2 : $minimum;
-        return $props->with(['maximumFractionDigits' => is_finite($maximum) && floor($maximum) === $maximum && abs($maximum) < 2 ** 53 ? (int) $maximum : $maximum]);
+        return ['maximumFractionDigits' => is_finite($maximum) && floor($maximum) === $maximum && abs($maximum) < 2 ** 53 ? (int) $maximum : $maximum];
     }
 
     /**
@@ -300,7 +302,7 @@ final class Modifiers
      * @param int|float|array{int|float, string} $request
      * @param \Closure(Request): void $observe
      */
-    private static function ask(Api $api, string $locale, Props $options, int|float|array $request, \Closure $observe, Numbers $numbers): string
+    private static function ask(Api $api, string $locale, Options $options, int|float|array $request, \Closure $observe, Numbers $numbers): string
     {
         try {
             $answer = Facility::perform($api, $locale, $options, $request, $numbers);

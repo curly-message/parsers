@@ -8,6 +8,7 @@ use CurlyMessage\ModifierInput;
 use CurlyMessage\Option;
 use CurlyMessage\Origin;
 use CurlyMessage\Parser;
+use CurlyMessage\Props;
 use CurlyMessage\ReentryLimit;
 use CurlyMessage\Undefined;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -597,6 +598,85 @@ final class ModifiersTest extends TestCase
             [1, 3, 'none', 'none', null, true, false, false, true, false, false, 4, ['a' => 1, 'c' => 3, 'n' => null, 1 => 'one'], 'one', 'one'],
             [1, 1, 'none', 'none', null, true, false, false, true, false, false, 4, ['a' => 1, 'c' => 1, 'n' => null, 1 => 'one'], 'one', 'one'],
         ], $seen);
+    }
+
+    // A host builds props as the parser does, to hand a modifier it tests.
+    public function testComposesThePropsAHostBuildsAsTheParserComposesThem(): void
+    {
+        $props = new Props([['b' => 2, 'a' => Undefined::Value, 'c' => Undefined::Value], ['a' => 1, 'c' => Undefined::Value, 'd' => null]]);
+
+        self::assertSame([1, 2, null, 'none', true, false, true], [$props['a'], $props['b'], $props['d'], $props->get('c', 'none'), $props->has('a'), $props->has('c'), $props->has('d')]);
+        self::assertSame(['a' => 1, 'd' => null, 'b' => 2], $props->toArray());
+        self::assertCount(3, $props);
+        self::assertSame([[], 0], [(new Props())->toArray(), count(new Props())]);
+
+        $keyed = new Props(['upper' => ['a' => 1], 'no layer', 7 => ['a' => 2, 'b' => Undefined::Value, 'e' => 5]]);
+
+        self::assertSame([['a' => 1, 'e' => 5], 2, false], [$keyed->toArray(), count($keyed), $keyed->has('b')]);
+    }
+
+    // Props a host builds over layers holding references hold the values
+    // those held: writing into the array they hand back reaches neither the
+    // host's variables nor the props, and writing into those variables
+    // afterwards does not reach the props. The near miss: props of one wide
+    // layer still count and hand it back without copying it.
+    public function testHoldsTheValuesOfTheReferencesAHostsLayersHold(): void
+    {
+        /** @var array<string, int> $held */
+        $held = ['u' => 1, 'l' => 2];
+        $props = new Props([['u' => &$held['u']], ['l' => &$held['l'], 'b' => 3]]);
+        $composed = $props->toArray();
+        $composed['u'] = 99;
+        $composed['l'] = 99;
+
+        self::assertSame(['u' => 1, 'l' => 2], $held);
+
+        $held['u'] = 98;
+        $held['l'] = 98;
+
+        self::assertSame([['l' => 2, 'b' => 3, 'u' => 1], ['l' => 2, 'b' => 3, 'u' => 1], 1, 2, 3], [$props->toArray(), iterator_to_array($props), $props['u'], $props['l'], count($props)]);
+
+        $wide = [];
+
+        for ($at = 0; $at < 5000; $at += 1) {
+            $wide["p{$at}"] = $at;
+        }
+
+        $props = new Props([$wide]);
+        $before = memory_get_usage();
+        memory_reset_peak_usage();
+        $counted = count($props);
+        $composed = $props->toArray();
+        $grew = memory_get_peak_usage() - $before;
+
+        self::assertSame([5000, $wide], [$counted, $composed]);
+        self::assertLessThan(1024, $grew);
+    }
+
+    // Counting the props a modifier is handed, or taking them as an array,
+    // copies nothing of the layer every placeholder shares, however wide it
+    // is: what each placeholder costs stays what it reads.
+    public function testCopiesNoSharedLayerToCountPropsOrTakeThemAsAnArray(): void
+    {
+        $grew = [];
+        $parser = $this->parser(customModifiers: ['c' => static function (ModifierInput $in) use (&$grew): string {
+            $before = memory_get_usage();
+            memory_reset_peak_usage();
+            $counted = count($in->props);
+            $composed = $in->props->toArray();
+            $grew[] = memory_get_peak_usage() - $before;
+
+            return $counted . '/' . count($composed) . ' ';
+        }]);
+        $wide = [];
+
+        for ($at = 0; $at < 5000; $at += 1) {
+            $wide["p{$at}"] = $at;
+        }
+
+        self::assertSame(str_repeat('5000/5000 ', 3), $parser->resolve('{{n:c}}{{n:c}}{{n:c}}', ['n' => 1], ['c' => $wide]));
+        self::assertCount(3, $grew);
+        self::assertSame([], array_filter($grew, static fn(int $bytes): bool => $bytes >= 1024));
     }
 
     // A property a wrapper holds `Undefined::Value` under is one it does not

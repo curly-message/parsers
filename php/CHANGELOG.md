@@ -45,3 +45,7 @@
   longer public** since 1.0.0-RC.0. Observing the requests the Intl
   modifiers make is a seam of the conformance adapter, not a promise to a
   host.
+* **`Props::with()` is gone** since 1.0.0-RC.0, **and `new Props($layers)` is
+  public**: it composes `$layers`, the uppermost first, as the parser
+  composes a modifier's props. `Props::only()` stays, internal as it was,
+  and reads the layers alone.

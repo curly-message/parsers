@@ -12,6 +12,7 @@ use CurlyMessage\Conformance\Runner;
 use CurlyMessage\Conformance\Set;
 use CurlyMessage\Internal\Intl\Api;
 use CurlyMessage\Internal\Intl\Facility;
+use CurlyMessage\Internal\Intl\Options;
 use CurlyMessage\Props;
 
 /** The pinned set as this suite runs it, and the adapter it runs the set through. */
@@ -128,7 +129,7 @@ final class Pinned
                     default => throw new \LogicException('The request states an input no facility takes.'),
                 };
 
-                return Facility::perform(Api::from($request['api']), $locale ?? throw new \LogicException('The request states no locale.'), new Props([get_object_vars($request['options'])]), $input);
+                return Facility::perform(Api::from($request['api']), $locale ?? throw new \LogicException('The request states no locale.'), new Options(new Props([get_object_vars($request['options'])])), $input);
             }
 
             /** @return array{int|float, string} */

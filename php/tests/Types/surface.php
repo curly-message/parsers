@@ -16,6 +16,7 @@ use CurlyMessage\ModifierInput;
 use CurlyMessage\Option;
 use CurlyMessage\Origin;
 use CurlyMessage\Parser;
+use CurlyMessage\Props;
 use CurlyMessage\ReentryLimit;
 use CurlyMessage\Report;
 use CurlyMessage\ReportCode;
@@ -60,6 +61,7 @@ function modifierInput(ModifierInput $in, Option $option): void
     assertType('array<mixed>', $in->props->toArray());
     assertType('mixed', $in->props['seen']);
     assertType('bool', $in->props->has('seen'));
+    assertType('CurlyMessage\\Props', new Props([['seen' => true], ['seen' => Undefined::Value]]));
     assertType('string|null', $in->locale);
     assertType('string', $in->default());
     assertType('string', $option->key);
