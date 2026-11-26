@@ -1,6 +1,6 @@
 # curly-message/parser
 
-[![Packagist](https://img.shields.io/packagist/v/curly-message/parser?include_prereleases)](https://packagist.org/packages/curly-message/parser)
+[![Packagist](https://img.shields.io/packagist/v/curly-message/parser)](https://packagist.org/packages/curly-message/parser)
 [![tests](https://github.com/curly-message/parsers/actions/workflows/tests-php.yml/badge.svg?branch=main)](https://github.com/curly-message/parsers/actions/workflows/tests-php.yml)
 
 The PHP implementation of the
@@ -34,13 +34,6 @@ particular to PHP.
 
 ```sh
 composer require curly-message/parser
-```
-
-Until `1.0.0` is released the package has release candidates only, which
-Composer installs where the requirement allows them:
-
-```sh
-composer require "curly-message/parser:^1.0@RC"
 ```
 
 Composer reads the package from
