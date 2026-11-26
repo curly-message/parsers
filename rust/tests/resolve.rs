@@ -482,9 +482,6 @@ fn every_code_names_its_origin_and_its_limit() {
     assert_eq!(report.code.as_str(), "nesting-limit");
     assert_eq!(report.origin, Origin::Message);
     assert_eq!(report.limit, Some(8));
-    assert_eq!(Code::FailedModifier.origin(), Origin::Payload);
-    assert_eq!(Code::MissingLocale.origin().as_str(), "payload");
-    assert_eq!(Code::ReadLimit.origin().as_str(), "limit");
 }
 
 #[test]

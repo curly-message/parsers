@@ -23,3 +23,6 @@
 * **The enums a later revision can extend are `non_exhaustive`:** `Code`,
   `Api`, `Unit`, `Input`, `Level` and `Value`, so a match on one outside the
   crate takes a wildcard arm, and a new variant is not a breaking change.
+* **A report's origin is read off the report.** `Code::origin` is no longer
+  public: a host reads `Report::origin`, as the JavaScript and Python parsers
+  expose it.
