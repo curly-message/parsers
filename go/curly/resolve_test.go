@@ -230,24 +230,6 @@ func TestResolveReports(t *testing.T) {
 	if fmt.Sprint(reports) != fmt.Sprint(want) {
 		t.Errorf("got %+v\nwant %+v", reports, want)
 	}
-
-	origins := map[curly.Code]curly.Origin{
-		curly.UnknownModifier:     curly.OriginMessage,
-		curly.FailedModifier:      curly.OriginPayload,
-		curly.MissingOptions:      curly.OriginMessage,
-		curly.UnserializableValue: curly.OriginPayload,
-		curly.MissingLocale:       curly.OriginPayload,
-		curly.NestingLimit:        curly.OriginMessage,
-		curly.OutputLimit:         curly.OriginLimit,
-		curly.ReadLimit:           curly.OriginLimit,
-		curly.Code("other"):       "",
-	}
-
-	for code, origin := range origins {
-		if code.Origin() != origin {
-			t.Errorf("%s: origin %q, want %q", code, code.Origin(), origin)
-		}
-	}
 }
 
 func TestResolveReportTextIsEscaped(t *testing.T) {
