@@ -227,13 +227,13 @@ hands it each one with the locale as the caller wrote it.
   or an offset of `+` or `-` and `HH:mm`, `HHmm` or `HH:mm:ss`; then any
   number of bracketed annotations, read and ignored. That reads RFC 3339 but
   for a leap second (`23:59:60`), which Node's `Date.parse` does not read
-  either, `Value::Date`'s own text, jiff's `Timestamp` and `Zoned`, chrono's
-  `DateTime` and `NaiveDateTime` and the `time` crate's `OffsetDateTime` as
-  their `Display` writes them. What names no offset is in UTC, and a day past
-  the month's last rolls into the next (`2024-02-30` is March 1), as
-  `Date.parse` rolls it. Text the grammar does not read, a phrase such as
-  `next monday` among it, is no date: the placeholder takes its fallback
-  chain and reports `failed-modifier`.
+  either, jiff's `Timestamp` and `Zoned`, chrono's `DateTime` and
+  `NaiveDateTime` and the `time` crate's `OffsetDateTime` as their `Display`
+  writes them. What names no offset is in UTC, and a day past the month's
+  last rolls into the next (`2024-02-30` is March 1), as `Date.parse` rolls
+  it. Text the grammar does not read, a phrase such as `next monday` among
+  it, is no date: the placeholder takes its fallback chain and reports
+  `failed-modifier`.
 * **Time zones.** A request naming no `timeZone` formats in UTC: there is no
   host zone to read, and reading the system's would make a message's text
   depend on the machine it is resolved on. `UTC`, `Etc/UTC`, `Etc/GMT` and
@@ -496,23 +496,24 @@ assert!(payload.get("__proto__").is_none());
 | `Number` | a double |
 | `Integer`, `Unsigned` | an integer of up to 64 bits |
 | `String` | text |
-| `Date` | an instant authored as a date, in milliseconds since the epoch |
 | `Array`, `Object` | the plain shapes |
 | `Host` | a value of the application's own type, read by its `Display` |
 
+An instant is passed as `Value::Number` of its milliseconds since the epoch,
+or as `Value::host` of a date crate's type.
+
 A value converts to text as section 4 of the format has it: `Null`, `Bool`
 and the numbers as ECMAScript writes them (`1e+21`, `0.5`), an `Integer` or
-`Unsigned` in all its digits, a `Date` as an ISO 8601 instant in UTC or
-`Invalid Date`, an `Array` or `Object` as JSON with its members in insertion
-order, and a `Host` value through its `Display`. An `Undefined` member is left
-out of an object and written as `null` in an array, as is a number that is not
-finite. A `Display` that fails or panics describes nothing, and neither does a
-container whose serialization visits more than `MAX_CONVERSION_NODES` nodes,
-nor a `Display` or a serialization that would write more than
-`MAX_SERIALIZED_LENGTH` code units of UTF-16, the most a string holds in V8,
-where the JavaScript implementation meets the same bound: the placeholder
-takes its fallback chain and reports `unserializable-value`. What would pass
-the bound is refused there, never written first.
+`Unsigned` in all its digits, an `Array` or `Object` as JSON with its members
+in insertion order, and a `Host` value through its `Display`. An `Undefined`
+member is left out of an object and written as `null` in an array, as is a
+number that is not finite. A `Display` that fails or panics describes nothing,
+and neither does a container whose serialization visits more than
+`MAX_CONVERSION_NODES` nodes, nor a `Display` or a serialization that would
+write more than `MAX_SERIALIZED_LENGTH` code units of UTF-16, the most a string
+holds in V8, where the JavaScript implementation meets the same bound: the
+placeholder takes its fallback chain and reports `unserializable-value`. What
+would pass the bound is refused there, never written first.
 The second bound is what a container naming one large child many times meets,
 which visits few nodes. A value
 is converted once per resolution however many placeholders read it.

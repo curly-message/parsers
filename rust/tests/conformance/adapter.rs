@@ -299,7 +299,7 @@ fn out(value: &Value) -> RunnerValue {
         Value::Undefined => RunnerValue::Undefined,
         Value::Null => RunnerValue::Null,
         Value::Bool(flag) => RunnerValue::Bool(*flag),
-        Value::Number(number) | Value::Date(number) => RunnerValue::Number(*number),
+        Value::Number(number) => RunnerValue::Number(*number),
         #[expect(clippy::cast_precision_loss, reason = "a JSON number is a double")]
         Value::Integer(number) => RunnerValue::Number(*number as f64),
         #[expect(clippy::cast_precision_loss, reason = "a JSON number is a double")]

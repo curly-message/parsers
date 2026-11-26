@@ -302,60 +302,6 @@ const DAY: i64 = 86_400_000;
 // The largest time value ECMAScript's TimeClip keeps, either side of the epoch.
 const TIME_CLIP: f64 = 8.64e15;
 
-/// An instant as ECMAScript's `toISOString` writes it, or nothing where the
-/// milliseconds are not a time value (NaN, or outside TimeClip).
-pub(crate) fn iso_date(milliseconds: f64) -> Option<String> {
-    if !milliseconds.is_finite() || milliseconds.abs() > TIME_CLIP {
-        return None;
-    }
-
-    // TimeClip truncates, and the bound above keeps the value well inside i64.
-    let time = milliseconds.trunc() as i64;
-    let (days, within) = (time.div_euclid(DAY), time.rem_euclid(DAY));
-    let (year, month, day) = civil_from_days(days);
-    let year = if (0..=9999).contains(&year) {
-        format!("{year:04}")
-    } else {
-        format!(
-            "{}{:06}",
-            if year < 0 { '-' } else { '+' },
-            year.unsigned_abs()
-        )
-    };
-
-    Some(format!(
-        "{year}-{month:02}-{day:02}T{:02}:{:02}:{:02}.{:03}Z",
-        within / 3_600_000,
-        within / 60_000 % 60,
-        within / 1000 % 60,
-        within % 1000,
-    ))
-}
-
-// The proleptic Gregorian date of a day counted from the epoch.
-#[expect(
-    clippy::arithmetic_side_effects,
-    reason = "TimeClip keeps the day count within 1e8 of the epoch"
-)]
-fn civil_from_days(days: i64) -> (i64, i64, i64) {
-    let shifted = days + 719_468;
-    let era = shifted.div_euclid(146_097);
-    let day_of_era = shifted.rem_euclid(146_097);
-    let year_of_era =
-        (day_of_era - day_of_era / 1460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
-    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
-    let shifted_month = (5 * day_of_year + 2) / 153;
-    let day = day_of_year - (153 * shifted_month + 2) / 5 + 1;
-    let month = if shifted_month < 10 {
-        shifted_month + 3
-    } else {
-        shifted_month - 9
-    };
-    let year = year_of_era + era * 400 + i64::from(month <= 2);
-
-    (year, month, day)
-}
-
 /// The number section 11.2's test reads text as: what a formatting modifier
 /// formats (section 11.2), and what `plural` and `ordinal` select for, the
 /// value and an option key that is a number alike (section 11.5).
@@ -389,9 +335,9 @@ pub fn modifier_input(text: &str) -> Option<f64> {
 }
 
 /// ECMAScript's ToNumber over the value model: `Undefined` is NaN, `Null` 0,
-/// a boolean 1 or 0, text and a host value's text by StringToNumber, and a
-/// date its time value. An array or an object is NaN, where ECMAScript would
-/// read the text its `toString` gives.
+/// a boolean 1 or 0, text and a host value's text by StringToNumber. An array
+/// or an object is NaN, where ECMAScript would read the text its `toString`
+/// gives.
 pub(crate) fn to_number_value(value: &Value) -> f64 {
     match value {
         Value::Undefined | Value::Array(_) | Value::Object(_) => f64::NAN,
@@ -410,13 +356,6 @@ pub(crate) fn to_number_value(value: &Value) -> f64 {
         Value::Unsigned(number) => *number as f64,
         Value::String(text) => to_number(text),
         Value::Host(host) => display(&**host).map_or(f64::NAN, |text| to_number(&text)),
-        Value::Date(milliseconds) => {
-            if milliseconds.is_finite() && milliseconds.abs() <= TIME_CLIP {
-                milliseconds.trunc() + 0.0
-            } else {
-                f64::NAN
-            }
-        }
     }
 }
 
@@ -665,7 +604,7 @@ fn days_from_civil(year: i64, month: i64, day: i64) -> Option<i64> {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
-    use super::{date_input, iso_date, modifier_input, to_js_string, to_number, to_number_value};
+    use super::{date_input, modifier_input, to_js_string, to_number, to_number_value};
     use crate::value::{Object, Value};
 
     // Each row was read off Node 22: `String(n)`.
@@ -763,35 +702,6 @@ mod tests {
         assert_eq!(to_number(&"1".repeat(300)), 1.111_111_111_111_111_2e299);
     }
 
-    #[test]
-    fn instants_are_written_as_iso_strings() {
-        let cases: [(f64, Option<&str>); 9] = [
-            (0.0, Some("1970-01-01T00:00:00.000Z")),
-            (-0.0, Some("1970-01-01T00:00:00.000Z")),
-            (1_709_632_800_000.0, Some("2024-03-05T10:00:00.000Z")),
-            (-1.0, Some("1969-12-31T23:59:59.999Z")),
-            (1.9, Some("1970-01-01T00:00:00.001Z")),
-            (8.64e15, Some("+275760-09-13T00:00:00.000Z")),
-            (-8.64e15, Some("-271821-04-20T00:00:00.000Z")),
-            (-62_198_755_200_000.0, Some("-000001-01-01T00:00:00.000Z")),
-            (8.64e15 + 1.0, None),
-        ];
-
-        for (milliseconds, text) in cases {
-            assert_eq!(iso_date(milliseconds).as_deref(), text, "{milliseconds:?}");
-        }
-
-        assert_eq!(iso_date(f64::NAN), None);
-        assert_eq!(
-            iso_date(253_402_300_799_999.0).as_deref(),
-            Some("9999-12-31T23:59:59.999Z")
-        );
-        assert_eq!(
-            iso_date(253_402_300_800_000.0).as_deref(),
-            Some("+010000-01-01T00:00:00.000Z")
-        );
-    }
-
     // The values a formatting modifier reads as numbers, and their near
     // misses.
     #[test]
@@ -819,7 +729,7 @@ mod tests {
     #[test]
     fn a_property_is_read_as_ecmascript_reads_a_value_as_a_number() {
         let object = Value::from(Object::new().with("a", 1));
-        let cases: [(Value, f64); 11] = [
+        let cases: [(Value, f64); 9] = [
             (Value::Null, 0.0),
             (Value::Bool(true), 1.0),
             (Value::Bool(false), 0.0),
@@ -829,8 +739,6 @@ mod tests {
             (Value::from("  "), 0.0),
             (Value::from(" 0x10 "), 16.0),
             (Value::host(42), 42.0),
-            (Value::date(1.9), 1.0),
-            (Value::date(-0.0), 0.0),
         ];
 
         for (value, number) in cases {
@@ -846,8 +754,6 @@ mod tests {
         for value in [
             Value::Undefined,
             Value::from("12px"),
-            Value::date(8.64e15 + 1.0),
-            Value::date(f64::NAN),
             Value::from(vec![1]),
             object,
         ] {

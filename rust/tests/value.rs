@@ -96,7 +96,7 @@ fn none_is_undefined_and_some_is_its_value() {
 
 #[test]
 fn primitives_convert_to_their_variant() {
-    let cases: [(Value, &str); 12] = [
+    let cases: [(Value, &str); 11] = [
         (true.into(), "Bool(true)"),
         (1.5f64.into(), "Number(1.5)"),
         (0.5f32.into(), "Number(0.5)"),
@@ -108,7 +108,6 @@ fn primitives_convert_to_their_variant() {
         (2usize.into(), "Unsigned(2)"),
         ("s".into(), r#"String("s")"#),
         (String::from("t").into(), r#"String("t")"#),
-        (Value::date(0.0), "Date(0.0)"),
     ];
 
     for (value, debug) in cases {

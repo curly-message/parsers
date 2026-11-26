@@ -72,7 +72,7 @@ const MESSAGES: [&str; 5] = [
 ];
 
 // 2026-01-31T00:00:00Z.
-const DUE: f64 = 1_769_817_600_000.0;
+const DUE: i64 = 1_769_817_600_000;
 
 fn catalogue_payload() -> Object {
     Object::new()
@@ -82,7 +82,7 @@ fn catalogue_payload() -> Object {
         .with("thread", "Plans")
         .with("folder", "docs")
         .with("amount", 1234.5)
-        .with("due", Value::date(DUE))
+        .with("due", DUE)
 }
 
 fn intl_parser() -> Parser {
