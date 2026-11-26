@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.0.0 (Unreleased)
+## 1.0.0
 
 * **The first implementation of `curly-message-3` in Python.** `create_parser`
   resolves a message at the Core and Extensions levels with no dependencies,

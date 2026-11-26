@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "curly-message"
-version = "1.0.0rc0"
+version = "1.0.0"
 description = "Python implementation of the Curly Message Format."
 readme = "README.md"
 requires-python = ">=3.11"
