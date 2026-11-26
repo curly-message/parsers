@@ -30,7 +30,7 @@ jobs:
       package: rust
 
   # `icu_experimental` requires the ICU4X minor it was released with, so with
-  # `intl` an application's graph holds ICU4X 2.3.x and nothing newer. This
+  # `intl` an application's graph holds ICU4X 2.4.x and nothing newer. This
   # fails once a newer ICU4X minor no longer resolves beside the crate: the
   # signal for the release that moves `intl` to it. Never on a pull request,
   # which it would block for a reason no pull request causes.

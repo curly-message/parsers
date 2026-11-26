@@ -324,7 +324,7 @@ Tech stack of `rust/` — **ground truth, do not assume otherwise**:
 | Build | `cargo build`; `cargo package` builds the `.crate` from the files it ships |
 | Tests | `cargo test`, with and without the `intl` feature; the conformance set vendored and checked by its sha256 (`conformance/set/`) |
 | Lint | `rustfmt` (`rustfmt.toml`) and clippy at `-D warnings` under the `[workspace.lints]` table of `rust/Cargo.toml`, both run by `tests-cargo.yml`'s Lint job and by `.githooks/rust.sh` |
-| Runtime dependencies | none; the `intl` feature brings ICU4X 2.3, `icu_experimental` 0.6 and `jiff` 0.2 |
+| Runtime dependencies | none; the `intl` feature brings ICU4X 2.4, `icu_experimental` 0.7 and `jiff` 0.2 |
 | Supported toolchains | Rust 1.88 and the latest stable, on Linux, macOS and Windows |
 | CI | `tests-rust.yml` (calls `tests-cargo.yml`; weekly, resolves the newest ICU4X beside the crate), `bench.yml` and `bench-label.yml`, `publish-rust.yml` (calls `publish-cargo.yml`) |
 

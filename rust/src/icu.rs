@@ -456,13 +456,11 @@ fn format_relative(
         value.sign = Sign::None;
     }
 
-    let mut formatter_options = RelativeTimeFormatterOptions::default();
-
-    formatter_options.numeric = if read.always {
+    let formatter_options = RelativeTimeFormatterOptions::default().with_numeric(if read.always {
         Numeric::Always
     } else {
         Numeric::Auto
-    };
+    });
 
     let prefs = (&locale).into();
     let formatter = relative_formatter!(

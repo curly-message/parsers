@@ -207,12 +207,12 @@ reads as no number and as no text, where ECMAScript would read the text its
 `toString` gives. A facility a host hands judges its own requests: the parser
 hands it each one with the locale as the caller wrote it.
 
-* **Locale data** is ICU4X 2.3's, compiled into the binary: no file to ship,
-  and the linker drops what is not used. It adds about 7 MB to a stripped
-  release binary (x86_64 Linux: 0.5 MB without the feature, 7.4 MB with every
-  modifier used), most of it time zones and their names. ICU4X 2.3 is a
-  locked dependency: with `intl`, an application's graph must hold ICU4X
-  2.3.x. What ICU4X has to say about data it lacks goes to the
+* **Locale data** is ICU4X 2.4's (CLDR 49), compiled into the binary: no
+  file to ship, and the linker drops what is not used. It adds about 7 MB to
+  a stripped release binary (x86_64 Linux: 0.5 MB without the feature,
+  7.6 MB with every modifier used), most of it time zones and their names.
+  ICU4X 2.4 is a locked dependency: with `intl`, an application's graph must
+  hold ICU4X 2.4.x. What ICU4X has to say about data it lacks goes to the
   [`log`](https://docs.rs/log) facade, which the application routes. The
   locale data and rules of the Intl level are ICU4X's, and so are its
   aliases and its locale fallback: a tag whose alias names a locale ICU4X
