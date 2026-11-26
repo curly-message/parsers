@@ -48,7 +48,7 @@ func git(repo string, args ...string) ([]byte, error) {
 func run() error {
 	repo := flag.String("repo", "../..", "the repository's root")
 	rev := flag.String("rev", "HEAD", "the revision to pack")
-	dir := flag.String("module", "", "the module's directory in the repository, as go or go/intl")
+	dir := flag.String("module", "", "the module's directory in the repository, such as go")
 	version := flag.String("version", "", "the version to pack it as")
 	proxy := flag.String("proxy", "", "a directory to write the module into, laid out as a module proxy")
 	hash := flag.Bool("hash", false, "print the zip's h1: hash")
