@@ -29,12 +29,14 @@ pub fn number(value: f64) -> String {
         return format!("-{}", number(-value));
     }
 
-    // Rust writes the shortest digits that read back as the same double,
-    // which are the digits ECMAScript chooses; only their layout differs.
+    // Rust writes the shortest digits that read back as the same double, as
+    // ECMAScript does, but for a tie between two of them; their layout
+    // differs too.
     let scientific = format!("{value:e}");
     let (mantissa, exponent) = scientific.split_once('e').unwrap_or((&scientific, "0"));
     let digits: String = mantissa.chars().filter(char::is_ascii_digit).collect();
     let exponent: i64 = exponent.parse().unwrap_or(0);
+    let digits = even_at_a_tie(value, digits, exponent);
     let k = digits.len() as i64;
     let n = exponent + 1;
 
@@ -56,6 +58,72 @@ pub fn number(value: f64) -> String {
         };
 
         format!("{first}{rest}e{sign}{}", (n - 1).abs())
+    }
+}
+
+// Of two shortest digit strings equally close to the double, ECMAScript's
+// `Number::toString` takes the even one, where Rust's `{:e}` takes the upper.
+// They tie only where the double's exact decimal expansion is the shortest
+// digits and one more, a 5; that expansion is read off the double exactly,
+// and the even string is taken where it reads back as the double.
+fn even_at_a_tie(value: f64, digits: String, exponent: i64) -> String {
+    let Some(exact) = exact_digits(value) else {
+        return digits;
+    };
+
+    if exact.checked_ilog10().map(|log| log as usize) != Some(digits.len()) || exact % 10 != 5 {
+        return digits;
+    }
+
+    let truncated = exact / 10;
+    let even = if truncated % 2 == 0 {
+        truncated
+    } else {
+        truncated + 1
+    };
+    let shortest = digits.parse::<u128>().ok();
+    let is_candidate = shortest == Some(truncated) || shortest == Some(truncated + 1);
+    let places = exponent - digits.len() as i64 + 1;
+    let even_digits = even.to_string();
+
+    if is_candidate
+        && shortest != Some(even)
+        && even_digits.len() == digits.len()
+        && format!("{even_digits}e{places}").parse::<f64>() == Ok(value)
+    {
+        even_digits
+    } else {
+        digits
+    }
+}
+
+// The digits of a finite, non-zero double's exact decimal expansion as an
+// integer `N`, the double being `N` times a power of ten, where `N` fits in
+// a `u128`; a tie needs at most 18 digits. The double is `m * 2^q` with
+// `m` odd: for a negative `q` that is `m * 5^-q * 10^q`, and for a positive
+// one `m / 5^q * 10^q`, where `5^q` divides `m`, and otherwise its digits end
+// in an even one.
+fn exact_digits(value: f64) -> Option<u128> {
+    let bits = value.to_bits();
+    let fraction = bits & ((1 << 52) - 1);
+    let biased = (bits >> 52) & 0x7ff;
+    let (significand, power) = if biased == 0 {
+        (fraction, -1074)
+    } else {
+        (fraction | (1 << 52), biased as i64 - 1075)
+    };
+    let zeros = significand.trailing_zeros();
+    let odd = significand >> zeros;
+    let power = power + i64::from(zeros);
+
+    if power >= 0 {
+        let five = 5_u64.checked_pow(u32::try_from(power).ok()?)?;
+
+        (odd % five == 0).then(|| u128::from(odd / five))
+    } else {
+        5_u128
+            .checked_pow(u32::try_from(power.unsigned_abs()).ok()?)?
+            .checked_mul(u128::from(odd))
     }
 }
 
@@ -250,6 +318,23 @@ mod tests {
             (f64::INFINITY, "Infinity"),
             (f64::NEG_INFINITY, "-Infinity"),
             (f64::NAN, "NaN"),
+        ] {
+            assert_eq!(number(value), written, "{value:e}");
+        }
+    }
+
+    #[test]
+    #[expect(
+        clippy::excessive_precision,
+        reason = "a tie is written as the double's exact value, its last digit a 5"
+    )]
+    fn a_tie_between_two_shortest_digit_strings_takes_the_even_one() {
+        for (value, written) in [
+            (2516583712.37890625, "2516583712.3789062"),
+            (-1600987034202908.25, "-1600987034202908.2"),
+            (0.1 + 0.2, "0.30000000000000004"),
+            (1e23, "1e+23"),
+            (5e-324, "5e-324"),
         ] {
             assert_eq!(number(value), written, "{value:e}");
         }
