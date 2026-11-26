@@ -117,6 +117,20 @@ def test_options_are_keyword_only_and_typed() -> None:
     assert report.code == "unknown-modifier"
 
 
+def test_a_modifier_runs_on_an_input_built_from_strings() -> None:
+    def upper(given: ModifierInput) -> object:
+        return given.value.upper()
+
+    modifier: Modifier = upper
+    built = ModifierInput(value="a", options=(Option("k", "v"),), default="d")
+    assert modifier(built) == "A"
+    assert_type(built.default, str)
+    assert built.default == "d"
+    assert built.options[0].value == "v"
+    with pytest.raises(TypeError):
+        ModifierInput(value="a", default=lambda: "x")  # type: ignore[arg-type]
+
+
 def test_the_checker_refuses_misuse() -> None:
     parser = create_parser(on_report=3)  # type: ignore[arg-type]
     parser = create_parser(custom_modifiers={"a": 1})  # type: ignore[dict-item]

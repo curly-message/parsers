@@ -150,14 +150,6 @@ def read(holder: Any) -> str:
     if found is not None:
         return found
     call = holder._call
-    if call is None:
-        # Host code made this one, around a callable of its own.
-        found = holder._produce()
-        if found is None:
-            return ""
-        holder._text = found
-        holder._produce = None
-        return found
     now: Now | None = None
     asked: Asked | None = None
     counted = False

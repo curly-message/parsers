@@ -659,6 +659,40 @@ def test_a_host_modifier_is_handed_the_value_the_options_and_the_default() -> No
     )
 
 
+def test_an_input_built_from_strings_answers_them_and_one_the_walk_hands_renders_once() -> None:
+    def show(config: ModifierInput) -> str:
+        options = ",".join(f"{o.key}={o.value}" for o in config.options)
+        return f"{config.value}|{options}|{config.default}"
+
+    built = ModifierInput(value="x", options=(Option("a", "A"),), default="D")
+    assert show(built) == show(built) == "x|a=A|D"
+
+    rendered: list[str] = []
+
+    def count(config: ModifierInput) -> str:
+        rendered.append(config.value)
+        return "C"
+
+    modifiers = {
+        "twice": lambda config: config.default + config.default,
+        "skip": lambda config: "S",
+        "count": count,
+    }
+    message = "{{v:twice; default:{{w:count}}}} {{v:skip; default:{{u:count}}}}"
+    assert with_modifiers(message, {"v": "x", "w": "y", "u": "z"}, modifiers) == ("CC S", [])
+    assert rendered == ["y"]
+
+
+@pytest.mark.parametrize("given", [lambda: "x", None], ids=["callable", "None"])
+def test_an_input_built_from_anything_but_strings_raises_where_it_is_built(given: Any) -> None:
+    with pytest.raises(TypeError):
+        Option("k", given)
+    with pytest.raises(TypeError):
+        ModifierInput(value="x", default=given)
+    assert Option("k", "").value == ""
+    assert ModifierInput(value="x", default="").default == ""
+
+
 def test_a_host_modifier_answers_with_a_value_converted_like_a_payload_value() -> None:
     answers: dict[str, Modifier] = {
         "number": lambda config: 1,
