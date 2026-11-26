@@ -21,8 +21,9 @@
   milliseconds since the epoch, which `date` formats, or `Value::host` of a
   date crate's type, whose `Display` text `date` reads.
 * **The enums a later revision can extend are `non_exhaustive`:** `Code`,
-  `Api`, `Unit`, `Input`, `Level` and `Value`, so a match on one outside the
-  crate takes a wildcard arm, and a new variant is not a breaking change.
+  `Api`, `Unit`, `Input`, `Level`, `Value` and `NodeKind`, so a match on
+  one outside the crate takes a wildcard arm, and a new variant is not a
+  breaking change.
 * **`MAX_SERIALIZED_LENGTH` counts bytes, 10 000 000 of them.** One
   serialization of a value, and a value's `Display`, writes at most
   10 000 000 bytes of UTF-8, the unit every other text limit of the crate

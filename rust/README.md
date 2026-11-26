@@ -34,8 +34,8 @@ The crate needs Rust 1.88 or newer, and has no dependencies without the
 `intl` feature (see [Intl](#intl)). Each change is tested on Rust 1.88 and on
 the current stable release, on Linux and Windows with and without `intl`, on
 macOS with it, and again from the `.crate` a release ships. A prerelease, such as
-`1.0.0-next.1`, is picked only by a requirement that names a prerelease of
-its version, `curly-message-parser = "1.0.0-next.1"`.
+`1.1.0-next.0`, is picked only by a requirement that names a prerelease of
+its version, `curly-message-parser = "1.1.0-next.0"`.
 
 ## Resolving a message
 
