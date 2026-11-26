@@ -116,6 +116,35 @@ jobs:
           GOARCH: '386'
         run: go test -count=1 ./...
 
+  # Go 1.26 with encoding/json built on encoding/json/v2, the one build of
+  # marshalers_jsonv2_go126.go. The job goes with that file when 1.26 leaves
+  # the matrix.
+  JSONv2:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        module: [go]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup Go
+        uses: actions/setup-go@v7
+        with:
+          go-version: '1.26.x'
+          cache: false
+
+      - name: Test with GOEXPERIMENT=jsonv2
+        env:
+          GOEXPERIMENT: jsonv2
+        run: go test -count=1 ./...
+
   # The formatting contract, over every module under go/, the never-tagged
   # dev module among them, at the oldest Go the modules support.
   Lint:

@@ -219,7 +219,7 @@ Tech stack of `go/` — **ground truth, do not assume otherwise**:
 | Tests | `go test`, examples included; the conformance set vendored and checked by its sha256 (`internal/conformance/set/`) |
 | Lint | `gofmt`, `go vet`, staticcheck v0.8.2, `go mod tidy -diff`, ASCII-only `.go`, all run by `tests-go.yml`'s Lint job; `.githooks/go.sh` runs `gofmt`, `go vet` and the ASCII check |
 | Runtime dependencies | none: `go list -m all` prints the module alone |
-| Supported toolchains | the Go `go.mod` names, the latest patch of that release, and the latest stable, on Linux, macOS and Windows |
+| Supported toolchains | the Go `go.mod` names, the latest patch of that release, and the latest stable, on Linux, macOS and Windows, and Go 1.26 with `GOEXPERIMENT=jsonv2`, on Linux |
 | CI | `tests-go.yml`, `bench.yml` and `bench-label.yml`, `publish-go.yml` |
 
 Commands, run from `go/`:
