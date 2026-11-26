@@ -9,7 +9,7 @@
 
 // `IcuIntl` against Node on one request per option mapping of `IcuIntl`
 // (`tests/intl/requests.json`), with Node's answers recorded by
-// `tests/intl/golden.mjs` in `tests/intl/golden.json`. A request whose answer
+// `conformance/golden.mjs` in `tests/intl/golden.json`. A request whose answer
 // differs from Node's is listed below with the reason, so a new difference is
 // seen rather than shipped.
 
@@ -421,7 +421,7 @@ fn the_golden_file_answers_the_requests_as_they_stand() {
     assert_eq!(
         requests.items(),
         answered.as_slice(),
-        "run tests/intl/golden.mjs again"
+        "run conformance/golden.mjs again"
     );
 }
 

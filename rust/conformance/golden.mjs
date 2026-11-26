@@ -1,15 +1,18 @@
-// Node's answers to the requests the conformance set states, as the recorded
-// host of the runner's text reading:
+// Node's answers to a list of requests, as the recorded host. It writes both
+// golden files: the requests the conformance set states, for the runner's
+// text reading, and the requests of `IcuIntl`'s parity test:
 //
 //   cargo run -p curly-message-conformance --bin requests \
 //     | node conformance/golden.mjs > conformance/set/golden-4.2.0.json
+//   node conformance/golden.mjs < tests/intl/requests.json > tests/intl/golden.json
 //
 // Each request is performed as the JavaScript runner's `format()` performs
 // it, and its answer is recorded beside it: the text, the plural category, or
-// the name of the error the facility raised. The JavaScript runner formats a
-// request with no `timeZone` in the zone of the machine it runs on, which is
-// UTC where the set is tested, so this does too. Text outside ASCII is written
-// as JSON escapes, so the file shows every invisible space.
+// the name of the error the facility raised. A request with no `timeZone` is
+// formatted in UTC: the zone the JavaScript runner formats in where the set is
+// tested, and the one the Rust parser formats in where none is named. Text
+// outside ASCII is written as JSON escapes, so the file shows every invisible
+// space.
 import { readFileSync } from 'node:fs';
 
 process.env.TZ = 'UTC';
