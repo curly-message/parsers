@@ -124,8 +124,8 @@ fn even_at_a_tie(number: f64, digits: String, exponent: i64) -> String {
 }
 
 // The digits of a finite, non-zero double's exact decimal expansion as an
-// integer `N`, the double being `N` times a power of ten, where `N` holds
-// fewer than 39 digits; a tie needs at most 18. The double is `m * 2^q` with
+// integer `N`, the double being `N` times a power of ten, where `N` fits in
+// a `u128`; a tie needs at most 18 digits. The double is `m * 2^q` with
 // `m` odd: for a negative `q` that is `m * 5^-q * 10^q`, and for a positive
 // one `m / 5^q * 10^q`, where `5^q` divides `m`, and otherwise its digits end
 // in an even one.
