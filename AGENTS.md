@@ -213,7 +213,7 @@ Tech stack of `go/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Module | `github.com/curly-message/parsers/go`, package `curly`, released as a prerelease, `v1.0.0-next.0`; tags `go/vX.Y.Z` |
+| Module | `github.com/curly-message/parsers/go`, package `curly`, released, `v1.0.0`; tags `go/vX.Y.Z` |
 | Language | Go 1.26+ |
 | Build | the go command; no build step ships |
 | Tests | `go test`, examples included; the conformance set vendored and checked by its sha256 (`internal/conformance/set/`) |
@@ -253,10 +253,9 @@ Map of `go/`:
 
 The rules of `js/` above hold here, in their Go form:
 
-- **The public surface** is package `curly`'s exported identifiers. Until
-  the first release it is a prerelease's and promises nothing; from then
-  on, the API job of `tests-go.yml` fails on a change `gorelease` calls
-  incompatible.
+- **The public surface** is package `curly`'s exported identifiers,
+  released: the API job of `tests-go.yml` fails on a change `gorelease`
+  calls incompatible with the newest release.
 - **Diagnostics leave through `Options.OnReport`** and nowhere else.
 - **A Go value has no prototype.** An own-entry read is a map lookup, and a
   value is plain by its `reflect` type: an unnamed map keyed by `string`, or
@@ -318,7 +317,7 @@ Tech stack of `rust/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Crate | `curly-message-parser`, library `curly_message_parser`, released as a prerelease; the first version, `1.0.0-next.0`, was published by hand |
+| Crate | `curly-message-parser`, library `curly_message_parser`, released, `1.0.0`; the first version, the prerelease `1.0.0-next.0`, was published by hand |
 | Language | Rust, edition 2024, MSRV 1.88 |
 | Package manager | cargo, one workspace rooted at `rust/` (the parser, `conformance/`, `bench/`), `Cargo.lock` committed and every command `--locked` |
 | Build | `cargo build`; `cargo package` builds the `.crate` from the files it ships |
@@ -364,8 +363,7 @@ Map of `rust/`:
 
 The rules of `js/` above hold here, in their Rust form:
 
-- **The public surface** is the crate's public items. Until the first
-  release it is a prerelease's and promises nothing; from then on, the Lint
+- **The public surface** is the crate's public items, released: the Lint
   job of `tests-cargo.yml` holds it to the newest version on crates.io with
   `cargo semver-checks`.
 - **Diagnostics leave through `ParserBuilder::on_report`** and nowhere
@@ -488,7 +486,7 @@ Tech stack of `python/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Package | `curly-message` on PyPI, imported as `curly_message`, released as a release candidate; the first version, `1.0.0rc0`, was published by the workflow through a pending trusted publisher |
+| Package | `curly-message` on PyPI, imported as `curly_message`, released, `1.0.0`; the first version, the release candidate `1.0.0rc0`, was published by the workflow through a pending trusted publisher |
 | Language | Python, typed (`py.typed`) |
 | Package manager | uv, one lockfile (`uv.lock`); the commands are `tasks.py`'s |
 | Build | hatchling, pinned by hash in `build-constraints.txt`: an sdist and a pure wheel |
@@ -615,7 +613,7 @@ Tech stack of `php/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Package | `curly-message/parser` for Composer, released as a release candidate, `1.0.0-RC.0`; served from `curly-message/parser-php`, which only `publish-php.yml` writes to |
+| Package | `curly-message/parser` for Composer, released, `1.0.0`; served from `curly-message/parser-php`, which only `publish-php.yml` writes to |
 | Language | PHP with `declare(strict_types=1)`, namespace `CurlyMessage\` (PSR-4 over `src/`) |
 | Package manager | Composer: `composer.lock` for the package and its suite, and `tools/qa/composer.lock` for php-cs-fixer and PHPStan |
 | Build | none: what a release ships is `git archive` of `php/` under its `.gitattributes`, which `composer test:dist` installs by copy and tests |
