@@ -26,3 +26,7 @@
   it: at the offset after the transition on 3.11, before it from 3.12. A
   time at a local offset of a day or more cannot be formatted, where it was
   read at offset zero.
+* **A unit is read at the next length where one holds nothing for it.** A
+  length of a unit's data that holds neither the plural category nor
+  `other` gives the pattern to the next one, and the `long` length falls
+  back to the `short`, where `1.0.0rc0` wrote the number without its unit.

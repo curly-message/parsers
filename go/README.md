@@ -555,10 +555,10 @@ later version whose `go.mod` retracts it.
 A release is cut from `main` by the **Go parser release** workflow
 (`.github/workflows/publish-go.yml`, started by hand, with the module
 directory to release). The changelog's pending section names the version it
-will be released as, `### 1.0.0 (Unreleased)`, and the release types read it
+will be released as, `### 1.1.0 (Unreleased)` say, and the release types read it
 as the JavaScript parser's workflow does: `patch`, `minor` and `major` must
 arrive at that version and cut the section, and `next` tags a prerelease of
-it, `v1.0.0-next.0` and then `.1`, and leaves the section open. The version
+it, `v1.1.0-next.0` and then `.1`, and leaves the section open. The version
 line the bump starts from is `package.json`'s, since the version is not
 tagged until the release exists, and the workflow refuses a version already
 tagged, and from version 2 on, a module path that does not end in its major

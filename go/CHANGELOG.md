@@ -34,3 +34,5 @@
   rule of the format decided in the parser and only the text and the plural
   category asked of the supplier. A supplier implementing `IntlResolving` is
   handed the `Resolver` of the resolution asking it.
+- A report's origin is read off the report: `Code.Origin` is no longer
+  exported, as it was in `v1.0.0-next.0`, and a host reads `Report.Origin`.
