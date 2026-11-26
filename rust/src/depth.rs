@@ -60,7 +60,6 @@ impl fmt::Display for ReentryLimit {
 /// The count is this thread's, so the guard is not `Send`: what moves it to
 /// another thread claims a `Send` it does not have.
 pub(crate) struct InProgress {
-    counted: bool,
     on_this_thread: PhantomData<*const ()>,
 }
 
@@ -69,6 +68,9 @@ impl InProgress {
     /// [`MAX_REENTRY`] in progress. One asked for where none is never is
     /// refused.
     pub(crate) fn enter() -> Option<Self> {
+        // The count stays readable wherever host code runs, as the thread
+        // tears its locals down too: a native key has no destructor, and an OS
+        // key's runs none and leaves the count to be read afresh after it.
         let entered = IN_PROGRESS.try_with(|count| {
             let held = count.get();
 
@@ -81,29 +83,15 @@ impl InProgress {
             true
         });
 
-        match entered {
-            Ok(true) => Some(Self {
-                counted: true,
-                on_this_thread: PhantomData,
-            }),
-            Ok(false) => None,
-            // The count has no destructor, so it stays readable while the
-            // thread tears its locals down, and a resolution there is counted
-            // as any other. Should it ever be unreadable, a resolution goes
-            // uncounted rather than refused.
-            Err(_) => Some(Self {
-                counted: false,
-                on_this_thread: PhantomData,
-            }),
-        }
+        matches!(entered, Ok(true)).then(|| Self {
+            on_this_thread: PhantomData,
+        })
     }
 }
 
 impl Drop for InProgress {
     fn drop(&mut self) {
-        if self.counted {
-            let _ = IN_PROGRESS.try_with(|count| count.set(count.get().saturating_sub(1)));
-        }
+        let _ = IN_PROGRESS.try_with(|count| count.set(count.get().saturating_sub(1)));
     }
 }
 
