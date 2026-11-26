@@ -49,3 +49,8 @@
   public**: it composes `$layers`, the uppermost first, as the parser
   composes a modifier's props. `Props::only()` stays, internal as it was,
   and reads the layers alone.
+* **`ReportCode::origin()`, `ReportCode::limit()` and `ReportCode::message()`
+  are no longer public** since 1.0.0-RC.0: a `Report` carries its `origin`,
+  its `limit` and its `message`. `ReportCode::OutputLimit->limit()` answered
+  `Parser::MAX_OUTPUT_LENGTH` where the report it named could carry
+  `Parser::MAX_TEXT_LENGTH`.

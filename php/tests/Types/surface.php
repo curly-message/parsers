@@ -79,9 +79,6 @@ function report(Report $report, string $code): void
     assertType('mixed', $report->id);
     assertType('int|null', $report->limit);
     assertType('string', $report->text);
-    assertType('CurlyMessage\Origin', $report->code->origin());
-    assertType('int|null', $report->code->limit());
-    assertType('string', $report->code->message());
     assertType("'failed-modifier'|'missing-locale'|'missing-options'|'nesting-limit'|'output-limit'|'read-limit'|'unknown-modifier'|'unserializable-value'", $report->code->value);
     assertType("'limit'|'message'|'payload'", $report->origin->value);
     assertType('CurlyMessage\ReportCode', ReportCode::from($code));

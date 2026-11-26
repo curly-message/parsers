@@ -432,12 +432,12 @@ $parser->resolve('{{v:nope; default:D}}', payload: ['v' => 1], id: 'greeting');
 ```
 
 The parser writes nowhere itself: `onReport` is where diagnostics go. A
-`Report` carries `code` (a `ReportCode`), the `origin` the code declares
-(`message`, `payload` or `limit`), an English `message`, the `id` the
-resolution was given, the `limit` for the three codes that reach one (for
-`output-limit` below the message, `MAX_TEXT_LENGTH`), and `text`, the
-placeholder that reported, as the message spells it. `text` is never payload
-text. It is cut to 120 bytes, stepping back over at most three
+`Report` carries `code` (a `ReportCode`), `origin`, what the condition is a
+defect of (an `Origin`: `message`, `payload` or `limit`), an English
+`message`, the `id` the resolution was given, the `limit` for the three codes
+that reach one (for `output-limit` below the message, `MAX_TEXT_LENGTH`), and
+`text`, the placeholder that reported, as the message spells it. `text` is
+never payload text. It is cut to 120 bytes, stepping back over at most three
 bytes so the cut never splits a character, marked `...` where cut, and escaped
 as a JSON string's contents, with every line terminator the format knows
 escaped, so no message can forge a line where a report is written. A handler
