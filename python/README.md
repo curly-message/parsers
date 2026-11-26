@@ -39,8 +39,6 @@ pip install curly-message          # Core and Extensions, with no dependencies
 pip install "curly-message[intl]"  # and Intl, over Babel
 ```
 
-A release candidate installs with `pip install --pre curly-message`.
-
 The `intl` extra installs [Babel](https://babel.pocoo.org/) 2.14 or later,
 and `tzdata` for the zone database where the system has none. Intl is on
 wherever such a Babel is installed, by this extra or by any other package
