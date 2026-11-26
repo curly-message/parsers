@@ -43,7 +43,6 @@ function parser(): void
     assertType('100000', Parser::MAX_CONVERSION_NODES);
     assertType('8', Parser::MAX_NESTING);
     assertType('32', Parser::MAX_REENTRY);
-    assertType('512', Parser::MAX_IN_PROGRESS);
     assertType('536870888', Parser::MAX_TEXT_LENGTH);
     assertType('CurlyMessage\Parser', new Parser());
 

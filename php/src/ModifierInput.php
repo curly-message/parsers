@@ -44,7 +44,7 @@ final class ModifierInput
      * fiber was let go in the middle of it. One made by anything but the
      * modifier the input was handed to, while that modifier is being asked,
      * takes a place among the resolutions in progress while it walks
-     * (`Parser::MAX_REENTRY`, `Parser::MAX_IN_PROGRESS`), and is refused
+     * (`Parser::MAX_REENTRY`), and is refused
      * where there is none, which leaves the chain to be walked by a later
      * call.
      */

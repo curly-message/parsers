@@ -453,7 +453,6 @@ that throws is contained, and nothing it answers changes the resolution.
 | text the parser writes: one value's JSON, and what a level below the message holds as it places a result | `Parser::MAX_TEXT_LENGTH` | 536 870 888 bytes |
 | levels of placeholder resolved, the outermost first | `Parser::MAX_NESTING` | 8 |
 | resolutions in progress on one thread of execution; a fiber is a thread of its own, and an option or a fallback chain host code reads outside the call it was handed to takes a place while it renders | `Parser::MAX_REENTRY` | 32 |
-| resolutions in progress in the process, every fiber's included, suspended or not, each begun beneath another on its thread of execution; a resolution is in progress until its `resolve` returned | `Parser::MAX_IN_PROGRESS` | 512 |
 
 A PHP string is bytes, so the length limits count bytes, what `strlen` counts:
 100 000 bytes hold 100 000 ASCII characters and 50 000 two-byte ones.
@@ -526,7 +525,7 @@ is free. PHP ends a process that passes `memory_limit` with a fatal error no
 `catch` sees, and no code the parser runs can contain it: that is the host
 ending the process, as it would for any code, and a host sizes `memory_limit`
 for what it resolves. What a resolution holds is bounded by its message, by
-`MAX_NESTING`, by `MAX_TEXT_LENGTH` and by the re-entry bounds, and none of it
+`MAX_NESTING`, by `MAX_TEXT_LENGTH` and by the re-entry bound, and none of it
 grows with anything outside the call; within those bounds, these end a process
 at PHP's default `memory_limit` of 128M, measured on PHP 8.3 by
 [`tools/memory.php`](tools/memory.php) in the shape each row names, which it
@@ -539,8 +538,9 @@ ends the process where that comes to 128M:
 | a value whose JSON is long, which the parser writes before it measures what it places: a string shared many times, or a key of characters that escape | 124 MiB of JSON, as one string of 1 MiB shared 124 times, or a key of 13 MiB of control characters, each written as six |
 | a long text a level below the message places with text around it, held about three times over as the level writes it (what it places, the level's own text, and the text the level returns) at any depth | an answer, or a value, of about 42 MiB; an answer placed with nothing around it is held once, and ends it from about 124 MiB |
 | a recursion that resolves each level in a fiber of its own, which no bound the parser keeps reaches and the host bounds (see [Re-entry](#re-entry)), each level holding its fiber, its own message, what its placeholders declare and the options it hands a host modifier | a message of one option that includes itself so: about 5 000 levels through a host modifier it hands its options to, and about 5 800 through a value that resolves it again |
+| a recursion that resolves its levels by turns in a fiber of its own and beneath the one before on its stack, which no bound the parser keeps reaches either, each pair of levels holding one fiber and what two levels hold of the message | a message of one option that includes itself so through a value that resolves it again: about 9 200 levels |
 | host code that reads options it kept one inside another, each in a fiber of its own, while the resolution is in progress, which no bound the parser keeps reaches and the host bounds, as it does the fibers: about 24 KB for each | about 5 300 options, a message of about 74 KB |
-| fibers the host keeps, which the parser does not count unless one is suspended in a resolution begun beneath another | about 7 600 fibers, at about 17 KB each, the host's alone |
+| fibers the host keeps, which the parser does not count | about 7 600 fibers, at about 17 KB each, the host's alone |
 | a list an Intl modifier's props hold, which it reads as text, as ECMAScript's `String()` joins one, up to `MAX_TEXT_LENGTH` | 124 MiB of text, as one string of 1 MiB shared 124 times |
 | a refusal's trace, which refers to the arguments of every frame beneath it unless `zend.exception_ignore_args` is on, as production configurations set it | what the host's frames pass, kept until the refusal is let go |
 
@@ -572,28 +572,19 @@ counts its own places: what one fiber holds, suspended or not, takes nothing
 from another's 32, and a fiber started or resumed inside a resolution begins
 from its own count. A `resolve` begun on a thread of execution where nothing
 is in progress, in main code or at the top of a fiber, is never refused, as
-section 13 asks, however many resolutions are in progress elsewhere. So a
-recursion that begins each level in a fiber of its own, as an async host
-awaiting each call does, reaches no bound the parser keeps: it is the host's
-to bound, as the fibers it starts are, and PHP's memory limit ends one the
-host does not (see Memory). A resolution begun beneath another on its thread
-is counted in the process too, and one begun so while 512 are in progress,
-every fiber's included, throws the same `ReentryLimit`. That adds up the
-parts of a recursion that each stay on one stack past their first level,
-which each fiber's count begins afresh, and what fibers left suspended in
-such resolutions hold. A resolution is in progress until its `resolve`
-returned, so one a fiber left suspended in a text of it holds no place once
-its `resolve` returned, and one a fiber left suspended in its own walk,
-beneath another, holds its place until the fiber finishes it. Once a
-resolution returned nothing resolves on its account (see Modifiers), so texts
-host code kept and reads later begin nothing and take no place. While 512 are
-in progress, every `resolve` begun beneath another throws, in main code and in
-any fiber, until one finishes, or until PHP destroys a fiber let go: at once,
-as the host lets go of its last reference to it, or, where the host's own
-references to it form a cycle, when PHP's cycle collector runs. No code
-reaches it that does not suspend fibers in the middle of resolutions begun
-beneath others, or recurse through fibers that each resolve more than one
-level on their own stack.
+section 13 asks, however many resolutions are in progress elsewhere, and one
+begun beneath another is refused by the count of its own thread alone,
+however many fibers are suspended in resolutions. So a recursion that begins
+its levels in fibers of their own, as an async host awaiting each call does,
+reaches no bound the parser keeps, whether each level begins in a new fiber
+or only every other one does while the rest resolve beneath it on its stack:
+it is the host's to bound, as the fibers it starts are, and PHP's memory limit
+ends one the host does not, with a fatal error rather than `ReentryLimit` (see
+Memory). Section 13 asks the bound per thread of execution and leaves one
+across them to the implementation; the other implementations of the format
+keep none either. Once a resolution returned nothing resolves on its account
+(see Modifiers), so texts host code kept and reads later begin nothing and
+take no place.
 
 `ReentryLimit` is all `resolve` ever throws, but for what a `__destruct` PHP's
 cycle collector runs inside it throws (see Modifiers). A refused read of an

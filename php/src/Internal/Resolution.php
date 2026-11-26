@@ -521,9 +521,8 @@ final class Resolution
      * placeholders that each read a text kept from the one before would
      * nest a rendering for each of them, at no level the nesting limit
      * counts. Such a read counts as a resolution in progress, and takes a
-     * resolution's places while it renders: one on its thread of
-     * execution and, beneath another there, one in the process. A read
-     * that finds none to take is refused.
+     * resolution's place on its thread of execution while it renders. A
+     * read that finds none to take is refused.
      *
      * A refused read renders nothing and answers the empty string, since
      * a read is an accessor, and fails nothing: the code that made it goes
@@ -567,9 +566,9 @@ final class Resolution
         // then asked no longer: what it reads of the call's other texts it
         // reads from outside.
         $outer = Guard::asks(null);
-        $entered = $outer === $call ? null : Guard::enter();
+        $counted = $outer !== $call;
 
-        if (is_string($entered)) {
+        if ($counted && Guard::enter() !== null) {
             Guard::asks($outer);
 
             return '';
@@ -581,8 +580,8 @@ final class Resolution
         } finally {
             Guard::asks($outer);
 
-            if ($entered !== null) {
-                Guard::leave($entered);
+            if ($counted) {
+                Guard::leave();
             }
         }
 

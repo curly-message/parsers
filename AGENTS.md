@@ -653,7 +653,7 @@ Map of `php/`:
 | `src/Internal/Conversion.php` | a value as text (section 4), the JSON written and bounded here |
 | `src/Internal/Layers.php` | reads of the payload, wrappers and props layers, by own entries only |
 | `src/Internal/Scanner.php`, `src/Internal/Text.php` | the placeholder scanner, `LINE_TERM` and the pure text helpers |
-| `src/Internal/Guard.php`, `src/Internal/Contained.php` | the re-entry bounds, and the containment of host code |
+| `src/Internal/Guard.php`, `src/Internal/Contained.php` | the re-entry bound, and the containment of host code |
 | `src/Internal/Comparisons.php`, `src/Internal/Intl/` | the format's comparisons, and its Intl modifiers over ext-intl |
 | `src/Internal/Excerpt.php` | the escaped text a report carries |
 | `conformance/` | the runner of the set and the audit of its defects, and the set's pin |
@@ -679,17 +679,18 @@ The rules of `js/` hold here, with these readings:
   never by walking them.
 - **The resolution limits** are `Parser::MAX_OUTPUT_LENGTH`,
   `MAX_READ_LENGTH`, `MAX_CONVERSION_NODES` and `MAX_NESTING`, held to the
-  same values and the same rules as `js/`'s, counted in bytes. Three bounds of
+  same values and the same rules as `js/`'s, counted in bytes. Two bounds of
   PHP's own stand beside them, as load-bearing: `MAX_TEXT_LENGTH`, the
-  longest text the parser writes; `MAX_REENTRY`, the resolutions in progress
-  on one thread of execution, a fiber being one, where an option or a
-  fallback chain host code reads outside the call it was handed to takes a
-  place while it renders; and `MAX_IN_PROGRESS`, the resolutions in progress
-  in the process that were each begun beneath another on their thread. PHP
-  ends a recursion at its memory limit with a fatal error no `catch` sees, so
-  the last two stand in for the host's limit of section 13, and, as it asks,
-  neither refuses a resolution begun where none is in progress on its thread.
-- **`ReentryLimit` is all `resolve` throws**, past either re-entry bound:
+  longest text the parser writes; and `MAX_REENTRY`, the resolutions in
+  progress on one thread of execution, a fiber being one, where an option or
+  a fallback chain host code reads outside the call it was handed to takes a
+  place while it renders. PHP ends a recursion at its memory limit with a
+  fatal error no `catch` sees, so `MAX_REENTRY` stands in for the host's
+  limit of section 13, and, as it asks, never refuses a resolution begun
+  where none is in progress on its thread. No bound counts across threads of
+  execution: a recursion that spreads across fibers is the host's to bound,
+  and one it does not bound ends at the memory limit.
+- **`ReentryLimit` is all `resolve` throws**, past the re-entry bound:
   everything host code runs where the parser calls it — a modifier, a
   handler, `__toString`, `jsonSerialize`, a `__destruct` as the parser lets
   go of what it holds — runs inside `Contained`. A refused read of an option

@@ -32,7 +32,7 @@ final readonly class Option
      * a fiber was let go in the middle of it. One made by anything but the
      * modifier the option was handed to, while that modifier is being
      * asked, takes a place among the resolutions in progress while it
-     * renders (`Parser::MAX_REENTRY`, `Parser::MAX_IN_PROGRESS`), and is
+     * renders (`Parser::MAX_REENTRY`), and is
      * refused where there is none, which leaves the value to be rendered by
      * a later call.
      */

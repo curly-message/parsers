@@ -9,7 +9,6 @@ use CurlyMessage\Option;
 use CurlyMessage\Origin;
 use CurlyMessage\Parser;
 use CurlyMessage\Props;
-use CurlyMessage\ReentryLimit;
 use CurlyMessage\Undefined;
 use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\Attributes\RequiresPhpExtension;
@@ -1189,76 +1188,11 @@ final class ModifiersTest extends TestCase
         self::assertSame(['failed-modifier'], $this->codes());
     }
 
-    // A fiber let go while a text host code asked for renders gives back
-    // the place its resolution, begun beneath another, took in the process
-    // as PHP destroys the fiber, and no cycle collection needs to run for
-    // it. The read took none there, so once one of the fibers that hold
-    // every place is let go, one more resolution reading an option fits,
-    // and the next is refused.
-    public function testReleasesThePlaceOfAResolutionLetGoInARead(): void
-    {
-        $waiting = new class implements \Stringable {
-            public function __toString(): string
-            {
-                \Fiber::suspend();
-
-                return 'w';
-            }
-        };
-        $parser = $this->parser(customModifiers: ['read' => static fn(ModifierInput $in): string => $in->options[0]->value()]);
-        $beneath = static fn(\Closure $resolve): string => $parser->resolve('{{v}}', ['v' => new Beneath($resolve)]);
-        $park = static function () use ($parser, $waiting, $beneath): \Fiber {
-            $fiber = new \Fiber(static fn(): string => $beneath(static fn(): string => $parser->resolve('{{a:read; o:{{v}}}}', ['a' => 'a', 'v' => $waiting])));
-            $fiber->start();
-            self::assertTrue($fiber->isSuspended());
-
-            return $fiber;
-        };
-        $refused = static function () use ($parser, $beneath): void {
-            $beneath(static function () use ($parser): string {
-                try {
-                    $parser->resolve('A');
-                    self::fail('A resolution begun past the bound of the process was not refused.');
-                } catch (ReentryLimit $refused) {
-                    self::assertStringContainsString('in the process', $refused->getMessage());
-                }
-
-                return '';
-            });
-        };
-        $fibers = [];
-
-        for ($at = 0; $at < Parser::MAX_IN_PROGRESS; $at += 1) {
-            $fibers[] = $park();
-        }
-
-        $refused();
-        $collecting = gc_enabled();
-        gc_disable();
-
-        try {
-            array_shift($fibers);
-            $fibers[] = $park();
-            $refused();
-        } finally {
-            if ($collecting) {
-                gc_enable();
-            }
-        }
-
-        foreach ($fibers as $fiber) {
-            $fiber->resume();
-            self::assertSame('w', $fiber->getReturn());
-        }
-
-        self::assertSame([], $this->codes());
-    }
-
-    // A resolution is in progress until its `resolve` returns, and gives
-    // back the place it took in the process then, though a read it began is
-    // left suspended in a fiber: the fiber resumed later finishes nothing on
-    // its account.
-    public function testGivesBackThePlaceOfAResolutionAsItReturnsThoughAReadItBeganIsSuspended(): void
+    // A resolution returns though a read it began is left suspended in a
+    // fiber, and the fiber resumed later finishes nothing on its account:
+    // however many are left so, a resolution begun beneath another
+    // resolves.
+    public function testReturnsThoughAReadItBeganIsSuspendedInAFiber(): void
     {
         $waiting = new class implements \Stringable {
             public function __toString(): string
@@ -1279,12 +1213,12 @@ final class ModifiersTest extends TestCase
         }]);
         $beneath = static fn(\Closure $resolve): string => $parser->resolve('{{v}}', ['v' => new Beneath($resolve)]);
 
-        for ($at = 0; $at < Parser::MAX_IN_PROGRESS; $at += 1) {
+        for ($at = 0; $at < 600; $at += 1) {
             self::assertSame('r', $beneath(static fn(): string => $parser->resolve('{{a:fork; o:{{w}}}}', ['a' => 1, 'w' => $waiting])));
         }
 
         self::assertSame('A', $beneath(static fn(): string => $parser->resolve('A')));
-        self::assertCount(Parser::MAX_IN_PROGRESS, $fibers);
+        self::assertCount(600, $fibers);
 
         foreach ($fibers as $fiber) {
             $fiber->resume();
@@ -1327,11 +1261,10 @@ final class ModifiersTest extends TestCase
 
     // A modifier may read each of its options in a fiber of its own, as an
     // async host awaiting them all at once does. However many it reads so,
-    // they take no place in the process, which counts resolutions, so it
-    // reads more of them than the process holds resolutions, and a
-    // resolution begun while they wait, in the main code or a fiber,
-    // resolves.
-    public function testReadsOptionsInMoreFibersThanTheProcessHoldsResolutions(): void
+    // each read begins where nothing is in progress on its thread and is
+    // never refused, and a resolution begun while they wait, in the main
+    // code or a fiber, resolves.
+    public function testReadsOptionsEachInAFiberOfItsOwn(): void
     {
         $parser = $this->parser(customModifiers: [
             'all' => static function (ModifierInput $in): string {
@@ -1360,7 +1293,7 @@ final class ModifiersTest extends TestCase
                 return 'v' . $in->value;
             },
         ]);
-        $count = Parser::MAX_IN_PROGRESS + 1;
+        $count = 600;
         $request = new \Fiber(static fn(): string => $parser->resolve('{{x:all' . str_repeat('; k:{{x:fetch}}', $count) . '; default:F}}', ['x' => 1]));
         $request->start();
         $other = new \Fiber(static fn(): string => $parser->resolve('Hello {{name}}', ['name' => 'C']));
@@ -1403,9 +1336,9 @@ final class ModifiersTest extends TestCase
         yield 'a text nested six deep, kept and read from inside another nested three deep' => [['nested'], 'K|<<<<<<<<<X>>>>>>>>>', 1, []];
         yield 'an option read in a fiber left suspended, beside an ordinary message nested eight deep' => [['suspended'], str_repeat('h', 8) . '|<<<<<<<X>>>>>>>', 0, []];
         // A read on a thread of execution where no resolution is in progress
-        // takes no place in the process, so however many fibers a resolution
-        // leaves suspended in reads they each began, the rest of it resolves.
-        yield 'options read in more fibers left suspended than the process holds resolutions, before a kept text is read' => [['parked', (string) (Parser::MAX_IN_PROGRESS + 1)], str_repeat('h', Parser::MAX_IN_PROGRESS + 1) . '|KX', 1, []];
+        // is never refused, so however many fibers a resolution leaves
+        // suspended in reads they each began, the rest of it resolves.
+        yield 'options read in many fibers left suspended, before a kept text is read' => [['parked', '600'], str_repeat('h', 600) . '|KX', 1, []];
         // A text kept from another placeholder is out of where the message
         // nests the read, however deep the two lie, so the nesting limit
         // counts none of these and the places they take bound them.

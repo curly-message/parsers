@@ -21,15 +21,11 @@ use CurlyMessage\Parser;
  * progress is never refused, as section 13 asks, so a host that begins each
  * level of a recursion in a fiber of its own, as an async host awaiting
  * each call does, begins every level at a count of 0, and the recursion is
- * the host's to bound, as the fibers it starts are. A resolution begun
- * beneath another on its thread takes a place in the process too: those
- * places add up the parts of such a recursion that each stay on one stack
- * past their first level, and what fibers left suspended in such
- * resolutions hold.
+ * the host's to bound, as the fibers it starts are.
  *
  * A text host code reads from outside the call it was handed to is rendered
  * as a resolution begun there is, a walk of message text beneath whatever
- * walk reached the read, so it takes the same places while it renders. To
+ * walk reached the read, so it takes the same place while it renders. To
  * tell such a read, each thread of execution knows the host modifier being
  * asked on it: the one whose call is the innermost the parser made into
  * host code there and has not returned from, which is none beneath a text
@@ -43,8 +39,6 @@ use CurlyMessage\Parser;
 final class Guard
 {
     private static int $main = 0;
-
-    private static int $inProcess = 0;
 
     /** @var \WeakMap<object, int>|null */
     private static ?\WeakMap $fibers = null;
@@ -83,13 +77,11 @@ final class Guard
     }
 
     /**
-     * Takes a place on this thread of execution, and one in the process too
-     * where a resolution is in progress on the thread already, before
-     * anything is read: whether it took one in the process, or why it
-     * refuses either. The caller raises the refusal, once it has let go of
-     * what the raise's trace would hold.
+     * Takes a place on this thread of execution before anything is read, or
+     * answers why it refuses one. The caller raises the refusal, once it has
+     * let go of what the raise's trace would hold.
      */
-    public static function enter(): string|bool
+    public static function enter(): ?string
     {
         $fiber = \Fiber::getCurrent();
         $fibers = null;
@@ -99,31 +91,17 @@ final class Guard
             return 'A resolution was begun while ' . Parser::MAX_REENTRY . ' were in progress on its thread of execution.';
         }
 
-        $placed = $count > 0;
-
-        if ($placed) {
-            if (self::$inProcess >= Parser::MAX_IN_PROGRESS) {
-                return 'A resolution was begun beneath another on its thread of execution while ' . Parser::MAX_IN_PROGRESS . ' resolutions so begun were in progress in the process.';
-            }
-
-            self::$inProcess += 1;
-        }
-
         if ($fibers === null) {
             self::$main = $count + 1;
         } else {
             $fibers[$fiber] = $count + 1;
         }
 
-        return $placed;
+        return null;
     }
 
-    public static function leave(bool $placed): void
+    public static function leave(): void
     {
-        if ($placed) {
-            self::$inProcess -= 1;
-        }
-
         $fiber = \Fiber::getCurrent();
 
         if ($fiber === null) {

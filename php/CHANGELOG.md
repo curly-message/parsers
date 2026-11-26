@@ -20,11 +20,11 @@
   rendered, and the empty string where none finished one, rendering,
   reporting and converting nothing; a rendering a fiber left suspended in the
   resolution and resumes then answers the empty string.
-* **`Parser::MAX_REENTRY` and `Parser::MAX_IN_PROGRESS` count resolutions,
-  and the texts host code reads outside the call they were handed to**
-  (SPEC.md section 13). An option or a fallback chain read by the call of the
-  modifier it was handed to is part of the walk of its resolution and takes
-  no place, so a resolution's own walk never meets either bound. One read
+* **`Parser::MAX_REENTRY` counts resolutions, and the texts host code reads
+  outside the call they were handed to** (SPEC.md section 13). An option or
+  a fallback chain read by the call of the modifier it was handed to is part
+  of the walk of its resolution and takes no place, so a resolution's own
+  walk never meets the bound. One read
   from anywhere else, as by a modifier that kept it from another placeholder,
   renders at a level the nesting limit does not count, so it takes a place
   while it renders. Where there is none the read is refused: it answers the
@@ -33,6 +33,17 @@
   asked for while it is rendering is refused the same way, at once, and never
   rendered a second time. A refused read throws nothing: `ReentryLimit` is
   thrown by `resolve` alone.
+* **`Parser::MAX_IN_PROGRESS` is gone** since 1.0.0-RC.0, which refused a
+  resolution begun beneath another on its thread of execution while 512 so
+  begun were in progress in the process. Fibers left suspended in such
+  resolutions held those places, so 512 of them refused every nested
+  `resolve` in the process, however shallow each fiber was. `MAX_REENTRY`,
+  per thread of execution, a fiber being one, is the only re-entry bound, as
+  section 13 asks. A recursion that resolves its levels by turns in a fiber
+  of its own and beneath the one before on its stack, so that no fiber is
+  deep, now reaches no bound the parser keeps, and PHP's memory limit ends
+  it with a fatal error rather than `ReentryLimit`, as it does one that
+  begins every level in a fiber of its own: the host bounds both.
 * **A modifier's props are a read-only `CurlyMessage\Props`**, read as an
   array is and by `has`, `get` and `toArray`. A resolution composes the layers
   every placeholder shares once for each modifier name and hands every
