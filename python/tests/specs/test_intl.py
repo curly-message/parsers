@@ -86,6 +86,53 @@ TEXTS = [
     ("number", "1234567", {"notation": "engineering"}, "fr", "1,23E6"),
     ("number", "3", {"style": "unit", "unit": "meter", "unitDisplay": "long"}, "de", "3 Meter"),
     ("number", "1", {"style": "unit", "unit": "meter", "unitDisplay": "long"}, "de", "1 Meter"),
+    # A length that holds neither the category nor `other`, but `per` alone
+    # or nothing, gives the unit's pattern to the next length.
+    (
+        "number",
+        "5",
+        {"style": "unit", "unit": "hour", "unitDisplay": "long"},
+        "ko",
+        "5\uc2dc\uac04",
+    ),
+    (
+        "number",
+        "999999",
+        {"style": "unit", "unit": "byte", "unitDisplay": "long"},
+        "it",
+        "999.999 byte",
+    ),
+    ("number", "5", {"style": "unit", "unit": "hour", "unitDisplay": "long"}, "en", "5 hours"),
+    (
+        "number",
+        "5",
+        {"style": "unit", "unit": "petabyte", "unitDisplay": "long"},
+        "ast",
+        "5 PB",
+    ),
+    (
+        "number",
+        "5",
+        {"style": "unit", "unit": "hour", "unitDisplay": "narrow"},
+        "ko",
+        "5\uc2dc\uac04",
+    ),
+    # A `per` the long length lacks is the next length's, not one built from
+    # the two units; English's long length holds its own.
+    (
+        "number",
+        "5",
+        {"style": "unit", "unit": "kilometer-per-day", "unitDisplay": "long"},
+        "hu",
+        "5 kilom\u00e9ter/nap",
+    ),
+    (
+        "number",
+        "5",
+        {"style": "unit", "unit": "kilometer-per-day", "unitDisplay": "long"},
+        "en",
+        "5 kilometers per day",
+    ),
     ("number", "3", {"style": "unit", "unit": "kilometer-per-hour"}, "en", "3 km/h"),
     (
         "number",

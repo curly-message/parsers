@@ -370,21 +370,23 @@ def _compound_keys(locale: Locale) -> dict[str, str]:
 
 
 _LENGTHS: Final = {
-    "long": ("long",),
+    "long": ("long", "short"),
     "short": ("short", "long"),
     "narrow": ("narrow", "short", "long"),
 }
 """The lengths a unit's data is read at: CLDR writes a narrow length that
-says nothing new as the short one, and a short one as the long."""
+says nothing new as the short one, a short one as the long, and a long one
+as the short."""
 
 
 def _at_length(lengths: Any, display: str, *names: str) -> str | None:
-    # The first length that holds anything is the one read: a category it
-    # lacks is its ``other``, not another length's category.
+    # The first length that holds one of the names is the one read: a
+    # category it lacks is its ``other``, not another length's category.
     for length in _LENGTHS[display]:
-        patterns = lengths.get(length)
-        if patterns:
-            return next((str(patterns[name]) for name in names if patterns.get(name)), None)
+        patterns = lengths.get(length) or {}
+        pattern = next((patterns[name] for name in names if patterns.get(name)), None)
+        if pattern:
+            return str(pattern)
     return None
 
 
