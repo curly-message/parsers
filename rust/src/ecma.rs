@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 use crate::convert::display;
 use crate::intl::Refusal;
-use crate::number::{iso_date, to_js_string, to_number_value};
+use crate::number::{to_js_string, to_number_value};
 use crate::props::Props;
 use crate::value::Value;
 
@@ -32,9 +32,6 @@ fn to_string(value: &Value) -> Result<Cow<'_, str>, Refusal> {
         Value::Integer(number) => Cow::Owned(number.to_string()),
         Value::Unsigned(number) => Cow::Owned(number.to_string()),
         Value::String(text) => Cow::Borrowed(&**text),
-        Value::Date(milliseconds) => {
-            Cow::Owned(iso_date(*milliseconds).unwrap_or_else(|| "Invalid Date".to_owned()))
-        }
         Value::Host(host) => {
             Cow::Owned(display(&**host).ok_or_else(|| Refusal::new("a property has no text"))?)
         }
@@ -53,7 +50,7 @@ fn to_boolean(value: &Value) -> bool {
         Value::Integer(number) => *number != 0,
         Value::Unsigned(number) => *number != 0,
         Value::String(text) => !text.is_empty(),
-        Value::Date(_) | Value::Array(_) | Value::Object(_) | Value::Host(_) => true,
+        Value::Array(_) | Value::Object(_) | Value::Host(_) => true,
     }
 }
 

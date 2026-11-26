@@ -5,7 +5,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 
 use crate::depth::host_call;
-use crate::number::{iso_date, to_js_string};
+use crate::number::to_js_string;
 use crate::value::{Object, Value};
 use crate::{MAX_CONVERSION_NODES, MAX_SERIALIZED_LENGTH};
 
@@ -84,9 +84,6 @@ impl Record {
             Value::Integer(number) => owned(number.to_string()),
             Value::Unsigned(number) => owned(number.to_string()),
             Value::String(string) => text(string),
-            Value::Date(milliseconds) => {
-                owned(iso_date(*milliseconds).unwrap_or_else(|| "Invalid Date".to_owned()))
-            }
             Value::Array(_) | Value::Object(_) | Value::Host(_) => {
                 let key = address(value).unwrap_or_default();
                 let known = self
@@ -424,10 +421,6 @@ fn write<'v>(output: &mut Written, stack: &mut Vec<Open<'v>>, value: &'v Value) 
         Value::Integer(number) => write!(output, "{number}").ok(),
         Value::Unsigned(number) => write!(output, "{number}").ok(),
         Value::String(text) => output.string(text),
-        Value::Date(milliseconds) => match iso_date(*milliseconds) {
-            Some(text) => output.string(&text),
-            None => output.put("null"),
-        },
         Value::Host(host) => output.string(&display(&**host)?),
         Value::Array(array) => {
             stack.push(Open::Items(array.iter(), false));

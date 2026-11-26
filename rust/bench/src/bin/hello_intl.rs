@@ -10,7 +10,7 @@ use curly_message_parser::{Context, IcuIntl, Object, Parser, Value};
 const INSTANT: f64 = 1_709_632_800_000.0;
 
 fn timed(style: &str) -> Object {
-    Object::new().with("value", Value::date(INSTANT)).with(
+    Object::new().with("value", Value::from(INSTANT)).with(
         "props",
         Object::new().with(
             "date",

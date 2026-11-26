@@ -85,8 +85,6 @@ fn a_value_converts_by_section_4() {
         .with("big", 1e21)
         .with("negative", -7)
         .with("unsigned", u64::MAX)
-        .with("date", Value::date(0.0))
-        .with("invalid", Value::date(f64::NAN))
         .with(
             "array",
             vec![Value::from(1), Value::Undefined, Value::from("x")],
@@ -96,7 +94,7 @@ fn a_value_converts_by_section_4() {
             Object::new()
                 .with("b", f64::INFINITY)
                 .with("a", Value::Undefined)
-                .with("c", Value::date(0.0)),
+                .with("c", Value::host(42)),
         )
         .with("host", Value::host(42));
 
@@ -107,13 +105,8 @@ fn a_value_converts_by_section_4() {
         ("{{big}}", "1e+21"),
         ("{{negative}}", "-7"),
         ("{{unsigned}}", "18446744073709551615"),
-        ("{{date}}", "1970-01-01T00:00:00.000Z"),
-        ("{{invalid}}", "Invalid Date"),
         ("{{array}}", "[1,null,\"x\"]"),
-        (
-            "{{object}}",
-            "{\"b\":null,\"c\":\"1970-01-01T00:00:00.000Z\"}",
-        ),
+        ("{{object}}", "{\"b\":null,\"c\":\"42\"}"),
         ("{{host}}", "42"),
     ];
 

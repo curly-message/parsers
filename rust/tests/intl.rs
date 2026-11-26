@@ -59,7 +59,7 @@ fn the_formatting_modifiers_format_in_the_callers_locale() {
 #[test]
 fn a_date_without_a_zone_is_in_utc() {
     let (parser, _) = recording();
-    let payload = Object::new().with("when", Value::date(1_709_632_800_000.0));
+    let payload = Object::new().with("when", Value::from(1_709_632_800_000.0));
     let props = Object::new().with("date", Object::new().with("timeStyle", "long"));
     let prague = Object::new().with(
         "date",

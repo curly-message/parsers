@@ -31,9 +31,6 @@ pub enum Value {
     Unsigned(u64),
     /// Text, which is its own conversion.
     String(String),
-    /// An instant authored as a date: milliseconds since the epoch. It
-    /// converts as ECMAScript's `toISOString` writes it, or to `Invalid Date`.
-    Date(f64),
     /// The plain array, which converts to JSON.
     Array(Arc<Array>),
     /// The plain object, which converts to JSON.
@@ -47,11 +44,6 @@ impl Value {
     /// A value of the application's own type, converted by its `Display`.
     pub fn host<T: fmt::Display + Send + Sync + 'static>(value: T) -> Self {
         Self::Host(Arc::new(value))
-    }
-
-    /// An instant authored as a date, in milliseconds since the epoch.
-    pub fn date(milliseconds: f64) -> Self {
-        Self::Date(milliseconds)
     }
 
     /// The text this value holds, where it is [`Value::String`].
@@ -106,7 +98,6 @@ impl fmt::Debug for Value {
                 Value::Integer(number) => write!(f, "Integer({number:?})"),
                 Value::Unsigned(number) => write!(f, "Unsigned({number:?})"),
                 Value::String(text) => write!(f, "String({text:?})"),
-                Value::Date(milliseconds) => write!(f, "Date({milliseconds:?})"),
                 Value::Host(_) => f.write_str("Host(..)"),
                 Value::Array(_) | Value::Object(_) => Ok(()),
             }
