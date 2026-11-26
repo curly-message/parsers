@@ -212,14 +212,21 @@ func New(options Options) *Parser {
 // walk needs waits forever, and so does Resolve. A read that finished during
 // the call answers its text again after it. One still producing an option or
 // default when Resolve returns, in host code or waiting to take the
-// resolution's lock back, goes on only to finish: it calls no more host code,
-// reads no more of the payload, reports nothing and spends no budget, and it
-// answers the empty string. Any other read once Resolve has returned, one
-// still waiting for the lock among them, answers what a read finished during
-// the call, or the empty string where none did. Host code still running when
-// Resolve returns, a method of a value or a modifier's goroutine, can read
-// the payload until it returns, so the caller changes the payload only once
-// that code has returned.
+// resolution's lock back, goes on only to finish: the parser's own writers
+// call no more host code and read no more of the payload, it reports nothing
+// and spends no budget, and it answers the empty string. A value the parser
+// handed to encoding/json is the exception: encoding/json writes it in one
+// call the parser cannot stop, so a read in the middle of one goes on
+// reading that value, and calling the methods encoding/json describes what
+// it holds by, until that call returns. Any other read once Resolve has
+// returned, one still waiting for the lock among them, answers what a read
+// finished during the call, or the empty string where none did. Host code
+// still running when Resolve returns, a method of a value or a modifier's
+// goroutine, can read the payload until it returns, so the caller changes
+// the payload only once that code has returned; where a read made on a
+// modifier's goroutine is in progress, only once that read has returned,
+// since a method that returned may leave encoding/json reading what follows
+// it.
 //
 // Go names no goroutine, so the parser counts along what it hands out, not by
 // where code runs. A lineage is the resolution Parser.Resolve started and
