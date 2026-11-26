@@ -1,5 +1,5 @@
 import * as modifiers from './modifiers';
-import type { AGO_LADDER, Structure } from './utils';
+import type { AGO_LADDER } from './utils';
 
 /**
  * A locale as it reaches resolution — an opaque identifier the modifiers hand
@@ -20,46 +20,6 @@ type Given<T> = [T][T extends any ? 0 : never];
  * A key holding `undefined` is owned; the empty object owns none.
  */
 type AtLeastOne<T> = { [Key in keyof T]-?: Record<Key, T[Key]> & Omit<T, Key> }[keyof T];
-
-/**
- * The text every value a resolution has converted came out as, keyed by the
- * value the conversion read, the answer that a value has no text included.
- * Converting is the costly step, and a value is read once for every placeholder
- * that names it, so one resolution converts one value once. A primitive whose
- * conversion runs no host code and costs nothing to repeat is not recorded:
- * converting it again is neither observable nor worth an entry. A bigint is,
- * because the digits it converts to are work the engine charges for on every
- * read.
- */
-export type Conversions = Map<any, string | undefined>;
-
-/**
- * Whether each entry a resolution has asked configures its value, keyed by the
- * entry, the answer that the entry refused the question included. Recognizing
- * a wrapper enumerates the entry's own names, which reads the entry as a
- * conversion does and costs what the entry holds, and an entry is read once
- * for every placeholder that names it, so one resolution asks one entry once.
- */
-export type Wrappers = Map<object, boolean | undefined>;
-
-/**
- * What the walk reads. It sees the message's id on top of what resolving one
- * needs, because a report names the message it came from, and what the call
- * around it has already converted and recognized. The option bag's own entries
- * reach it read: the modifiers a message can name and the defaults they read
- * are the call's own structure, read once for the call like the context's
- * entries, so the walk composes over them and asks the bag nothing. The walk
- * carries the host's props without reading one, so it names no props type of
- * its own.
- */
-type WalkProps = { value: Structure, props?: any, locale?: Locale, parserOptions?: Parser.Options<Modifier.Key, any>, modifierFor: (name: string) => Modifier.T<any, any> | undefined, modifierDefaults?: Modifier.Props, onReport?: Parser.OnReport, onSuspectValue?: Parser.OnSuspectValue, recognizeWrappers: boolean, payload?: Parser.Payload, id?: Parser.Id, conversions: Conversions, wrappers: Wrappers };
-
-/**
- * Resolves a message. One walk produces the whole output: what a placeholder
- * resolves to is data and is never read back as syntax, so there is nothing to
- * repeat and nothing to answer with but the text.
- */
-export type Interpolation = (config: WalkProps) => string;
 
 /**
  * A diagnostic the parser hands to its caller. The format does not specify a
