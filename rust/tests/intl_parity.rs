@@ -25,7 +25,7 @@ const GOLDEN: &str = include_str!("intl/golden.json");
 const CURRENCY_DIGITS_REASON: &str =
     "ICU4X formats a currency amount with the currency's own digits (UNEXPRESSIBLE)";
 const UNPADDED_REASON: &str =
-    "ICU4X pads day and month: no ICU4X 2.3 field set selects CLDR's yMd skeleton";
+    "ICU4X pads day and month: no ICU4X 2.4 field set selects CLDR's yMd skeleton";
 const ERA_REASON: &str = "ICU4X shows the era before year 1, which Node omits";
 const FULL_YEAR_REASON: &str =
     "ICU4X writes a short date's year in full outside 1950 to 2049; Node writes two digits";
