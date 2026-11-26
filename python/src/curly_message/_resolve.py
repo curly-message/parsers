@@ -22,12 +22,13 @@ from ._types import (
     UNDEFINED,
     Modifier,
     ModifierInput,
-    Option,
     Parser,
     ReentryLimitError,
     Report,
     ReportCode,
     ReportOrigin,
+    _walk_input,
+    _walk_option,
 )
 from ._utils import (
     MISSING,
@@ -498,11 +499,10 @@ class _Walk:
                 call: Asked | _Walk = Asked(self) if host else self
                 depth = chain.depth + 1
                 render = self._range
-                options = []
-                for key, from_, to in segments:
-                    option = Option(key, partial(render, from_, to, depth))  # type: ignore[arg-type]
-                    option._call = call
-                    options.append(option)
+                options = [
+                    _walk_option(key, partial(render, from_, to, depth), call)
+                    for key, from_, to in segments
+                ]
                 props, prepared = self.props_for(
                     name,
                     chain.parts,
@@ -510,16 +510,15 @@ class _Walk:
                     chain.close,
                     shown_digits=name == "plural" and not host,
                 )
-                config = ModifierInput(
+                config = _walk_input(
                     value=value_text,
                     options=tuple(options),
                     props=props,
                     locale=self.locale,
-                    default=partial(self._fallback, chain),  # type: ignore[arg-type]
+                    produce=partial(self._fallback, chain),
+                    call=call,
+                    prepared=None if host else prepared,
                 )
-                config._call = call
-                if not host:
-                    config._prepared = prepared
                 # The modifier called is current until it returns, one the
                 # format defines too (section 13). Where no host-defined one
                 # was current when the resolution began, none is when its own

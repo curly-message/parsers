@@ -277,23 +277,21 @@ class Option:
     asks for what it is part of; one of a value another thread is rendering
     waits for it and answers what that render gave. ``ModifierInput.default`` is read the same way.
 
-    A ``value`` given as a callable is asked on the first read; where it
-    answers ``None`` the value is the empty string and the next read asks
-    again.
+    Built by a host, to test a modifier directly, an option's value is a
+    ``str``, rendered already: any other value, a callable included, raises
+    ``TypeError``.
     """
 
     __slots__ = ("_busy", "_call", "_key", "_produce", "_text")
 
-    def __init__(self, key: str, value: str | Callable[[], str | None]) -> None:
+    def __init__(self, key: str, value: str) -> None:
+        if not isinstance(value, str):
+            raise TypeError("an Option's value must be a str")
         self._key = key
+        self._text: str | None = value
+        self._produce: Callable[[], object] | None = None
         self._call: object = None
         self._busy: object = None
-        if isinstance(value, str):
-            self._text: str | None = value
-            self._produce: Callable[[], object] | None = None
-        else:
-            self._text = None
-            self._produce = value
 
     @property
     def key(self) -> str:
@@ -331,6 +329,10 @@ class ModifierInput:
     input kept past the resolution answers what the resolution read of it, and
     a ``default`` first read after the resolution returned is the empty string:
     it resolves, reports and runs nothing.
+
+    Built by a host, to test a modifier directly, ``default`` is a ``str``,
+    rendered already: any other value, a callable included, raises
+    ``TypeError``.
     """
 
     __slots__ = (
@@ -357,23 +359,21 @@ class ModifierInput:
         options: tuple[Option, ...] = (),
         props: Mapping[str, Any] | None = None,
         locale: object = None,
-        default: str | Callable[[], str | None] = "",
+        default: str = "",
     ) -> None:
+        if not isinstance(default, str):
+            raise TypeError("a ModifierInput's default must be a str")
         self.value = value
         self.options = options
         self.props = _NO_PROPS if props is None else props
         self.locale = locale
+        self._text: str | None = default
+        self._produce: Callable[[], object] | None = None
         self._call: object = None
         self._busy: object = None
         # What the format's modifiers read off ``props``, kept with the walk's
         # composition of them (``_Walk.props_for``).
         self._prepared: dict[object, object] | None = None
-        if isinstance(default, str):
-            self._text: str | None = default
-            self._produce: Callable[[], object] | None = None
-        else:
-            self._text = None
-            self._produce = default
 
     if TYPE_CHECKING:
 
@@ -385,6 +385,41 @@ class ModifierInput:
             _reads.read,
             doc="The placeholder's default: the first link of its fallback chain that yields text.",
         )
+
+
+def _walk_option(key: str, produce: Callable[[], object], call: object) -> Option:
+    """An option the walk renders where it is first read, for the modifier ``call`` asks."""
+    option = Option.__new__(Option)
+    option._key = key
+    option._text = None
+    option._produce = produce
+    option._call = call
+    option._busy = None
+    return option
+
+
+def _walk_input(
+    *,
+    value: str,
+    options: tuple[Option, ...],
+    props: Mapping[str, Any],
+    locale: object,
+    produce: Callable[[], object],
+    call: object,
+    prepared: dict[object, object] | None,
+) -> ModifierInput:
+    """What the walk hands a modifier, its default rendered where it is first read."""
+    config = ModifierInput.__new__(ModifierInput)
+    config.value = value
+    config.options = options
+    config.props = props
+    config.locale = locale
+    config._text = None
+    config._produce = produce
+    config._call = call
+    config._busy = None
+    config._prepared = prepared
+    return config
 
 
 Modifier = Callable[[ModifierInput], object]

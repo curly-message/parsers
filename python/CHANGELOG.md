@@ -12,3 +12,7 @@
   entry raises only where it is looked up by name, and a layer is enumerated,
   but for the digit entries `plural` looks up by name in the `number` layer.
 * **`Level` is exported**: the type `levels()` answers members of.
+* **A host builds a modifier's input from strings.** `Option` and
+  `ModifierInput`, built to test a modifier directly, take an option's value
+  and a default as `str` and raise `TypeError` on anything else, where
+  `1.0.0rc0` took a callable.

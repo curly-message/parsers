@@ -120,7 +120,9 @@ resolves, reports and runs nothing. The modifier's answer becomes text the
 way a payload value does. `None` or `UNDEFINED` is no answer, and so is a
 raise: the placeholder takes its fallback chain, and a raise is reported as
 `failed-modifier`. A name registered here is looked up before the format's
-own, so a host may replace `eq` or `number`.
+own, so a host may replace `eq` or `number`. To test a modifier directly,
+build its input from strings:
+`upper(ModifierInput(value="ada", options=(Option("k", "v"),), default="-"))`.
 
 ```python
 def name(given):
