@@ -8,6 +8,12 @@
   the Intl level where ext-intl is loaded. `Cst::parse` describes a message as
   CST.md specifies, in bytes of the PHP string. The package passes the
   specification's conformance set 4.2.0.
+* **`date` reads text by PHP's own date parser alone** since 1.0.0-RC.0,
+  which read ECMAScript's date time string format first. A date with no
+  time, `2024-03-05` or `2024-03`, is midnight in PHP's default time zone
+  rather than at UTC, and `2024-02-30` and `2024-03-05T24:00`, which PHP
+  warns of, are no date: the placeholder takes its fallback chain and
+  reports `failed-modifier`.
 * **Nothing runs on a resolution's account once it returned** (SPEC.md
   section 11.3). An `Option::value()` or a `ModifierInput::default()` host code
   kept and calls later answers the text a call during the resolution
