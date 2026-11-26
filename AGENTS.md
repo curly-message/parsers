@@ -647,7 +647,7 @@ Map of `php/`:
 | `src/Parser.php` | `Parser`: its options, `resolve`, `levels`, `unexpressible`, and the limits |
 | `src/Cst.php`, `src/Cst/` | `Cst::parse`: the tree a message is described by, its spans in bytes |
 | `src/ModifierInput.php`, `src/Option.php`, `src/Props.php` | what a host modifier is handed, its props read-only |
-| `src/Report.php`, `src/ReportCode.php`, `src/FormatRequest.php`, `src/Facility.php`, `src/Origin.php` | what `onReport` and `onRequest` are handed |
+| `src/Report.php`, `src/ReportCode.php`, `src/Origin.php` | what `onReport` is handed |
 | `src/ReentryLimit.php`, `src/Undefined.php` | the one throw, and the host's undefined |
 | `src/Internal/Resolution.php` | one resolution: the walk, its budgets and the texts host code asks for |
 | `src/Internal/Conversion.php` | a value as text (section 4), the JSON written and bounded here |

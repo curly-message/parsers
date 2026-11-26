@@ -8,7 +8,8 @@ use CurlyMessage\Conformance\BehaviourOption;
 use CurlyMessage\Conformance\CstOffer;
 use CurlyMessage\Conformance\Resolution;
 use CurlyMessage\Cst;
-use CurlyMessage\FormatRequest;
+use CurlyMessage\Internal\Intl\Request;
+use CurlyMessage\Internal\Requests;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Option;
 use CurlyMessage\Parser;
@@ -36,16 +37,15 @@ return new Adapter(
             $input->modifiers,
         );
         $defaults = $input->defaults;
-        $parser = new Parser(
+        $parser = Requests::observe(new Parser(
             $modifiers,
             is_array($defaults) || $defaults instanceof stdClass ? $defaults : [],
             static function (Report $report) use (&$reports): void {
                 $reports[] = array_filter(['code' => $report->code->value, 'origin' => $report->origin->value, 'id' => $report->id, 'limit' => $report->limit], static fn(mixed $field): bool => $field !== null);
             },
-            static function (FormatRequest $request) use (&$formats): void {
-                $formats[] = array_filter(['api' => $request->api->value, 'options' => $request->options->toArray(), 'input' => $request->input, 'category' => $request->category], static fn(mixed $field): bool => $field !== null);
-            },
-        );
+        ), static function (Request $request) use (&$formats): void {
+            $formats[] = array_filter(['api' => $request->api->value, 'options' => $request->options->toArray(), 'input' => $request->input, 'category' => $request->category], static fn(mixed $field): bool => $field !== null);
+        });
         $output = $parser->resolve($input->message, $input->payload, $input->props, $input->locale, $input->id);
 
         return ['output' => $output, 'reports' => $reports, 'formats' => $formats];

@@ -10,7 +10,7 @@ use CurlyMessage\Conformance\Performer;
 use CurlyMessage\Conformance\Resolution;
 use CurlyMessage\Conformance\Runner;
 use CurlyMessage\Conformance\Set;
-use CurlyMessage\Facility as Api;
+use CurlyMessage\Internal\Intl\Api;
 use CurlyMessage\Internal\Intl\Facility;
 use CurlyMessage\Props;
 

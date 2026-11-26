@@ -2,14 +2,16 @@
 
 declare(strict_types=1);
 
-namespace CurlyMessage;
+namespace CurlyMessage\Internal\Intl;
 
 /**
  * The locale-dependent facility a request is made of (SPEC.md section 11.2),
  * named as ECMAScript's `Intl` names it, since a request is stated in that
  * vocabulary whatever performs it.
+ *
+ * @internal
  */
-enum Facility: string
+enum Api: string
 {
     case NumberFormat = 'NumberFormat';
     case DateTimeFormat = 'DateTimeFormat';

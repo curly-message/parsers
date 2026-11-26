@@ -8,6 +8,7 @@ use CurlyMessage\Internal\Contained;
 use CurlyMessage\Internal\Conversion;
 use CurlyMessage\Internal\Guard;
 use CurlyMessage\Internal\Intl\Available;
+use CurlyMessage\Internal\Requests;
 use CurlyMessage\Internal\Resolution;
 
 /**
@@ -69,14 +70,12 @@ final class Parser
      * @param array<array-key, mixed>|\stdClass $customModifiers the modifiers the host defines, by name, each a `\Closure` or an object with `__invoke`; an entry of any other kind registers nothing and shadows nothing
      * @param array<array-key, mixed>|\stdClass $modifierDefaults the props each modifier is configured with, by its name
      * @param (\Closure(Report): mixed)|null $onReport called with each report, in walk order
-     * @param (\Closure(FormatRequest): mixed)|null $onRequest called with each request an Intl modifier makes of its facility, once the facility answered or refused it, in walk order
      * @param bool $recognizeWrappers whether an entry holding only `value`, `default` and `props` configures its value (section 4.1)
      */
     public function __construct(
         private readonly array|\stdClass $customModifiers = [],
         private readonly array|\stdClass $modifierDefaults = [],
         private readonly ?\Closure $onReport = null,
-        private readonly ?\Closure $onRequest = null,
         private readonly bool $recognizeWrappers = true,
     ) {}
 
@@ -167,7 +166,7 @@ final class Parser
                 $this->customModifiers,
                 $this->modifierDefaults,
                 $this->onReport,
-                $this->onRequest,
+                Requests::of($this),
                 $this->recognizeWrappers,
                 $conversion,
             );

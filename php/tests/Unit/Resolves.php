@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Tests\Unit;
 
-use CurlyMessage\FormatRequest;
+use CurlyMessage\Internal\Intl\Request;
+use CurlyMessage\Internal\Requests;
 use CurlyMessage\Parser;
 use CurlyMessage\Report;
 
@@ -14,7 +15,7 @@ trait Resolves
     /** @var list<Report> */
     private array $reports = [];
 
-    /** @var list<FormatRequest> */
+    /** @var list<Request> */
     private array $requests = [];
 
     /**
@@ -26,17 +27,16 @@ trait Resolves
         $this->reports = [];
         $this->requests = [];
 
-        return new Parser(
+        return Requests::observe(new Parser(
             $customModifiers,
             $modifierDefaults,
             onReport: function (Report $report): void {
                 $this->reports[] = $report;
             },
-            onRequest: function (FormatRequest $request): void {
-                $this->requests[] = $request;
-            },
             recognizeWrappers: $recognizeWrappers,
-        );
+        ), function (Request $request): void {
+            $this->requests[] = $request;
+        });
     }
 
     private function resolve(mixed $message, mixed $payload = null, mixed $id = null): string

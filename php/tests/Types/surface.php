@@ -12,8 +12,6 @@ namespace CurlyMessage\Tests\Types;
 
 use CurlyMessage\Cst;
 use CurlyMessage\Cst\NodeType;
-use CurlyMessage\Facility;
-use CurlyMessage\FormatRequest;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Option;
 use CurlyMessage\Origin;
@@ -31,7 +29,6 @@ function parser(): void
         customModifiers: ['upper' => static fn(ModifierInput $in): string => strtoupper($in->value), 'none' => static function (ModifierInput $in): void {}],
         modifierDefaults: (object) ['number' => ['maximumFractionDigits' => 1]],
         onReport: static function (Report $report): void {},
-        onRequest: static function (FormatRequest $request): void {},
         recognizeWrappers: false,
     );
 
@@ -87,17 +84,6 @@ function report(Report $report, string $code): void
     assertType("'limit'|'message'|'payload'", $report->origin->value);
     assertType('CurlyMessage\ReportCode', ReportCode::from($code));
     assertType('CurlyMessage\Origin', Origin::from($code));
-}
-
-function request(FormatRequest $request, string $api): void
-{
-    assertType('CurlyMessage\Facility', $request->api);
-    assertType('CurlyMessage\\Props', $request->options);
-    assertType('array<mixed>', $request->options->toArray());
-    assertType('array{float|int, string}|float|int', $request->input);
-    assertType('string|null', $request->category);
-    assertType("'DateTimeFormat'|'NumberFormat'|'PluralRules'|'RelativeTimeFormat'", $request->api->value);
-    assertType('CurlyMessage\Facility', Facility::from($api));
 }
 
 function tree(string $type): void

@@ -34,11 +34,14 @@
   rendered a second time. A refused read throws nothing: `ReentryLimit` is
   thrown by `resolve` alone.
 * **A modifier's props are a read-only `CurlyMessage\Props`**, read as an
-  array is and by `has`, `get` and `toArray`, and so are a `FormatRequest`'s
-  `options`. A resolution composes the layers every placeholder shares once
-  for each modifier name and hands every placeholder naming it the same
-  properties, a wrapper's own laid over them without either being copied, so
-  a wide layer is neither walked nor kept again for each placeholder or each
-  wrapped key. A modifier that writes into its props fails as one that throws
-  does. A shared layer host code changes while a resolution is in progress is
-  read as it was when first composed.
+  array is and by `has`, `get` and `toArray`. A resolution composes the layers
+  every placeholder shares once for each modifier name and hands every
+  placeholder naming it the same properties, a wrapper's own laid over them
+  without either being copied, so a wide layer is neither walked nor kept
+  again for each placeholder or each wrapped key. A modifier that writes into
+  its props fails as one that throws does. A shared layer host code changes
+  while a resolution is in progress is read as it was when first composed.
+* **`Parser`'s `onRequest` option, `FormatRequest` and `Facility` are no
+  longer public** since 1.0.0-RC.0. Observing the requests the Intl
+  modifiers make is a seam of the conformance adapter, not a promise to a
+  host.

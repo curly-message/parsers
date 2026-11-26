@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Internal\Intl;
 
-use CurlyMessage\Facility as Api;
-use CurlyMessage\FormatRequest;
 use CurlyMessage\Internal\Comparisons;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Props;
@@ -43,7 +41,7 @@ final class Modifiers
      * The modifier's text, or the code of the condition that kept it from
      * answering.
      *
-     * @param \Closure(FormatRequest): void $observe told of every request made, once its facility answered or refused
+     * @param \Closure(Request): void $observe told of every request made, once its facility answered or refused
      */
     public static function call(string $name, ModifierInput $input, \Closure $observe, Numbers $numbers): string|ReportCode
     {
@@ -83,7 +81,7 @@ final class Modifiers
         return $number;
     }
 
-    /** @param \Closure(FormatRequest): void $observe */
+    /** @param \Closure(Request): void $observe */
     private static function number(ModifierInput $input, string $locale, \Closure $observe, Numbers $numbers): string
     {
         $number = self::formattable($input->value);
@@ -91,7 +89,7 @@ final class Modifiers
         return self::ask(Api::NumberFormat, $locale, self::shownDigits($input->props, $numbers), $number, $observe, $numbers);
     }
 
-    /** @param \Closure(FormatRequest): void $observe */
+    /** @param \Closure(Request): void $observe */
     private static function date(ModifierInput $input, string $locale, \Closure $observe, Numbers $numbers): string
     {
         $text = $input->value;
@@ -105,7 +103,7 @@ final class Modifiers
         return self::ask(Api::DateTimeFormat, $locale, $input->props, $instant, $observe, $numbers);
     }
 
-    /** @param \Closure(FormatRequest): void $observe */
+    /** @param \Closure(Request): void $observe */
     private static function currency(ModifierInput $input, string $locale, \Closure $observe, Numbers $numbers): string
     {
         $amount = self::formattable($input->value);
@@ -140,7 +138,7 @@ final class Modifiers
         };
     }
 
-    /** @param \Closure(FormatRequest): void $observe */
+    /** @param \Closure(Request): void $observe */
     private static function ago(ModifierInput $input, string $locale, \Closure $observe, Numbers $numbers): string
     {
         $milliseconds = self::formattable($input->value);
@@ -237,7 +235,7 @@ final class Modifiers
      * key that is a number selects the value it equals before any category
      * is asked for, so the facility is asked only where none does.
      *
-     * @param \Closure(FormatRequest): void $observe
+     * @param \Closure(Request): void $observe
      * @param 'cardinal'|'ordinal' $type
      */
     private static function byCategory(ModifierInput $input, string $locale, \Closure $observe, Numbers $numbers, string $type): string
@@ -300,19 +298,19 @@ final class Modifiers
      * refused; the refusal goes on to the modifier.
      *
      * @param int|float|array{int|float, string} $request
-     * @param \Closure(FormatRequest): void $observe
+     * @param \Closure(Request): void $observe
      */
     private static function ask(Api $api, string $locale, Props $options, int|float|array $request, \Closure $observe, Numbers $numbers): string
     {
         try {
             $answer = Facility::perform($api, $locale, $options, $request, $numbers);
         } catch (\Throwable $refusal) {
-            $observe(new FormatRequest($api, $options, $request));
+            $observe(new Request($api, $options, $request));
 
             throw $refusal;
         }
 
-        $observe(new FormatRequest($api, $options, $request, $api === Api::PluralRules ? $answer : null));
+        $observe(new Request($api, $options, $request, $api === Api::PluralRules ? $answer : null));
 
         return $answer;
     }

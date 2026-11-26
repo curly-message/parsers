@@ -16,8 +16,9 @@ declare(strict_types=1);
 // what PHP it runs on.
 
 use CurlyMessage\Cst;
-use CurlyMessage\FormatRequest;
 use CurlyMessage\Internal\Intl\Cache;
+use CurlyMessage\Internal\Intl\Request;
+use CurlyMessage\Internal\Requests;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Parser;
 
@@ -404,16 +405,15 @@ function host_calls(): int
 function modifier_calls(): int
 {
     $calls = 0;
-    $parser = new Parser(
+    $parser = Requests::observe(new Parser(
         customModifiers: ['tally' => static function (ModifierInput $in) use (&$calls): string {
             $calls += 1;
 
             return $in->value;
         }],
-        onRequest: static function (FormatRequest $request) use (&$calls): void {
-            $calls += 1;
-        },
-    );
+    ), static function (Request $request) use (&$calls): void {
+        $calls += 1;
+    });
     $tallied = [
         'Hello, {{name:tally}}!',
         '{{gender; male:{{name:tally}}; female:{{thread:tally}}; default:{{folder:tally}}}} replied to {{thread:tally}}.',

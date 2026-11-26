@@ -4,9 +4,10 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Tests\Unit;
 
-use CurlyMessage\Facility;
-use CurlyMessage\FormatRequest;
+use CurlyMessage\Internal\Intl\Api;
 use CurlyMessage\Internal\Intl\Cache;
+use CurlyMessage\Internal\Intl\Request;
+use CurlyMessage\Internal\Requests;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Parser;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -47,8 +48,8 @@ final class IntlTest extends TestCase
         self::assertSame('1,234.5 ONE', $parser->resolve('{{n:number}} {{c:plural; one:ONE; other:OTHER}}', ['n' => 1234.5, 'c' => 1], locale: 'en'));
         self::assertCount(2, $this->requests);
         [$number, $plural] = $this->requests;
-        self::assertSame([Facility::NumberFormat, ['maximumFractionDigits' => 2], 1234.5, null], [$number->api, $number->options->toArray(), $number->input, $number->category]);
-        self::assertSame([Facility::PluralRules, ['type' => 'cardinal', 'maximumFractionDigits' => 2], 1, 'one'], [$plural->api, $plural->options->toArray(), $plural->input, $plural->category]);
+        self::assertSame([Api::NumberFormat, ['maximumFractionDigits' => 2], 1234.5, null], [$number->api, $number->options->toArray(), $number->input, $number->category]);
+        self::assertSame([Api::PluralRules, ['type' => 'cardinal', 'maximumFractionDigits' => 2], 1, 'one'], [$plural->api, $plural->options->toArray(), $plural->input, $plural->category]);
         self::assertSame([], $this->codes());
     }
 
@@ -58,7 +59,7 @@ final class IntlTest extends TestCase
 
         self::assertSame('D', $parser->resolve('{{c:plural; one:ONE; default:D}}', ['c' => 1], ['plural' => ['maximumFractionDigits' => 200]], 'en'));
         self::assertCount(1, $this->requests);
-        self::assertSame(Facility::PluralRules, $this->requests[0]->api);
+        self::assertSame(Api::PluralRules, $this->requests[0]->api);
         self::assertNull($this->requests[0]->category);
         self::assertSame(['failed-modifier'], $this->codes());
     }
@@ -87,12 +88,12 @@ final class IntlTest extends TestCase
 
     public function testContainsAnObserverThatThrows(): void
     {
-        $parser = new Parser(onRequest: static function (FormatRequest $request): never {
+        $parser = Requests::observe(new Parser(), static function (Request $request): never {
             throw new \RuntimeException('observer');
         });
 
         self::assertSame('1.5', $parser->resolve('{{n:number}}', ['n' => 1.5], locale: 'en'));
-        $parser = new Parser(onRequest: static function (FormatRequest $request): never {
+        $parser = Requests::observe(new Parser(), static function (Request $request): never {
             throw new Rethrowing(1);
         });
 
