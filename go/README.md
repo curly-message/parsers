@@ -498,9 +498,10 @@ recognizes no linked worktree.
 
 CI (`.github/workflows/tests-go.yml`) runs the suite on the oldest and the
 newest Go the module supports on Linux, macOS and Windows, again under the
-race detector and on 386, a platform whose `int` is 32 bits, the formatting
-contract over every module under `go/`, the zip `pack` builds as a consumer
-meets it — fetched from a proxy laid out on disk and tested in the read-only
+race detector, on 386, a platform whose `int` is 32 bits, and on Linux with
+Go 1.26 and `GOEXPERIMENT=jsonv2`, where `encoding/json` is built on
+`encoding/json/v2`. It also runs the formatting contract over every module
+under `go/`, the zip `pack` builds as a consumer meets it — fetched from a proxy laid out on disk and tested in the read-only
 module cache, with nothing else in its build list — and, once a release
 exists, `gorelease` against it, failing on a change that breaks its exported
 surface.
