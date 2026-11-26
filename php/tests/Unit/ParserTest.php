@@ -426,7 +426,7 @@ final class ParserTest extends TestCase
         $report = $this->reports[0];
 
         self::assertSame(ReportCode::UnknownModifier, $report->code);
-        self::assertSame(ReportCode::UnknownModifier->message(), $report->message);
+        self::assertSame('A placeholder named a modifier this parser does not know.', $report->message);
         self::assertSame(42, $report->id);
         self::assertNull($report->limit);
         $this->resolve('{{v:nope}}', [], Undefined::Value);

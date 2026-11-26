@@ -10,6 +10,7 @@ use CurlyMessage\Internal\Intl\Numbers;
 use CurlyMessage\Internal\Intl\Request;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Option;
+use CurlyMessage\Origin;
 use CurlyMessage\Parser;
 use CurlyMessage\Report;
 use CurlyMessage\ReportCode;
@@ -31,6 +32,40 @@ final class Resolution
     // The selections the format defines: a placeholder naming one with no
     // options was asked to select from nothing.
     private const SELECTIONS = ['eq', 'ne', 'lt', 'gt', 'lte', 'gte', 'plural', 'ordinal'];
+
+    // What each condition is a defect of. It is the code's to declare, so no
+    // site that reports one chooses it: a modifier that could not answer was
+    // handed the caller's value, props and locale, or is the caller's own, so
+    // what it reports is the payload's.
+    private const ORIGINS = [
+        'unknown-modifier' => Origin::Message,
+        'missing-options' => Origin::Message,
+        'nesting-limit' => Origin::Message,
+        'failed-modifier' => Origin::Payload,
+        'unserializable-value' => Origin::Payload,
+        'missing-locale' => Origin::Payload,
+        'output-limit' => Origin::Limit,
+        'read-limit' => Origin::Limit,
+    ];
+
+    // The limit each of the three conditions that reach one names.
+    private const LIMITS = [
+        'nesting-limit' => Parser::MAX_NESTING,
+        'output-limit' => Parser::MAX_OUTPUT_LENGTH,
+        'read-limit' => Parser::MAX_READ_LENGTH,
+    ];
+
+    // An English sentence saying what happened.
+    private const MESSAGES = [
+        'unknown-modifier' => 'A placeholder named a modifier this parser does not know.',
+        'failed-modifier' => 'A modifier could not produce a result, so the placeholder took its fallback chain.',
+        'missing-options' => 'A selection was given no options to select from, so the placeholder took its fallback chain.',
+        'unserializable-value' => 'A value could not become text, so resolution read it as missing.',
+        'missing-locale' => 'A modifier that depends on a locale was given none, so the placeholder resolved to the empty string.',
+        'nesting-limit' => 'A placeholder was nested deeper than ' . Parser::MAX_NESTING . ' levels, so it took its fallback chain.',
+        'output-limit' => 'A placeholder resolved to text this resolution has no room for: in the message, past ' . Parser::MAX_OUTPUT_LENGTH . ' bytes of output, and below it, past ' . Parser::MAX_TEXT_LENGTH . ' bytes of the text of its level, so it resolved to the empty string.',
+        'read-limit' => 'Resolution read more than ' . Parser::MAX_READ_LENGTH . ' bytes of value text, so this placeholder resolved to the empty string.',
+    ];
 
     private readonly Scanner $scanner;
 
@@ -136,7 +171,7 @@ final class Resolution
             return;
         }
 
-        $report = new Report($code, $code->origin(), $code->message(), $this->id, $limit ?? $code->limit(), Excerpt::of($this->message, $open, $close));
+        $report = new Report($code, self::ORIGINS[$code->value], self::MESSAGES[$code->value], $this->id, $limit ?? self::LIMITS[$code->value] ?? null, Excerpt::of($this->message, $open, $close));
 
         // Reporting is an observation, not a step of the resolution: a host
         // whose handler fails, or answers what fails as it is let go, still
