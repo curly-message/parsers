@@ -452,8 +452,8 @@ The rules of `js/` above hold here, in their Rust form:
   so cargo's feature unification never changes what another crate's parser
   resolves.
 - **Generated files**: `target/` and `bench/dist/` are never committed, and
-  the golden files of Node's answers are written by their `golden.mjs`, never
-  by hand.
+  the golden files of Node's answers are written by `conformance/golden.mjs`,
+  never by hand.
 - **Docs** are `rust/README.md` (the crates.io page, its examples run as
   doc tests), `rust/CHANGELOG.md` and the doc comments of the public items.
 
