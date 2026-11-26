@@ -315,6 +315,7 @@ fn out(value: &Value) -> RunnerValue {
                 Err(fmt::Error) => RunnerValue::Unserializable,
             }
         }
+        _ => RunnerValue::Unserializable,
     }
 }
 
@@ -336,6 +337,7 @@ fn exposed((request, category): &(Kept, Option<Category>)) -> ExposedRequest {
             Input::Relative(count, unit) => {
                 RunnerValue::array(vec![count.into(), unit.as_str().into()])
             }
+            _ => RunnerValue::Unserializable,
         },
         category: category.map(|category| category.as_str().to_owned()),
     }

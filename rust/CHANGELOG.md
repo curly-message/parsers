@@ -20,3 +20,6 @@
 * **`Value::Date` is gone.** An instant is `Value::Number` of its
   milliseconds since the epoch, which `date` formats, or `Value::host` of a
   date crate's type, whose `Display` text `date` reads.
+* **The enums a later revision can extend are `non_exhaustive`:** `Code`,
+  `Api`, `Unit`, `Input`, `Level` and `Value`, so a match on one outside the
+  crate takes a wildcard arm, and a new variant is not a breaking change.
