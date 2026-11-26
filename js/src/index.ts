@@ -255,52 +255,31 @@ const cut = (value: string) => value.slice(0, (value.codePointAt(MAX_REPORTED_LE
 // it did escape are two characters by then and no longer match.
 const excerpt = (value: string) => JSON.stringify(value.length > MAX_REPORTED_LENGTH ? `${cut(value)}...` : value).slice(1, -1).replace(EVERY_TERMINATOR, unicodeEscape);
 
-const REPORT_MESSAGES: Record<Report['code'], string> = {
-  'unknown-modifier': 'A placeholder named a modifier this parser does not know.',
-  'failed-modifier': 'A modifier could not produce a result, so the placeholder took its fallback chain.',
-  'missing-options': 'A selection was given no options to select from, so the placeholder took its fallback chain.',
-  'unserializable-value': 'A value could not become text, so resolution read it as missing.',
-  'missing-locale': 'A modifier that depends on a locale was given none, so the placeholder resolved to the empty string.',
-  'nesting-limit': `A placeholder was nested deeper than ${MAX_NESTING} levels, so it took its fallback chain.`,
-  'output-limit': `A placeholder resolved to text this resolution has no room for, and would have carried the output past ${MAX_OUTPUT_LENGTH} characters, so it resolved to the empty string.`,
-  'read-limit': `Resolution read more than ${MAX_READ_LENGTH} characters of value text, so this placeholder resolved to the empty string.`,
-};
-
-// A code that reached no limit names one all the same, because a table read by
-// a key it does not carry answers for its prototype, and a report would then
-// carry out whatever somebody else had written there.
-const REPORT_LIMITS: Record<Report['code'], number | undefined> = {
-  'unknown-modifier': undefined,
-  'failed-modifier': undefined,
-  'missing-options': undefined,
-  'unserializable-value': undefined,
-  'missing-locale': undefined,
-  'nesting-limit': MAX_NESTING,
-  'output-limit': MAX_OUTPUT_LENGTH,
-  'read-limit': MAX_READ_LENGTH,
-};
-
-// The axis is a property of the code rather than of the site that reported it,
-// so every code names its own here and no report site chooses one. The table
-// names them all for the reason the limits do. A modifier that could not
-// produce a result was handed the caller's value, props and locale, or is the
-// caller's own, so what it reports is the payload's.
-const REPORT_ORIGINS: Record<Report['code'], Report['origin']> = {
-  'unknown-modifier': 'message',
-  'failed-modifier': 'payload',
-  'missing-options': 'message',
-  'unserializable-value': 'payload',
-  'missing-locale': 'payload',
-  'nesting-limit': 'message',
-  'output-limit': 'limit',
-  'read-limit': 'limit',
+// The origin is a property of the code rather than of the site that reported
+// it, so every code names its own here and no report site chooses one. A
+// modifier that could not produce a result was handed the caller's value,
+// props and locale, or is the caller's own, so what it reports is the
+// payload's. A code that reached no limit names one all the same, because a
+// table read by a key it does not carry answers for its prototype, and a
+// report would then carry out whatever somebody else had written there.
+const REPORTS: Record<Report['code'], Pick<Report, 'origin' | 'message' | 'limit'>> = {
+  'unknown-modifier': { origin: 'message', message: 'A placeholder named a modifier this parser does not know.', limit: undefined },
+  'failed-modifier': { origin: 'payload', message: 'A modifier could not produce a result, so the placeholder took its fallback chain.', limit: undefined },
+  'missing-options': { origin: 'message', message: 'A selection was given no options to select from, so the placeholder took its fallback chain.', limit: undefined },
+  'unserializable-value': { origin: 'payload', message: 'A value could not become text, so resolution read it as missing.', limit: undefined },
+  'missing-locale': { origin: 'payload', message: 'A modifier that depends on a locale was given none, so the placeholder resolved to the empty string.', limit: undefined },
+  'nesting-limit': { origin: 'message', message: `A placeholder was nested deeper than ${MAX_NESTING} levels, so it took its fallback chain.`, limit: MAX_NESTING },
+  'output-limit': { origin: 'limit', message: `A placeholder resolved to text this resolution has no room for, and would have carried the output past ${MAX_OUTPUT_LENGTH} characters, so it resolved to the empty string.`, limit: MAX_OUTPUT_LENGTH },
+  'read-limit': { origin: 'limit', message: `Resolution read more than ${MAX_READ_LENGTH} characters of value text, so this placeholder resolved to the empty string.`, limit: MAX_READ_LENGTH },
 };
 
 const report = (code: Report['code'], reported: string, id: Parser.Id | undefined, onReport: Parser.OnReport | undefined) => {
   if (!onReport) return;
 
   try {
-    onReport({ code, origin: REPORT_ORIGINS[code], message: REPORT_MESSAGES[code], id, limit: REPORT_LIMITS[code], text: excerpt(reported) });
+    const { origin, message, limit } = REPORTS[code];
+
+    onReport({ code, origin, message, id, limit, text: excerpt(reported) });
   } catch {
     // Reporting is an observation, not a step of the resolution. A host whose
     // logger fails must still get its message back.
