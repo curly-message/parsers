@@ -21,17 +21,16 @@ format, which the specification states is stable.
 It resolves over the format's own inputs and depends on no host library.
 
 The Go implementation, `github.com/curly-message/parsers/go`, implements the
-same version and is released as a prerelease, `v1.0.0-next.0`.
+same version and is released as `v1.0.0`.
 
 The Rust implementation, `curly-message-parser`, implements the same version
-and is on crates.io as a prerelease, `1.0.0-next.0`.
+and is on crates.io as `1.0.0`.
 
 The Python implementation, `curly-message` on PyPI, implements the same
-version and is released as a release candidate, `1.0.0rc0`.
+version and is released as `1.0.0`.
 
 The PHP implementation, `curly-message/parser` for Composer, implements the
-same version and is released as a release candidate, `1.0.0-RC.0`. It is
-developed in `php/` and served
+same version and is released as `1.0.0`. It is developed in `php/` and served
 to Composer from
 [`curly-message/parser-php`](https://github.com/curly-message/parser-php),
 which only its publish workflow writes to (see *Releasing*).
@@ -41,10 +40,10 @@ which only its publish workflow writes to (see *Releasing*).
 | Path | Package | State |
 | --- | --- | --- |
 | [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
-| [`go/`](./go) | `github.com/curly-message/parsers/go` | Prerelease, `v1.0.0-next.0` |
-| [`rust/`](./rust) | `curly-message-parser` | Prerelease, `1.0.0-next.0` |
-| [`python/`](./python) | `curly-message` (PyPI) | Release candidate, `1.0.0rc0` |
-| [`php/`](./php) | `curly-message/parser` (Packagist) | Release candidate, `1.0.0-RC.0` |
+| [`go/`](./go) | `github.com/curly-message/parsers/go` | Stable, `v1.0.0` |
+| [`rust/`](./rust) | `curly-message-parser` | Stable, `1.0.0` |
+| [`python/`](./python) | `curly-message` (PyPI) | Stable, `1.0.0` |
+| [`php/`](./php) | `curly-message/parser` (Packagist) | Stable, `1.0.0` |
 
 One directory per language, each a standalone package with its own build,
 tests and version line. Release tags are namespaced by directory: `js-v1.0.0`,
