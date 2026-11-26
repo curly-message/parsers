@@ -22,3 +22,23 @@ func TestExcerptEscapesEveryLineTerminator(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// The conformance runner checks a report's origin only where one is
+// observed, so this table is what holds each code to its origin.
+func TestCodeOrigin(t *testing.T) {
+	for code, want := range map[Code]Origin{
+		UnknownModifier:     OriginMessage,
+		FailedModifier:      OriginPayload,
+		MissingOptions:      OriginMessage,
+		UnserializableValue: OriginPayload,
+		MissingLocale:       OriginPayload,
+		NestingLimit:        OriginMessage,
+		OutputLimit:         OriginLimit,
+		ReadLimit:           OriginLimit,
+		Code("other"):       "",
+	} {
+		if got := code.origin(); got != want {
+			t.Errorf("%s: origin %q, want %q", code, got, want)
+		}
+	}
+}

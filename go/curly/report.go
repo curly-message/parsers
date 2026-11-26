@@ -31,9 +31,9 @@ const (
 	OriginLimit   Origin = "limit"
 )
 
-// Origin is the origin every report of the code carries. A code that is
-// none of the eight has none.
-func (c Code) Origin() Origin {
+// origin is the origin every report of the code carries, the one table
+// Report.Origin is read from; a code that is none of the eight has none.
+func (c Code) origin() Origin {
 	switch c {
 	case UnknownModifier, MissingOptions, NestingLimit:
 		return OriginMessage
@@ -157,7 +157,7 @@ func (w *walk) report(code Code, spelling string) {
 
 	r := Report{
 		Code:    code,
-		Origin:  code.Origin(),
+		Origin:  code.origin(),
 		Message: reportMessages[code],
 		ID:      w.id,
 		Limit:   limitOf(code),
