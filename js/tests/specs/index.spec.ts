@@ -1558,6 +1558,33 @@ describe('parser', () => {
 
     expect(builds).toBe(2);
   });
+  it('a polyfill already in place when the package loaded is asked on every call', async () => {
+    const Original = Intl.NumberFormat;
+    let builds = 0;
+
+    Object.assign(Intl, {
+      NumberFormat: class extends Original {
+        constructor(...args: ConstructorParameters<typeof Original>) {
+          super(...args);
+          builds += 1;
+        }
+      },
+    });
+
+    try {
+      vi.resetModules();
+
+      const { createParser: loaded } = await import('@curly-message/parser');
+      const { resolve } = loaded();
+      const [first, second] = [1, 2].map(() => resolve('{{v:number}}', { payload: { v: 1234 }, locale: defaultLocale }));
+
+      expect(second).toBe(first);
+      expect(builds).toBe(2);
+    } finally {
+      Object.assign(Intl, { NumberFormat: Original });
+      vi.resetModules();
+    }
+  });
   it('a host formatter is kept for the exact spelling of its request, types included', () => {
     const reports: Report[] = [];
     const { resolve } = createParser({ onReport: (report) => { reports.push(report); } });
