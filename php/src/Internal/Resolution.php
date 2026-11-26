@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Internal;
 
-use CurlyMessage\FormatRequest;
 use CurlyMessage\Internal\Intl\Available;
 use CurlyMessage\Internal\Intl\Modifiers;
 use CurlyMessage\Internal\Intl\Numbers;
+use CurlyMessage\Internal\Intl\Request;
 use CurlyMessage\ModifierInput;
 use CurlyMessage\Option;
 use CurlyMessage\Parser;
@@ -344,7 +344,7 @@ final class Resolution
      * the resolution: a handler that fails, or answers what fails as it is
      * let go, changes nothing it resolves to.
      */
-    private function observe(FormatRequest $request): void
+    private function observe(Request $request): void
     {
         $onRequest = $this->onRequest;
 

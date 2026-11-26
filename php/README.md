@@ -78,14 +78,13 @@ Each argument is `mixed`, so nothing a caller passes makes `resolve` throw a
 none. `resolve` answers a string, always, with the one exception described
 under [Re-entry](#re-entry).
 
-The constructor takes five named options:
+The constructor takes four named options:
 
 | Option | Meaning |
 | --- | --- |
 | `customModifiers` | Modifiers the host defines, by name: see [Modifiers a host defines](#modifiers-a-host-defines). |
 | `modifierDefaults` | The props each modifier is configured with, by its name, beneath every other layer. |
 | `onReport` | `Closure(Report): mixed`, called with each report in the order the walk meets it. |
-| `onRequest` | `Closure(FormatRequest): mixed`, called with each request an Intl modifier makes, once its facility answered or refused it. |
 | `recognizeWrappers` | Whether a payload entry holding only `value`, `default` and `props` configures its value (on by default). |
 
 ## Values
@@ -246,18 +245,7 @@ and `many` under `minimumFractionDigits: 1`, which shows it as `1.0`; the text
 `1.0` is `one`, since `number` shows it as `1`. ECMAScript's default grouping,
 which leaves `1234` ungrouped
 in Polish where ICU's formatter groups it, is applied from the locale's minimum
-grouping digits. `onRequest` observes each request:
-
-```php
-use CurlyMessage\FormatRequest;
-
-$parser = new Parser(onRequest: function (FormatRequest $request): void {
-    // $request->api, $request->options, $request->input, $request->category
-});
-```
-
-`options` is a `CurlyMessage\Props`, read as a modifier's props are:
-`$request->options['style']`, or `$request->options->toArray()` for an array.
+grouping digits.
 
 **Locales.** A locale is checked before any formatter is built. It must be a
 Unicode locale identifier (UTS #35), written with `-` or with `_`, so
@@ -611,7 +599,7 @@ code that called `resolve`, which the placeholder that called that code contains
 that code throws: a modifier takes its fallback chain and reports
 `failed-modifier`; a value's `__toString` or `jsonSerialize` gives no text, so
 its placeholder takes its fallback chain and reports `unserializable-value`;
-and a report or request handler's raise changes nothing. The resolution around
+and a report handler's raise changes nothing. The resolution around
 it answers as usual.
 
 ## Describing a message

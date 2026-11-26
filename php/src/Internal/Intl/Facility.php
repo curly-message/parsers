@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Internal\Intl;
 
-use CurlyMessage\Facility as Api;
 use CurlyMessage\Props;
 
 /**
