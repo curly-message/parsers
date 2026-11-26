@@ -277,15 +277,16 @@ its fallback chain and reports `failed-modifier`.
 
 **Dates.** `date` reads a value as milliseconds since the epoch first
 wherever it reads as a number (SPEC.md section 11.2), so `2024`, ` 2024 ` and
-`+002024` are each the 2024th millisecond, never a year. Other text is read in
-two steps, the first that reads it deciding: ECMAScript's date time string
-format, as `Date.parse` reads it (`2024-03`, `2024-03-05` at UTC,
-`2024-03-05T10:00` in PHP's default time zone, `2024-03-05T10:00:00.123Z`);
-then PHP's own date parser, for text that names a date: `date_parse` reads it
-without an error or a warning, with a year, a month and a day, and with nothing
-relative but a weekday that is the date's own. So the RFC 2822 form
+`+002024` are each the 2024th millisecond, never a year. Other text is read by
+PHP's own date parser, where it names a date: `date_parse` reads it without an
+error or a warning, with a year, a month and a day, and with nothing relative
+but a weekday that is the date's own. Text with no offset is read in PHP's
+default time zone, a date alone included: `2024-03` and `2024-03-05` are
+midnight there, as `2024-03-05T10:00` is ten o'clock, while
+`2024-03-05T10:00:00.123Z` is at UTC. So the RFC 2822 form
 `Tue, 05 Mar 2024 10:00:00 +0000` is a date, and `now`, `tomorrow`, `+1 day`,
-a lone `a` and `Wed, 05 Mar 2024` (a Tuesday) are not.
+a lone `a`, `Wed, 05 Mar 2024` (a Tuesday), `2024-02-30` and
+`2024-03-05T24:00` are not.
 
 **What ext-intl cannot express.** `Parser::unexpressible()` lists, by facility,
 the properties no value of which can be performed here, and none of them is
