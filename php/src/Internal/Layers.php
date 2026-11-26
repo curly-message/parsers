@@ -190,7 +190,7 @@ final class Layers
     {
         // Most placeholders hold no wrapper, and nothing lies beneath.
         if ($own === null && $beneath === null) {
-            return $this->handed[$name][''] ??= new Props($this->lower($name, null, ''));
+            return $this->handed[$name][''] ??= Props::composed($this->lower($name, null, ''));
         }
 
         $slice = $this->slice($own, $name);
@@ -198,7 +198,7 @@ final class Layers
         $variant = $beneath === null ? '' : $beneath[0] . "\0" . implode("\0", $beneath[1]);
 
         if ($slice === [] && $under === []) {
-            return $this->handed[$name][$variant] ??= new Props($this->lower($name, $beneath, $variant));
+            return $this->handed[$name][$variant] ??= Props::composed($this->lower($name, $beneath, $variant));
         }
 
         $layers = $this->lower($name, $beneath, $variant);
@@ -213,7 +213,7 @@ final class Layers
             array_unshift($layers, $slice, ...($layers === [] ? [[]] : []));
         }
 
-        return new Props($layers);
+        return Props::composed($layers);
     }
 
     /**

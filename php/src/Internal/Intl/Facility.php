@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace CurlyMessage\Internal\Intl;
 
-use CurlyMessage\Props;
-
 /**
  * Performs a request of section 11.2 on ext-intl: the locale checked as a
  * tag before anything is built, the facility built once per request whose
@@ -38,14 +36,14 @@ final class Facility
      *
      * @param int|float|array{int|float, string} $input
      */
-    public static function perform(Api $api, string $locale, Props $props, int|float|array $input, Numbers $numbers = new Numbers()): string
+    public static function perform(Api $api, string $locale, Options $asked, int|float|array $input, Numbers $numbers = new Numbers()): string
     {
         $tag = LocaleTag::of($locale) ?? throw new \ValueError('The locale is not a well-formed tag');
         // Kept by what it reads alone, so names a payload adds keep nothing
         // more and share the facility built without them. Each is asked for
         // by its name, so what a request costs is the names a facility
         // reads, however many properties the layers hold.
-        $options = $props->only(self::READS[$api->value]);
+        $options = $asked->only(self::READS[$api->value]);
 
         $head = Cache::key(['api' => $api->value, 'locale' => $locale]);
         $rest = Cache::key($options);
