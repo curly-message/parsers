@@ -52,20 +52,26 @@ const flat = (count) => Array.from({ length: count }, (_, index) => `{{p${index}
 // keep of it from the call before.
 const first = (message, payload) => () => createParser().resolve(message, { payload, locale: 'en' });
 
-// What resolving the message set reads of its payload: every trap a read can
-// go through, counted.
-const reads = () => {
-  let count = 0;
+// A view of `target` that counts every trap a read can go through.
+const counted = (target) => {
+  const counter = { count: 0 };
   const handler = Object.fromEntries(['get', 'has', 'getOwnPropertyDescriptor', 'ownKeys', 'getPrototypeOf'].map((trap) => [trap, (...args) => {
-    count += 1;
+    counter.count += 1;
 
     return Reflect[trap](...args);
   }]));
-  const payload = new Proxy(PAYLOAD, handler);
+
+  return { proxy: new Proxy(target, handler), counter };
+};
+
+// What resolving the message set reads of its payload: every trap a read can
+// go through, counted.
+const reads = () => {
+  const { proxy: payload, counter } = counted(PAYLOAD);
 
   for (const message of MESSAGES) resolve(message, { payload, locale: 'en' });
 
-  return count;
+  return counter.count;
 };
 
 // A props slice of 1 000 entries, as wide as a host cares to make one.
@@ -77,20 +83,13 @@ const over = (placeholder, count) => Array.from({ length: count }, () => placeho
 // configured with, for a selection, a plural selection and a modifier a host
 // registered: every trap, counted.
 const sliceReads = () => {
-  let count = 0;
-  const handler = Object.fromEntries(['get', 'has', 'getOwnPropertyDescriptor', 'ownKeys', 'getPrototypeOf'].map((trap) => [trap, (...args) => {
-    count += 1;
-
-    return Reflect[trap](...args);
-  }]));
-
-  const slice = new Proxy(WIDE, handler);
+  const { proxy: slice, counter } = counted(WIDE);
 
   resolve(over('{{v:eq; 1:a}}', 100), { payload: { v: 1 }, props: { eq: slice } });
   resolve(over('{{v:plural; one:a; other:b}}', 100), { payload: { v: 1 }, props: { plural: slice }, locale: 'en' });
   resolveWrapped(over('{{v:test}}', 100), { payload: { v: 1 }, props: { test: slice } });
 
-  return count;
+  return counter.count;
 };
 
 // What checking resolve calls against a payload type of 20 keys costs a
