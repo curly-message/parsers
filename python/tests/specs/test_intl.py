@@ -14,7 +14,6 @@ import os
 import subprocess
 import sys
 import time
-import zoneinfo
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -1127,26 +1126,23 @@ for v in ("1704110400000", "1720000000000", "253399089600000"):
 
 
 LOCAL_PROBE = """
+import importlib, os, time
 from curly_message import create_parser
+date = importlib.import_module("curly_message._intl.date")
 codes = []
 parser = create_parser(on_report=lambda report: codes.append(report.code))
 payload = {"v": "0", "w": "2024-03-05T15:00:00", "s": "2024-08-15T12:00:00"}
 for style in ("long", "full"):
     props = {"date": {"timeStyle": style}}
     print(parser.resolve("{{v:date}}, {{w:date}}, {{s:date}}", payload, props=props, locale="en"))
+print(date.time_value("2024-03-31T02:30:00"), date.time_value("2024-10-27T02:30:00"))
+os.environ["TZ"] = "JST-9"
+time.tzset()
+print(parser.resolve("{{v:date}}", payload, props={"date": {"timeStyle": "long"}}, locale="en"))
 print(codes)
 """
 
 GMT = "12:00:00 AM GMT, 3:00:00 PM GMT, 12:00:00 PM GMT"
-UTC_TEXTS = (
-    "12:00:00 AM UTC, 3:00:00 PM UTC, 12:00:00 PM UTC",
-    "12:00:00 AM Coordinated Universal Time, 3:00:00 PM Coordinated Universal Time,"
-    " 12:00:00 PM Coordinated Universal Time",
-)
-CET = (
-    "1:00:00 AM GMT+1, 3:00:00 PM GMT+1, 12:00:00 PM GMT+2",
-    "1:00:00 AM GMT+01:00, 3:00:00 PM GMT+01:00, 12:00:00 PM GMT+02:00",
-)
 
 
 def _babel_before(version: tuple[int, int]) -> bool:
@@ -1157,232 +1153,135 @@ def _babel_before(version: tuple[int, int]) -> bool:
     return tuple(int(part) for part in found.split(".")[:2]) < version
 
 
-# Babel reads a key zoneinfo refuses as no zone only from 2.16 (README).
-REFUSED_KEY = pytest.mark.skipif(_babel_before((2, 16)), reason="Babel fails to import")
-
-TOKYO = (
-    "9:00:00 AM GMT+9, 3:00:00 PM GMT+9, 12:00:00 PM GMT+9",
-    "9:00:00 AM GMT+09:00, 3:00:00 PM GMT+09:00, 12:00:00 PM GMT+09:00",
+CET = (
+    "1:00:00 AM GMT+1, 3:00:00 PM GMT+1, 12:00:00 PM GMT+2",
+    "1:00:00 AM GMT+01:00, 3:00:00 PM GMT+01:00, 12:00:00 PM GMT+02:00",
+    # The spring transition skips 2:30, read by 3.11 at the offset after it
+    # and by later releases at the one before. The autumn one repeats it,
+    # read as its first occurrence.
+    ("1711845000000" if sys.version_info < (3, 12) else "1711848600000") + " 1729989000000",
 )
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows reads its zone from the registry")
 @pytest.mark.parametrize(
-    ("zone", "long", "full"),
+    ("zone", "long", "full", "transitions"),
     [
-        ("JST-9", *TOKYO),
+        # A zone of the database is named by its offset all the same.
+        ("Europe/Prague", *CET),
+        ("CET-1CEST,M3.5.0,M10.5.0/3", *CET),
         (
-            "EST5",
-            "7:00:00 PM GMT-5, 3:00:00 PM GMT-5, 12:00:00 PM GMT-5",
-            "7:00:00 PM GMT-05:00, 3:00:00 PM GMT-05:00, 12:00:00 PM GMT-05:00",
-        ),
-        (
-            "IST-5:30",
+            "<+0530>-5:30",
             "5:30:00 AM GMT+5:30, 3:00:00 PM GMT+5:30, 12:00:00 PM GMT+5:30",
             "5:30:00 AM GMT+05:30, 3:00:00 PM GMT+05:30, 12:00:00 PM GMT+05:30",
+            "1711832400000 1729976400000",
         ),
-        (
-            "<+05>-5",
-            "5:00:00 AM GMT+5, 3:00:00 PM GMT+5, 12:00:00 PM GMT+5",
-            "5:00:00 AM GMT+05:00, 3:00:00 PM GMT+05:00, 12:00:00 PM GMT+05:00",
-        ),
-        # A rule with transitions, wherever in the year they fall.
-        ("CET-1CEST,M3.5.0,M10.5.0/3", *CET),
-        ("XXX-1YYY,M8.1.0,M9.1.0", *CET),
-        # A rule naming daylight saving time and no dates takes the C
-        # library's.
-        ("CET-1CEST", *CET),
-        (
-            "EST5EDT4",
-            "7:00:00 PM GMT-5, 3:00:00 PM GMT-5, 12:00:00 PM GMT-4",
-            "7:00:00 PM GMT-05:00, 3:00:00 PM GMT-05:00, 12:00:00 PM GMT-04:00",
-        ),
-        (
-            "XYZ-23:59:59",
-            "11:59:59 PM GMT+23:59:59, 3:00:00 PM GMT+23:59:59, 12:00:00 PM GMT+23:59:59",
-            "11:59:59 PM GMT+23:59:59, 3:00:00 PM GMT+23:59:59, 12:00:00 PM GMT+23:59:59",
-        ),
-        # An offset of a day or more, which no ``datetime`` holds, is offset
-        # zero where it applies, and leaves the others as they are.
-        (
-            "ABC-23DEF,M3.5.0,M10.5.0",
-            "11:00:00 PM GMT+23, 3:00:00 PM GMT+23, 12:00:00 PM GMT",
-            "11:00:00 PM GMT+23:00, 3:00:00 PM GMT+23:00, 12:00:00 PM GMT",
-        ),
-        (
-            "ABC-12DEF-36,M3.5.0,M10.5.0",
-            "12:00:00 PM GMT+12, 3:00:00 PM GMT+12, 12:00:00 PM GMT",
-            "12:00:00 PM GMT+12:00, 3:00:00 PM GMT+12:00, 12:00:00 PM GMT",
-        ),
-        ("ABC-24", GMT, GMT),
-        ("ABC24", GMT, GMT),
-        ("ABC+24:59:59", GMT, GMT),
-        # A path to a file the database holds, which names no zone of it.
-        pytest.param("Asia//Tokyo", *TOKYO, marks=REFUSED_KEY),
-        pytest.param("Asia/./Tokyo", *TOKYO, marks=REFUSED_KEY),
-        # A directory of the database, which Babel reads no zone in only
-        # from Python 3.13 (README).
-        pytest.param(
-            "Europe",
-            GMT,
-            GMT,
-            marks=pytest.mark.skipif(sys.version_info < (3, 13), reason="Babel fails to import"),
-        ),
-        # TZ the C library reads nothing from: offset zero, named by no zone.
-        ("", GMT, GMT),
-        ("UTC0", GMT, GMT),
-        ("Europe/Pargue", GMT, GMT),
-        (
-            "Europe/Prague",
-            CET[0],
-            "1:00:00 AM Central European Standard Time, 3:00:00 PM Central European Standard"
-            " Time, 12:00:00 PM Central European Summer Time",
-        ),
-        ("GMT0", GMT, GMT.replace("GMT", "Greenwich Mean Time")),
+        ("UTC0", GMT, GMT, "1711852200000 1729996200000"),
+        ("UTC", GMT, GMT, "1711852200000 1729996200000"),
     ],
 )
-def test_a_local_zone_tz_names_is_read_as_the_c_library_reads_it(
-    zone: str, long: str, full: str
+def test_a_local_zone_is_python_s_local_time_named_by_its_offset(
+    zone: str, long: str, full: str, transitions: str
 ) -> None:
-    probe = (
-        """
-import importlib
-date = importlib.import_module("curly_message._intl.date")
-calls = []
-system_zone = date._system_zone
-def counted():
-    calls.append(None)
-    return system_zone()
-date._system_zone = counted
-"""
-        + LOCAL_PROBE
-        + "print(len(calls))\n"
-    )
+    # A later ``time.tzset()`` is followed.
     env = {**os.environ, "TZ": zone}
     lines = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, text=True, check=True, env=env
+        [sys.executable, "-c", LOCAL_PROBE], capture_output=True, text=True, check=True, env=env
     ).stdout.splitlines()
-    assert lines == [long, full, "[]", "1"]
+    assert lines == [long, full, transitions, "9:00:00 AM GMT+9", "[]"]
 
 
-@pytest.mark.skipif(sys.platform == "win32", reason="Windows reads its zone from the registry")
-def test_a_local_zone_the_c_library_reads_shows_and_reads_times_as_the_database_does() -> None:
-    # The rule the database's Europe/Prague follows today: each instant of
-    # its years, and each wall time once in each fold, the gap and the
-    # overlap included.
-    probe = """
-import importlib
-from datetime import UTC, datetime, timedelta
-from zoneinfo import ZoneInfo
-date = importlib.import_module("curly_message._intl.date")
-local, prague = date.local_zone(), ZoneInfo("Europe/Prague")
-moment, differ = datetime(2023, 1, 1, tzinfo=UTC), 0
-while moment.year < 2026:
-    shown, named = moment.astimezone(local), moment.astimezone(prague)
-    differ += shown.replace(tzinfo=None) != named.replace(tzinfo=None)
-    differ += shown.fold != named.fold or shown.utcoffset() != named.utcoffset()
-    wall = moment.replace(tzinfo=None)
-    for fold in (0, 1):
-        differ += wall.replace(tzinfo=local, fold=fold).utcoffset() != wall.replace(
-            tzinfo=prague, fold=fold
-        ).utcoffset()
-    moment += timedelta(minutes=30)
-print(differ)
-print(date.time_value("2024-03-31T02:30:00"), date.time_value("2024-10-27T02:30:00"))
+EDGE_PROBE = """
+import sys
+from curly_message import create_parser
+codes = []
+parser = create_parser(on_report=lambda report: codes.append(report.code))
+props = {"date": {"dateStyle": "medium", "timeStyle": "medium", "timeZone": "UTC"}}
+for value in sys.argv[1:]:
+    output = parser.resolve("{{v:date; default:never}}", {"v": value}, props=props, locale="en")
+    print(output, codes)
+    codes.clear()
 """
-    env = {**os.environ, "TZ": "CET-1CEST,M3.5.0,M10.5.0/3"}
-    lines = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, text=True, check=True, env=env
-    ).stdout.splitlines()
-    assert lines == ["0", "1711848600000 1729989000000"]
 
-
-def _zone_file(key: str) -> bytes:
-    for directory in zoneinfo.TZPATH:
-        path = Path(directory, key)
-        if path.is_file():
-            return path.read_bytes()
-    pytest.skip("no zone database on this host")
+REFUSED = "never ['failed-modifier']"
 
 
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows reads its zone from the registry")
 @pytest.mark.parametrize(
-    ("held", "named", "long", "full"),
+    ("zone", "texts"),
     [
-        # A stale /etc/timezone, where the supplier finds no zone, beside a
-        # zone file that holds one.
         (
-            "Asia/Tokyo",
-            None,
-            "9:00:00 AM GMT+9, 3:00:00 PM GMT+9, 12:00:00 PM GMT+9",
-            "9:00:00 AM GMT+09:00, 3:00:00 PM GMT+09:00, 12:00:00 PM GMT+09:00",
+            "UTC0",
+            [
+                "Jan 1, 1, 12:00:00 AM []",
+                "Jan 1, 1, 12:00:00 PM []",
+                "Dec 31, 9999, 12:00:00 AM []",
+                "Dec 31, 9999, 11:59:00 PM []",
+            ],
         ),
-        # The supplier names the zone /etc/timezone names, the file holds
-        # another.
-        ("Europe/Prague", "Asia/Tokyo", *CET),
-        # The file is that zone's own, so it is named.
+        # Midnight of the first day at Prague's mean time is in year 0.
         (
-            "Asia/Tokyo",
-            "Asia/Tokyo",
-            "9:00:00 AM GMT+9, 3:00:00 PM GMT+9, 12:00:00 PM GMT+9",
-            "9:00:00 AM Japan Standard Time, 3:00:00 PM Japan Standard Time,"
-            " 12:00:00 PM Japan Standard Time",
+            "Europe/Prague",
+            [
+                REFUSED,
+                "Jan 1, 1, 11:02:16 AM []",
+                "Dec 30, 9999, 11:00:00 PM []",
+                "Dec 31, 9999, 10:59:00 PM []",
+            ],
         ),
-        # No zone file, or one holding no zone: UTC, whatever the supplier
-        # names.
-        (None, "Asia/Tokyo", *UTC_TEXTS),
-        (b"not a zone", "Asia/Tokyo", *UTC_TEXTS),
-        (b"TZif2" + bytes(5), "Europe/Prague", *UTC_TEXTS),
-        # A copy of the named zone's file cut short in its footer, at its
-        # start or before it.
-        (("Europe/Prague", -1), "Europe/Prague", *UTC_TEXTS),
-        (("Europe/Prague", 1), "Europe/Prague", *UTC_TEXTS),
-        (("Europe/Prague", 0), "Europe/Prague", *UTC_TEXTS),
+        (
+            "Pacific/Kiritimati",
+            [
+                "Jan 1, 1, 10:29:20 AM []",
+                "Jan 1, 1, 10:29:20 PM []",
+                "Dec 30, 9999, 10:00:00 AM []",
+                "Dec 31, 9999, 9:59:00 AM []",
+            ],
+        ),
+        # The last minute of the calendar twelve hours behind is in year 10000.
+        (
+            "Etc/GMT+12",
+            [
+                "Jan 1, 1, 12:00:00 PM []",
+                "Jan 2, 1, 12:00:00 AM []",
+                "Dec 31, 9999, 12:00:00 PM []",
+                REFUSED,
+            ],
+        ),
     ],
 )
-def test_with_no_tz_the_local_zone_is_the_one_the_zone_file_holds(
-    held: str | bytes | tuple[str, int] | None,
-    named: str | None,
-    long: str,
-    full: str,
-    tmp_path: Path,
+def test_a_naive_time_on_the_first_or_last_day_is_placed_in_local_time(
+    zone: str, texts: list[str]
 ) -> None:
-    # The supplier stands in for what Babel reads beside the zone file, and
-    # the zone file for /etc/localtime. A file cut short keeps that many
-    # bytes of its footer, or all of it but its last.
-    path = tmp_path / "localtime"
-    if isinstance(held, str):
-        path.write_bytes(_zone_file(held))
-    elif isinstance(held, tuple):
-        data = _zone_file(held[0])
-        footer = data.rindex(b"\n", 0, -1)
-        path.write_bytes(data[: footer + held[1]] if held[1] >= 0 else data[: held[1]])
-    elif held is not None:
-        path.write_bytes(held)
-    probe = (
-        """
-import importlib, sys, zoneinfo
-import babel.localtime
-def get_localzone():
-    if not sys.argv[2]:
-        raise LookupError("Can not find any timezone configuration")
-    return zoneinfo.ZoneInfo(sys.argv[2])
-babel.localtime.get_localzone = get_localzone
-date = importlib.import_module("curly_message._intl.date")
-date._ZONE_FILE = sys.argv[1]
-"""
-        + LOCAL_PROBE
-    )
-    env = {key: value for key, value in os.environ.items() if key != "TZ"}
+    days = ("0001-01-01", "0001-01-01T12:00", "9999-12-31", "9999-12-31T23:59")
     lines = subprocess.run(
-        [sys.executable, "-c", probe, str(path), named or ""],
+        [sys.executable, "-c", EDGE_PROBE, *days],
         capture_output=True,
         text=True,
         check=True,
-        env=env,
-        timeout=120,
+        env={**os.environ, "TZ": zone},
     ).stdout.splitlines()
-    assert lines == [long, full, "[]"]
+    assert lines == texts
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="Windows reads its zone from the registry")
+def test_a_local_offset_of_a_day_or_more_takes_the_fallback_chain() -> None:
+    probe = """
+from curly_message import create_parser
+codes = []
+parser = create_parser(on_report=lambda report: codes.append(report.code))
+payload = {"v": "0", "w": "2024-03-05T15:00:00"}
+print(parser.resolve("{{v:date; default:-}} {{w:date; default:-}}", payload, locale="en"))
+print(codes)
+"""
+    lines = subprocess.run(
+        [sys.executable, "-c", probe],
+        capture_output=True,
+        text=True,
+        check=True,
+        env={**os.environ, "TZ": "ABC-24"},
+    ).stdout.splitlines()
+    assert lines == ["- -", "['failed-modifier', 'failed-modifier']"]
 
 
 @pytest.mark.parametrize(
