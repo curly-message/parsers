@@ -117,7 +117,7 @@ impl Record {
 }
 
 // A host value's own string conversion. One that fails, or panics, describes
-// nothing, and so does one writing more than a string holds in V8: past
+// nothing, and so does one writing more than a serialization may: past
 // `MAX_SERIALIZED_LENGTH` the writer refuses, as a serialization does, and a
 // `Display` that goes on writing after a refusal still describes nothing.
 pub(crate) fn display(host: &(dyn fmt::Display + Send + Sync)) -> Option<String> {
@@ -161,18 +161,14 @@ pub(crate) fn escape_json(text: &str, mut put: impl FnMut(&str) -> Option<()>) -
 }
 
 /// What one serialization has written. It refuses to write past
-/// [`MAX_SERIALIZED_LENGTH`] code units of UTF-16, the length V8 gives a
-/// string, or past what the allocator grants, and the serialization is
-/// abandoned instead of the process. A run is refused before any of it is
-/// copied, so a refusal costs no more room than the bound. A refusal is the
-/// serialization's, not the run's: nothing is written after it, and the text
-/// is never handed out, whatever the writer does with the error.
+/// [`MAX_SERIALIZED_LENGTH`] bytes, or past what the allocator grants, and the
+/// serialization is abandoned instead of the process. A run is refused before
+/// any of it is copied, so a refusal costs no more room than the bound. A
+/// refusal is the serialization's, not the run's: nothing is written after
+/// it, and the text is never handed out, whatever the writer does with the
+/// error.
 struct Written {
     text: String,
-    // The code units of the text up to `counted`. A code unit takes at least
-    // a byte, so they are counted only once the bytes pass the bound.
-    units: usize,
-    counted: usize,
     refused: bool,
 }
 
@@ -197,8 +193,6 @@ impl Written {
     const fn new() -> Self {
         Self {
             text: String::new(),
-            units: 0,
-            counted: 0,
             refused: false,
         }
     }
@@ -251,29 +245,11 @@ impl Written {
         Some(())
     }
 
-    // Room for a run where it keeps the text within the bound. While the
-    // bytes stay within it so do the code units, which take a byte at least;
-    // past it the units are counted, of what is written once and of the run
-    // without copying it.
+    // Room for a run where it keeps the text within the bound.
     #[cold]
     fn admit(&mut self, run: &str) -> Option<()> {
-        if self.refused {
-            return None;
-        }
-
-        if self.text.len().saturating_add(run.len()) > MAX_SERIALIZED_LENGTH {
-            let written = utf16_length(self.text.get(self.counted..)?);
-
-            self.units = self.units.saturating_add(written);
-            self.counted = self.text.len();
-
-            // A code unit takes three bytes at most, so a run too long even
-            // at that is refused unread.
-            if self.units.saturating_add(run.len().div_ceil(3)) > MAX_SERIALIZED_LENGTH
-                || self.units.saturating_add(utf16_length(run)) > MAX_SERIALIZED_LENGTH
-            {
-                return self.refuse();
-            }
+        if self.refused || self.text.len().saturating_add(run.len()) > MAX_SERIALIZED_LENGTH {
+            return self.refuse();
         }
 
         self.grow(run.len())
@@ -307,39 +283,11 @@ fn room(text: &mut String, more: usize) -> Option<()> {
     }
 
     let needed = text.len().saturating_add(more);
-    let most = if needed <= MAX_SERIALIZED_LENGTH {
-        MAX_SERIALIZED_LENGTH
-    } else {
-        MAX_SERIALIZED_LENGTH.saturating_mul(3)
-    };
-    let grown = text
-        .capacity()
-        .saturating_mul(2)
-        .max(8)
-        .min(most)
-        .max(needed);
+    let doubled = text.capacity().saturating_mul(2).max(8);
+    let grown = needed.max(MAX_SERIALIZED_LENGTH.min(doubled));
 
     text.try_reserve_exact(grown.saturating_sub(text.len()))
         .ok()
-}
-
-// The length of text in code units of UTF-16: each byte that starts a code
-// point is one, and one that starts a code point past the Basic Multilingual
-// Plane, from 0xF0, is two. A run of ASCII is a unit a byte, and is told
-// apart a word at a time.
-fn utf16_length(text: &str) -> usize {
-    text.as_bytes().chunks(4096).fold(0, |units: usize, chunk| {
-        let more = if chunk.is_ascii() {
-            chunk.len()
-        } else {
-            chunk.iter().fold(0, |more: usize, &byte| {
-                more.saturating_add(usize::from(byte & 0xc0 != 0x80))
-                    .saturating_add(usize::from(byte >= 0xf0))
-            })
-        };
-
-        units.saturating_add(more)
-    })
 }
 
 impl fmt::Write for Written {
@@ -355,7 +303,7 @@ enum Open<'v> {
 
 /// The JSON a plain value serializes to, written as `JSON.stringify` writes
 /// it, or nothing where it visits more than [`MAX_CONVERSION_NODES`] nodes,
-/// would write more than [`MAX_SERIALIZED_LENGTH`] code units, or holds a host
+/// would write more than [`MAX_SERIALIZED_LENGTH`] bytes, or holds a host
 /// value that fails its conversion. It runs off a stack of its own, so a
 /// value's depth never reaches the host's call stack.
 pub(crate) fn json(value: &Value) -> Option<String> {

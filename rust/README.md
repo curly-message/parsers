@@ -332,18 +332,18 @@ prints what it prints for any other; that refusal runs none.
 | `MAX_OUTPUT_LENGTH` | 100 000 | bytes of UTF-8 of placeholder results the output carries; the message's own text is not counted and always renders |
 | `MAX_READ_LENGTH` | 100 000 | bytes of UTF-8 of value text a resolution reads |
 | `MAX_CONVERSION_NODES` | 100 000 | nodes one conversion of a value visits |
-| `MAX_SERIALIZED_LENGTH` | 536 870 888 | code units of UTF-16 one serialization of a value writes |
+| `MAX_SERIALIZED_LENGTH` | 10 000 000 | bytes of UTF-8 one serialization of a value writes |
 | `MAX_NESTING` | 8 | levels a placeholder may nest and still resolve |
 | `MAX_REENTRY` | 8 | resolutions in progress at once on one thread, and the reads of a lent input's options and default that are not the walk's |
 
-The output and read limits count bytes of UTF-8, the unit a `str` measures
-its length in, which section 13 lets a host count in: a character outside
-ASCII counts two to four, where `js/` counts it one or two code units of
-UTF-16. `MAX_SERIALIZED_LENGTH` alone counts code units of UTF-16, since it
-is the length V8 gives a string. A text holds no more code units of UTF-16
-than bytes of UTF-8, so a serialization of fewer than the 100 000 bytes
-section 13 asks the conversion limit to permit, in the unit of the output
-limit, is never abandoned.
+The text limits count bytes of UTF-8, the unit a `str` measures its length
+in, which section 13 lets a host count in: a character outside ASCII counts
+two to four, where `js/` counts it one or two code units of UTF-16.
+`MAX_SERIALIZED_LENGTH` is far above the 100 000 section 13 asks the
+conversion limit to permit, and below the most a string holds in V8,
+536 870 888 code units of UTF-16, which bounds a serialization in `js/`: a
+value whose text lies between the two converts there and is
+`unserializable-value` here.
 
 A placeholder nested past `MAX_NESTING` takes its fallback chain and reports
 `nesting-limit`. The walk keeps what it nests on a stack of its own, so a
@@ -510,10 +510,9 @@ member is left out of an object and written as `null` in an array, as is a
 number that is not finite. A `Display` that fails or panics describes nothing,
 and neither does a container whose serialization visits more than
 `MAX_CONVERSION_NODES` nodes, nor a `Display` or a serialization that would
-write more than `MAX_SERIALIZED_LENGTH` code units of UTF-16, the most a string
-holds in V8, where the JavaScript implementation meets the same bound: the
-placeholder takes its fallback chain and reports `unserializable-value`. What
-would pass the bound is refused there, never written first.
+write more than `MAX_SERIALIZED_LENGTH` bytes: the placeholder takes its
+fallback chain and reports `unserializable-value`. What would pass the bound
+is refused there, never written first.
 The second bound is what a container naming one large child many times meets,
 which visits few nodes. A value
 is converted once per resolution however many placeholders read it.

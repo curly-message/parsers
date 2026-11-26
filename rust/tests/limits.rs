@@ -162,20 +162,21 @@ impl fmt::Display for Runs {
 }
 
 // A value's own description is a string as a serialization is, held to the
-// same bound: one writing past it describes nothing, however it writes.
+// same bound: one writing past it describes nothing, however it writes, and
+// the placeholder after it resolves.
 #[test]
-fn a_description_longer_than_a_string_holds_describes_nothing() {
+fn a_description_longer_than_a_serialization_holds_describes_nothing() {
     let (parser, reports) = recording();
-    let message = "{{v; default:D}}";
+    let message = "{{v; default:D}}|{{w; default:after}}";
     let resolve = |length| {
         let payload = Object::new().with("v", Value::host(Runs(length)));
 
         parser.resolve(message, &Context::new().payload(&payload))
     };
 
-    assert_eq!(resolve(MAX_SERIALIZED_LENGTH), "");
-    assert_eq!(codes(&reports), ["output-limit"]);
-    assert_eq!(resolve(MAX_SERIALIZED_LENGTH + 1), "D");
+    assert_eq!(resolve(MAX_SERIALIZED_LENGTH), "|");
+    assert_eq!(codes(&reports), ["output-limit", "read-limit"]);
+    assert_eq!(resolve(MAX_SERIALIZED_LENGTH + 1), "D|after");
     assert_eq!(codes(&reports), ["unserializable-value"]);
 }
 
@@ -213,7 +214,9 @@ fn a_description_going_on_past_a_refusal_describes_nothing() {
 fn a_value_writing_more_than_a_serialization_holds_describes_nothing() {
     let (parser, reports) = recording();
     let leaf = Value::from(Array::from(vec![Value::from("x".repeat(99_995))]));
-    let fits = MAX_SERIALIZED_LENGTH / 100_000;
+    // The brackets take two bytes, less the comma the first element has none
+    // of.
+    let fits = (MAX_SERIALIZED_LENGTH - 1) / 100_000;
     let message = "{{v}}|{{w; default:after}}";
 
     // What fits is read, and the placeholder after it finds the read budget
@@ -224,15 +227,20 @@ fn a_value_writing_more_than_a_serialization_holds_describes_nothing() {
     );
     assert_eq!(codes(&reports), ["output-limit", "read-limit"]);
 
-    // The bound counts code units of UTF-16, as V8 counts a string: a last
-    // element filling it to the unit, though it takes more bytes of UTF-8,
-    // is written, and one unit more is not.
+    // The bound counts bytes of UTF-8 as they are written, escapes included:
+    // a last element filling it to the byte is written, and one byte more is
+    // not. The elements before it take `fits * 100_000 + 1` bytes with the
+    // brackets around them, its comma, brackets and quotes five, and the
+    // characters before the filler 210 as they are written: 100 for the
+    // accents, 100 for the emoji, two for each short escape and six for
+    // `\u0001`.
+    let filler = MAX_SERIALIZED_LENGTH - (fits * 100_000 + 1) - 5 - 210;
     let last = |extra: &str| {
         let text = format!(
             "{}{}\"\n\u{1}{}{extra}",
             "\u{e9}".repeat(50),
             "\u{1f600}".repeat(25),
-            "x".repeat(70_772)
+            "x".repeat(filler)
         );
         let mut items = vec![leaf.clone(); fits];
 

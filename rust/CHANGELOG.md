@@ -23,6 +23,13 @@
 * **The enums a later revision can extend are `non_exhaustive`:** `Code`,
   `Api`, `Unit`, `Input`, `Level` and `Value`, so a match on one outside the
   crate takes a wildcard arm, and a new variant is not a breaking change.
+* **`MAX_SERIALIZED_LENGTH` counts bytes, 10 000 000 of them.** One
+  serialization of a value, and a value's `Display`, writes at most
+  10 000 000 bytes of UTF-8, the unit every other text limit of the crate
+  counts in, where `1.0.0-next.0` let it write 536 870 888 code units of
+  UTF-16, the most a string holds in V8. A value whose text is longer now
+  describes nothing: its placeholder takes the fallback chain and reports
+  `unserializable-value`.
 * **A report's origin is read off the report.** `Code::origin` is no longer
   public: a host reads `Report::origin`, as the JavaScript and Python parsers
   expose it.

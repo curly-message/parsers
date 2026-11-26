@@ -378,9 +378,8 @@ The rules of `js/` above hold here, in their Rust form:
 - **The limits** are `MAX_OUTPUT_LENGTH`, `MAX_READ_LENGTH`,
   `MAX_CONVERSION_NODES` and `MAX_NESTING`, as in `js/`, the text ones in
   bytes of UTF-8, the unit a `str` is indexed by; plus
-  `MAX_SERIALIZED_LENGTH`, the most one serialization writes, in code units
-  of UTF-16 as V8 counts a string, and `MAX_REENTRY`. Each is
-  load-bearing.
+  `MAX_SERIALIZED_LENGTH`, the most one serialization writes, in bytes of
+  UTF-8 too, and `MAX_REENTRY`. Each is load-bearing.
 - **The walk keeps its own stack.** A message, a value and a tree of any
   depth are walked, converted and dropped without a call per level. The
   host's stack is reached only through host code (a modifier, an `Intl`

@@ -51,17 +51,16 @@ pub const MAX_READ_LENGTH: usize = 100_000;
 /// The most nodes one conversion of a value visits (section 13).
 pub const MAX_CONVERSION_NODES: usize = 100_000;
 
-/// The most code units of UTF-16 one serialization of a value writes, as V8
-/// counts the length of a string, and so the most a value's `Display` may
+/// The most bytes of UTF-8 one serialization of a value writes, in the unit
+/// [`MAX_OUTPUT_LENGTH`] counts, and so the most a value's `Display` may
 /// write. One that would write more describes nothing, as one past
 /// [`MAX_CONVERSION_NODES`] does: a value naming one large child many times
-/// visits few nodes and could still write without bound. The number is the
-/// most a string holds in V8, where the JavaScript implementation meets it.
-/// It is the one limit not counted in bytes of UTF-8, the unit of
-/// [`MAX_OUTPUT_LENGTH`]; a text holds no more code units of UTF-16 than
-/// bytes of UTF-8, so it never abandons a serialization of fewer than the
-/// 100 000 bytes section 13 asks the conversion limit to permit.
-pub const MAX_SERIALIZED_LENGTH: usize = 536_870_888;
+/// visits few nodes and could still write without bound. It permits far more
+/// than the 100 000 section 13 asks the conversion limit to permit, and less
+/// than the most a string holds in V8, where the JavaScript implementation
+/// meets its bound: a value whose text lies between the two is described
+/// there and not here.
+pub const MAX_SERIALIZED_LENGTH: usize = 10_000_000;
 
 /// How deeply a placeholder may nest and still resolve (section 13).
 pub const MAX_NESTING: usize = 8;
