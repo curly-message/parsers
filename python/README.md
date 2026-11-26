@@ -199,7 +199,8 @@ sorted(levels())
 
 This implementation satisfies **Core** and **Extensions** (host-defined
 modifiers, props and wrappers) everywhere, and **Intl** where Babel 2.14 or
-later is installed. `levels()` answers for the installation it runs in.
+later is installed. `levels()` answers for the installation it runs in,
+as a `frozenset` of `Level`.
 Without Intl, `number`, `date`, `ago`, `currency`, `plural` and `ordinal` are
 modifier names nobody registered: `{{n:number; default:-}}` resolves to `-`
 and reports `unknown-modifier`. `import curly_message` imports no Babel;
