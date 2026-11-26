@@ -16,3 +16,13 @@
   `ModifierInput`, built to test a modifier directly, take an option's value
   and a default as `str` and raise `TypeError` on anything else, where
   `1.0.0rc0` took a callable.
+* **A date without a zone is local time as Python's `datetime` reads it.**
+  Outside Windows, local time is the C library's, from `TZ` or
+  `/etc/localtime` and the system's zone database alone (a `TZ` naming a
+  zone the system lacks is UTC, whatever `tzdata` holds), and follows a
+  later `time.tzset()`. A time shown in it without a `timeZone` names the
+  local zone by its offset (`GMT+1`, `GMT` at offset zero), not by a zone
+  name. A local time a transition skips is read as the running Python reads
+  it: at the offset after the transition on 3.11, before it from 3.12. A
+  time at a local offset of a day or more cannot be formatted, where it was
+  read at offset zero.

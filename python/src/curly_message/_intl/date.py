@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import functools
-import io
 import math
-import os
 import sys
 import time as host_time
 import zoneinfo
@@ -74,96 +72,6 @@ _TWELVE: Final = frozenset(("h11", "h12"))
 # The zone names ECMA-402 reads as UTC, which need no zone database.
 _UTC_NAMES: Final = frozenset(("utc", "etc/utc", "etc/gmt", "gmt", "gmt0", "gmt+0", "gmt-0"))
 
-_ZONE_FILE: Final = "/etc/localtime"
-
-# Larger than any file the database holds, so that a zone file is read in
-# bounded time whatever it is linked to.
-_MAX_ZONE_FILE: Final = 1 << 20
-
-_DAY: Final = 86400
-
-_SECOND: Final = timedelta(seconds=1)
-
-_NAIVE_EPOCH: Final = datetime(1970, 1, 1)
-
-
-class _ZoneBytes(io.BytesIO):
-    # A read past the end raises: CPython 3.11 reads a footer cut short a
-    # byte at a time, forever.
-    def read(self, size: int | None = -1, /) -> bytes:
-        data = super().read(size)
-        if size is not None and size > 0 and not data:
-            raise ValueError("a zone file cut short")
-        return data
-
-
-def _file_zone(path: str) -> tuple[zoneinfo.ZoneInfo, bytes] | None:
-    # The zone a file holds, and its bytes; ``None`` where it holds none.
-    try:
-        with open(path, "rb") as file:
-            data = file.read(_MAX_ZONE_FILE + 1)
-        if len(data) > _MAX_ZONE_FILE:
-            return None
-        return zoneinfo.ZoneInfo.from_file(_ZoneBytes(data)), data
-    except Exception:
-        # zoneinfo trips on a damaged file with whatever it meets there,
-        # ``struct.error`` and ``AssertionError`` among them.
-        return None
-
-
-def _host_offset(seconds: int) -> int:
-    # The offset the C library reads at an instant, in seconds; zero where it
-    # reads a day or more, which no ``datetime`` holds, or none.
-    try:
-        offset = host_time.localtime(seconds).tm_gmtoff
-    except (OverflowError, OSError, ValueError):
-        return 0
-    return offset if abs(offset) < _DAY else 0
-
-
-class _HostZone(tzinfo):
-    """The zone the C library reads in TZ, as Python's ``time`` module does.
-
-    No identifier names it. A wall time is read as Temporal reads one: the
-    offsets a day either side of it are the only ones it can have, the
-    earlier instant of a fold where ``fold`` is 0, and in a gap the offset
-    before it where ``fold`` is 0, as ``zoneinfo`` reads both.
-    """
-
-    def _instants(self, wall: int) -> tuple[list[int], int, int]:
-        before, after = _host_offset(wall - _DAY), _host_offset(wall + _DAY)
-        found = sorted(
-            {wall - offset for offset in (before, after) if _host_offset(wall - offset) == offset}
-        )
-        return found, before, after
-
-    def utcoffset(self, dt: datetime | None) -> timedelta | None:
-        if dt is None:
-            return None
-        wall = (dt.replace(tzinfo=None) - _NAIVE_EPOCH) // _SECOND
-        found, before, after = self._instants(wall)
-        if found:
-            return timedelta(seconds=wall - found[-1 if dt.fold else 0])
-        return timedelta(seconds=after if dt.fold else before)
-
-    def dst(self, dt: datetime | None) -> timedelta | None:
-        return None
-
-    def tzname(self, dt: datetime | None) -> str | None:
-        return None
-
-    def fromutc(self, dt: datetime) -> datetime:
-        if not isinstance(dt, datetime) or dt.tzinfo is not self:
-            raise ValueError("fromutc: dt.tzinfo is not self")
-        instant = (dt.replace(tzinfo=None) - _NAIVE_EPOCH) // _SECOND
-        offset = _host_offset(instant)
-        found, _, _ = self._instants(instant + offset)
-        fold = int(len(found) == 2 and instant == found[1])
-        return (dt + timedelta(seconds=offset)).replace(fold=fold)
-
-
-_HOST_ZONE: Final = _HostZone()
-
 
 def _supplier_zone() -> tzinfo | None:
     try:
@@ -184,38 +92,6 @@ def _supplier_zone() -> tzinfo | None:
     return None
 
 
-def _holds(key: str, data: bytes) -> bool:
-    # Whether the zone file holds the bytes of the database's file for the
-    # zone ``key`` names, linked or copied.
-    for directory in zoneinfo.TZPATH:
-        path = os.path.join(directory, key)
-        if os.path.isfile(path):
-            try:
-                with open(path, "rb") as named:
-                    return named.read(len(data) + 1) == data
-            except OSError:
-                return False
-    return False
-
-
-def _held_zone() -> tzinfo:
-    # With TZ unset the C library reads the zone file alone, and UTC where
-    # it holds no zone. The supplier reads a name beside it, in
-    # /etc/timezone and elsewhere, which names the file's zone only where
-    # it is that zone's file.
-    held = _file_zone(_ZONE_FILE)
-    if held is None:
-        return UTC
-    named = _supplier_zone()
-    if (
-        isinstance(named, zoneinfo.ZoneInfo)
-        and named.key is not None
-        and _holds(named.key, held[1])
-    ):
-        return named
-    return held[0]
-
-
 def _standard_zone() -> tzinfo:
     # The standard offset the C runtime reads from the registry, where the
     # supplier maps the registry's zone to none.
@@ -223,38 +99,36 @@ def _standard_zone() -> tzinfo:
     return timezone(offset, "") if abs(offset) < timedelta(days=1) else UTC
 
 
-def _system_zone() -> tzinfo:
+def _system_zone() -> tzinfo | None:
     if sys.platform == "win32":
         return _supplier_zone() or _standard_zone()
-    text = os.environ.get("TZ")
-    if text is None:
-        return _held_zone()
-    # A zone of the database is named by its key. Everything else TZ can
-    # say, a file, a path into the database, a POSIX rule and the defaults
-    # the C library fills one with, only the C library reads as it does.
-    name = text.removeprefix(":")
-    if name and not os.path.isabs(name):
-        try:
-            return zoneinfo.ZoneInfo(name)
-        except Exception:
-            # Not a key, no such zone, or a damaged file, as ``_file_zone``
-            # meets one.
-            return _HOST_ZONE
-    return _HOST_ZONE
+    return None
 
 
 @functools.cache
-def _cached_system_zone() -> tzinfo:
+def _cached_system_zone() -> tzinfo | None:
     return _system_zone()
 
 
-def local_zone() -> tzinfo:
+def local_zone() -> tzinfo | None:
     """The zone a time is read and shown in where nothing names one: the system's.
 
-    It is a zone, not an offset: an instant is shown at the offset the zone has
-    at that instant, as ECMA-402's ``DefaultTimeZone`` is.
+    On Windows it is the zone the supplier maps the registry's to, or the
+    registry's standard offset. Elsewhere it is ``None``: the local time
+    Python's ``datetime`` reads through the C library, which follows ``TZ``
+    and ``time.tzset()``, and which names no zone.
     """
     return _cached_system_zone()
+
+
+def _local(naive: datetime) -> datetime:
+    try:
+        return naive.astimezone()
+    except (OverflowError, OSError, ValueError):
+        # Python reads a naive time against the offsets a day either side,
+        # which the first and last days it holds lack.
+        inward = naive + timedelta(days=1) if naive.year == 1 else naive - timedelta(days=1)
+        return naive.replace(tzinfo=inward.astimezone().tzinfo)
 
 
 def time_value(text: str) -> float | None:
@@ -270,11 +144,12 @@ def time_value(text: str) -> float | None:
         parsed = datetime.fromisoformat(text)
     except ValueError:
         return None
-    if parsed.tzinfo is None:
-        parsed = parsed.replace(tzinfo=local_zone())
     try:
+        if parsed.tzinfo is None:
+            zone = local_zone()
+            parsed = _local(parsed) if zone is None else parsed.replace(tzinfo=zone)
         return (parsed - EPOCH) // timedelta(milliseconds=1)
-    except (OverflowError, ValueError):
+    except (OverflowError, OSError, ValueError):
         return None
 
 
@@ -457,9 +332,9 @@ def format_date(tag: object, spec: DateSpec, time: float) -> str:
     zone = spec.zone if spec.zone is not None else local_zone()
     try:
         instant = (EPOCH + timedelta(milliseconds=math.trunc(time))).astimezone(zone)
-    except (OverflowError, ValueError):
+    except (OverflowError, OSError, ValueError):
         refuse()
-    pattern = _as_icu_writes(date_pattern(spec, locale, tag_cycle), instant, locale)
+    pattern = _as_icu_writes(date_pattern(spec, locale, tag_cycle), instant, locale, zone is None)
     return str(format_datetime(instant, pattern, locale=locale))
 
 
@@ -551,7 +426,7 @@ def _is_daylight(instant: datetime) -> bool:
     return _daylight_in(instant.tzinfo, offset, saving, month)
 
 
-def _zone_name(instant: datetime, width: int, locale: Locale) -> str:
+def _zone_name(instant: datetime, width: int, locale: Locale, by_offset: bool) -> str:
     # ICU names a zone by the name the locale gives that zone itself, then by
     # the name of the metazone it belongs to at that instant, then in the
     # localized GMT format, where the supplier writes an ISO offset. A name
@@ -559,13 +434,11 @@ def _zone_name(instant: datetime, width: int, locale: Locale) -> str:
     # take the long one for a short one. The supplier's metazones carry no
     # dates, so it would name a zone by today's metazone at any instant;
     # before the epoch, where ICU's mapping of nearly every zone to a
-    # metazone begins, no metazone names it. A zone read from a file or a
-    # rule has no key to name it by, and the supplier would name it by its
-    # abbreviation.
+    # metazone begins, no metazone names it. Python's local time has no key
+    # to name it by, and the supplier would name it by its abbreviation.
     long = width >= 4
     style: Literal["long", "short"] = "long" if long else "short"
-    zone = instant.tzinfo
-    if isinstance(zone, _HostZone) or (isinstance(zone, zoneinfo.ZoneInfo) and zone.key is None):
+    if by_offset:
         return _localized_gmt(instant, long, locale)
     canonical = str(get_timezone_name(instant, style, locale=locale, return_zone=True))
     ids, metazone = _zone_identity(canonical)
@@ -583,7 +456,7 @@ def _zone_name(instant: datetime, width: int, locale: Locale) -> str:
     return _localized_gmt(instant, long, locale)
 
 
-def _as_icu_writes(pattern: str, instant: datetime, locale: Locale) -> str:
+def _as_icu_writes(pattern: str, instant: datetime, locale: Locale, by_offset: bool) -> str:
     # ICU writes the plain day period up to a width of three with the
     # locale's wide name where it has one, and names no flexible period
     # "midnight": that instant takes the period its hour falls in, the one
@@ -606,7 +479,7 @@ def _as_icu_writes(pattern: str, instant: datetime, locale: Locale) -> str:
                 tokens.append(("chars", str(format_datetime(later, "B" * width, locale=locale))))
                 continue
             elif letter == "z":
-                tokens.append(("chars", _zone_name(instant, width, locale)))
+                tokens.append(("chars", _zone_name(instant, width, locale, by_offset)))
                 continue
         tokens.append((kind, value))
     return _untokenized(tokens)

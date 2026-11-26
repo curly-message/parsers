@@ -431,19 +431,22 @@ not read the same on every release:
   number, so milliseconds.
 
 A naive date and time, and a bare date, are local time: a bare date is local
-midnight, where ECMAScript reads it as UTC. The local zone is the one the C
-library reads, and where it comes from is decided once per process, at the
-first date: from `TZ` where it is set, a
-zone of the database by its name and anything else, a file or a POSIX rule,
-by the C library itself, and otherwise from `/etc/localtime`, UTC where
-there is none. A zone of the database or of `/etc/localtime` stays the
-local zone for the rest of the process; a zone the C library reads in `TZ`
-follows the C library's current setting, so a later `time.tzset()` moves it.
-Babel's `babel.localtime` names the zone `/etc/localtime` holds where it is
-that zone's own file. On Windows the local zone is Babel's reading of the
-registry (below), fixed at the first date.
+midnight, where ECMAScript reads it as UTC. Local time is Python's own, as
+`datetime.astimezone()` reads it through the C library, from `TZ` where it
+is set (a zone of the system's database, a file or a POSIX rule) and from
+`/etc/localtime` otherwise, and it follows a later `time.tzset()`. The C
+library reads the system's database alone: `tzdata` serves only a
+`timeZone`, and a `TZ` naming a zone the system lacks is UTC. A local time
+a transition repeats is its first occurrence; one a transition skips is
+read as the running Python reads it, at the offset after the transition on
+3.11 and at the one before it from 3.12. On Windows the local zone is
+Babel's reading of the registry (below), fixed at the first date.
 Python's `datetime` spans the years 1 to 9999; a value outside them is one
-`date` cannot format, and takes the fallback chain.
+`date` cannot format, and takes the fallback chain. So is a naive time
+whose instant leaves them: the first hours of 0001-01-01 where local time is
+ahead of UTC, the last hours of 9999-12-31 where it is behind. So, outside
+Windows, is every time where the local offset is a day or more, which no
+`datetime` holds.
 
 ## Locales
 
@@ -521,44 +524,21 @@ an implementation:
 - Babel names zones ICU does not: `fr` writes `HNE` for New York where ICU
   writes the localized GMT format, `TU` for UTC where ICU writes `UTC`, and
   `GMT` for London in winter where ICU writes `UTC`.
-- A `TZ` naming no zone of the database is read by the C library, as
-  Python's `time` module reads it: a file (`/usr/share/zoneinfo/Asia/Tokyo`,
-  `Asia//Tokyo`) or a POSIX rule, transitions included.
-  `CET-1CEST,M3.5.0,M10.5.0/3` is `GMT+1` in winter and `GMT+2` in summer,
-  `JST-9` is `GMT+9`, and a rule naming daylight saving time but no dates
-  takes the C library's (`EST5EDT4` is `GMT-5` in winter and `GMT-4` in
-  summer, on the dates of the United States). A `TZ` the C library reads
-  nothing from is offset zero, written `GMT`, as ICU writes it: an empty
-  `TZ`, a misspelled name (`Europe/Pargue`), a file that does not exist, and
-  from Python 3.13 a directory of the database (`TZ=Europe`). An offset of a
-  day or more, which no `datetime` holds, is offset zero at the instants it
-  applies to: `ABC-24` is `GMT`, and `ABC-23DEF,M3.5.0,M10.5.0` is `GMT+23`
-  in winter and `GMT` in summer.
-- ICU reads `TZ` alike for an offset or a file, but reads a rule naming
-  daylight saving time, an offset with minutes (`IST-5:30`) or a name in
-  angle brackets (`<+05>-5`) as the zone `/etc/localtime` holds, whatever
-  the rule names. It shows an offset of a day or more at that offset with
-  no zone name, and names a few abbreviations at offset zero by a zone's
-  name: in the `long` style and the `full` one (`PST` is `PST` and
-  `Pacific Standard Time`), or in the `full` style alone (`JST` is `Japan
-  Standard Time`), where this package writes `GMT`.
-- A zone read from a file or a rule, which no identifier names, is written
-  in the localized GMT format (`GMT+9`, and `GMT+09:00` in the `full`
-  style). With `TZ` unset, an `/etc/localtime` copied from the database
-  rather than linked to it is named only where Babel finds that zone's name
-  beside it, in `/etc/timezone`; ICU finds the name by searching the
-  database (`Japan Standard Time`). An `/etc/localtime` that holds no zone,
-  a damaged one included, is UTC, as ICU reads it.
+- Outside Windows, local time names no zone, so without a `timeZone` the
+  `long` and `full` time styles write its offset in the localized GMT
+  format (`GMT+1`, and `GMT+01:00` in the `full` style), where ICU names
+  the local zone where it can (`Central European Standard Time`). Its
+  offset is the C library's, where ICU reads some `TZ` rules otherwise: one
+  naming daylight saving time, an offset with minutes (`IST-5:30`) or a
+  name in angle brackets (`<+05>-5`), as the zone `/etc/localtime` holds.
 - A `TZ` naming a file that holds no zone or a directory (`TZ=/etc`, and on
-  Python 3.11 and 3.12 a directory of the database, `TZ=Europe`), with Babel
-  before 2.16 a `TZ` that `zoneinfo` refuses as a key (`Asia//Tokyo`, or an
-  absolute path to no file), and, with `TZ` unset, an `/etc/localtime` that
-  holds no zone where nothing beside it names one, keep Babel from loading
-  any locale data: it reads the local zone as `babel.dates` is imported, and
-  its locale data imports `babel.dates`. The first Intl placeholder reports
-  `failed-modifier`, and the installation then satisfies no Intl (*Levels*),
-  where Node formats as ever: in `GMT` for a directory, and in UTC for a
-  file that holds no zone.
+  Python 3.11 and 3.12 a directory of the database, `TZ=Europe`), and with
+  Babel before 2.16 a `TZ` that `zoneinfo` refuses as a key
+  (`Asia//Tokyo`), keep Babel from loading any locale data: it reads the
+  local zone as `babel.dates` is imported, and its locale data imports
+  `babel.dates`. The first Intl placeholder reports `failed-modifier`, and
+  the installation then satisfies no Intl (*Levels*), where Node formats as
+  ever: in `GMT` for a directory, and in UTC for a file that holds no zone.
 - On Windows `TZ` is not read, as Babel reads none, and where Babel maps the
   registry's zone to none, the local zone is the standard offset
   `time.timezone` reads, without daylight saving time.
