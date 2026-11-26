@@ -9,7 +9,8 @@ use crate::{MAX_NESTING, MAX_OUTPUT_LENGTH, MAX_READ_LENGTH, MAX_REPORTED_LENGTH
 pub struct Report {
     /// The condition, as section 14.3 names it.
     pub code: Code,
-    /// Whose defect it is: [`Code::origin`].
+    /// Whose defect it is, a property of the code rather than of the site
+    /// that reported it.
     pub origin: Origin,
     /// The id the caller gave the resolution.
     pub id: Option<String>,
@@ -74,9 +75,8 @@ impl Code {
         }
     }
 
-    /// Whose defect the code describes. It is a property of the code rather
-    /// than of the site that reported it.
-    pub fn origin(self) -> Origin {
+    // Whose defect the code describes, which `Report::origin` carries.
+    pub(crate) fn origin(self) -> Origin {
         match self {
             Self::UnknownModifier | Self::MissingOptions | Self::NestingLimit => Origin::Message,
             Self::FailedModifier | Self::UnserializableValue | Self::MissingLocale => {
@@ -191,7 +191,29 @@ fn excerpt(text: &str) -> String {
 mod tests {
     #![allow(clippy::unwrap_used, clippy::indexing_slicing)]
 
-    use super::excerpt;
+    use super::{Code, Report, excerpt};
+
+    #[test]
+    fn a_report_carries_the_origin_its_code_declares() {
+        let codes = [
+            (Code::UnknownModifier, "message"),
+            (Code::FailedModifier, "payload"),
+            (Code::MissingOptions, "message"),
+            (Code::UnserializableValue, "payload"),
+            (Code::MissingLocale, "payload"),
+            (Code::NestingLimit, "message"),
+            (Code::OutputLimit, "limit"),
+            (Code::ReadLimit, "limit"),
+        ];
+
+        for (code, origin) in codes {
+            assert_eq!(
+                Report::new(code, "", None).origin.as_str(),
+                origin,
+                "{code:?}"
+            );
+        }
+    }
 
     // A placeholder holds no line terminator, so the resolution reaches none
     // of these; the excerpt is held to them all the same.
