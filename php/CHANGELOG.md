@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.0.0 (Unreleased)
+## 1.0.0
 
 * **The first release of the PHP implementation.** `CurlyMessage\Parser`
   resolves messages of `curly-message-3` at the Core and Extensions levels on
