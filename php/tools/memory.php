@@ -33,6 +33,7 @@ const SHAPES = [
     'answer-alone' => ['an answer a level below the message places alone', 'MiB of answer', 8, false],
     'include-modifier' => ['a message that includes itself, each level in a fiber, through a host modifier it hands its options to, as many levels as the host begins', 'levels', 1_000, false],
     'include-value' => ['a message that includes itself, each level in a fiber, through a value that resolves it again, as many levels as the host begins', 'levels', 1_000, false],
+    'include-paired' => ['a message that includes itself through a value that resolves it again, each level by turns beneath the one before on its stack and in a fiber of its own, as many levels as the host begins', 'levels', 1_000, false],
     'kept-fibers' => ['options a host modifier kept, each read in a fiber of its own from inside the one before, while the resolution is in progress', 'options', 1_000, false],
     'fibers' => ['fibers the host keeps suspended, outside any resolution', 'fibers', 1_000, false],
     'props-list' => ['a props list an Intl modifier reads as text, one string of 1 MiB written many times', 'MiB of list', 8, true],
@@ -84,10 +85,10 @@ function run(string $shape, int $size): string
         },
     ];
     $parser = $holder->parser = new Parser(customModifiers: $modifiers);
-    $level = new class ($parser, message($shape, $size), $size) implements Stringable {
+    $level = new class ($parser, message($shape, $size), $size, $shape === 'include-paired') implements Stringable {
         private int $levels = 0;
 
-        public function __construct(private readonly Parser $parser, private readonly string $message, private readonly int $size) {}
+        public function __construct(private readonly Parser $parser, private readonly string $message, private readonly int $size, private readonly bool $paired) {}
 
         public function __toString(): string
         {
@@ -96,6 +97,11 @@ function run(string $shape, int $size): string
             }
 
             $this->levels += 1;
+
+            if ($this->paired && $this->levels % 2 === 1) {
+                return $this->parser->resolve($this->message, ['a' => 1, 'x' => $this]);
+            }
+
             $fiber = new Fiber(fn(): string => $this->parser->resolve($this->message, ['a' => 1, 'x' => $this]));
             $fiber->start();
             $text = $fiber->getReturn();
@@ -110,7 +116,7 @@ function run(string $shape, int $size): string
         'json-shared' => $parser->resolve('{{v}}', ['v' => array_fill(0, $size, $shared)]),
         'json-key' => $parser->resolve('{{v}}', ['v' => [str_repeat("\x01", $size * 1_024) => 1]]),
         'value-around' => $parser->resolve(message($shape, $size), ['a' => 1, 'v' => str_repeat('a', $size * MIB)]),
-        'include-value' => $parser->resolve(message($shape, $size), ['a' => 1, 'x' => $level]),
+        'include-value', 'include-paired' => $parser->resolve(message($shape, $size), ['a' => 1, 'x' => $level]),
         'fibers' => (static function () use ($size): string {
             $fibers = [];
 
@@ -138,7 +144,7 @@ function message(string $shape, int $size): string
         'answer-alone' => '{{a:read; o:{{a:big}}}}',
         'value-around' => '{{a:read; o:a{{v}}b}}',
         'include-modifier' => '{{a:include; k:v}}',
-        'include-value' => '{{x; k:v; default:F}}',
+        'include-value', 'include-paired' => '{{x; k:v; default:F}}',
         'kept-fibers' => '{{a:fan' . str_repeat('; k:{{a:step}}', $size) . '}}',
         default => '',
     };

@@ -54,19 +54,6 @@ final class Parser
     public const MAX_REENTRY = 32;
 
     /**
-     * Resolutions in progress in the process, every fiber's included,
-     * suspended or not, that were each begun beneath another on their thread
-     * of execution, past which such a `resolve` throws `ReentryLimit`. One
-     * begun on a thread where none is in progress takes no place and is
-     * never refused (SPEC.md section 13), so a recursion that begins each
-     * level in a fiber of its own is the host's to bound; this adds up the
-     * parts of one that stay on one stack past their first level, which
-     * `MAX_REENTRY` counts afresh in each fiber, and what fibers left
-     * suspended in such resolutions hold.
-     */
-    public const MAX_IN_PROGRESS = 512;
-
-    /**
      * @param array<array-key, mixed>|\stdClass $customModifiers the modifiers the host defines, by name, each a `\Closure` or an object with `__invoke`; an entry of any other kind registers nothing and shadows nothing
      * @param array<array-key, mixed>|\stdClass $modifierDefaults the props each modifier is configured with, by its name
      * @param (\Closure(Report): mixed)|null $onReport called with each report, in walk order
@@ -107,14 +94,12 @@ final class Parser
     /**
      * The text a message resolves to. It never throws, but for `ReentryLimit`
      * where a resolution begins while `MAX_REENTRY` are in progress on its
-     * thread of execution, or begins beneath one of them while
-     * `MAX_IN_PROGRESS` resolutions so begun are in progress in the process;
-     * one begun on a thread where none is in progress is never refused. A
-     * `__destruct` PHP's cycle collector runs while it resolves is the host's
-     * garbage rather than code the parser called, and what it throws leaves
-     * wherever the collector ran, here as in any code: from `resolve`, or,
-     * where the collector ran inside what the parser contains of a
-     * placeholder, as that placeholder's failure.
+     * thread of execution; one begun on a thread where none is in progress
+     * is never refused. A `__destruct` PHP's cycle collector runs while it
+     * resolves is the host's garbage rather than code the parser called,
+     * and what it throws leaves wherever the collector ran, here as in any
+     * code: from `resolve`, or, where the collector ran inside what the
+     * parser contains of a placeholder, as that placeholder's failure.
      *
      * @param mixed $message the message; `Undefined::Value` is none, and resolves to ''
      * @param mixed $payload an array or a `stdClass`; anything else is no payload
@@ -129,16 +114,16 @@ final class Parser
         mixed $locale = null,
         mixed $id = null,
     ): string {
-        $entered = Guard::enter();
+        $refused = Guard::enter();
 
-        if (is_string($entered)) {
+        if ($refused !== null) {
             // A raise keeps the arguments of the frames it is made in where
             // the host has PHP keep them (`zend.exception_ignore_args` off),
             // and the caller would let go of them as it lets go of the
             // refusal: so they are let go first, inside the containment.
             Contained::release($message, $payload, $props, $locale, $id);
 
-            throw new ReentryLimit($entered);
+            throw new ReentryLimit($refused);
         }
 
         $conversion = null;
@@ -178,7 +163,7 @@ final class Parser
             // is let go where nothing it runs leaves the call.
             Contained::release($message, $payload, $props, $locale, $id, $resolution, $conversion);
 
-            Guard::leave($entered);
+            Guard::leave();
         }
     }
 }

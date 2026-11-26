@@ -6,9 +6,8 @@ declare(strict_types=1);
 // outermost resolution answered as JSON. The first argument names how many
 // levels of placeholder the message nests the value in, none where it names
 // none; the second names where each level resolves the next: on the same
-// call stack (`stack`), in a fiber of its own, for as many levels as the
-// third names before the value answers `E` (`fiber`), or on the same call
-// stack and in a fiber of its own by turns (`paired`).
+// call stack (`stack`), or in a fiber of its own, for as many levels as the
+// third names before the value answers `E` (`fiber`).
 
 use CurlyMessage\Parser;
 use CurlyMessage\Report;
@@ -36,7 +35,7 @@ $level = new class ($parser, $message, $argv[2] ?? '', (int) ($argv[3] ?? 0)) {
 
         $this->levels += 1;
 
-        if ($this->where === 'stack' || ($this->where === 'paired' && $this->levels % 2 === 1)) {
+        if ($this->where === 'stack') {
             return $this->parser->resolve($this->message, ['a' => 1, 'x' => $this]);
         }
 
