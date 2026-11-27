@@ -17,7 +17,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
-PACKAGE = ROOT / "src" / "curly_message"
+PACKAGE = ROOT / "src" / "curly_message_parser"
 
 
 @pytest.fixture(scope="module")
@@ -36,12 +36,13 @@ def _metadata(wheel: zipfile.ZipFile) -> str:
 def test_wheel_carries_every_module_and_the_marker(wheel: zipfile.ZipFile) -> None:
     names = set(wheel.namelist())
     modules = {
-        f"curly_message/{path.relative_to(PACKAGE).as_posix()}" for path in PACKAGE.rglob("*.py")
+        f"curly_message_parser/{path.relative_to(PACKAGE).as_posix()}"
+        for path in PACKAGE.rglob("*.py")
     }
-    assert "curly_message/py.typed" in names
+    assert "curly_message_parser/py.typed" in names
     assert modules <= names
-    shipped = {name for name in names if name.startswith("curly_message/")}
-    assert shipped == modules | {"curly_message/py.typed"}
+    shipped = {name for name in names if name.startswith("curly_message_parser/")}
+    assert shipped == modules | {"curly_message_parser/py.typed"}
 
 
 def test_wheel_carries_no_tests(wheel: zipfile.ZipFile) -> None:
@@ -55,7 +56,7 @@ def test_wheel_depends_on_nothing_but_the_intl_extra(wheel: zipfile.ZipFile) -> 
         "babel<3,>=2.14; extra == 'intl'",
         "tzdata>=2024.1; extra == 'intl'",
     ]
-    assert metadata["Name"] == "curly-message"
+    assert metadata["Name"] == "curly-message-parser"
     assert metadata["Requires-Python"] == ">=3.11"
 
 

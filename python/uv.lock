@@ -98,8 +98,8 @@ wheels = [
 ]
 
 [[package]]
-name = "curly-message"
-version = "1.0.0"
+name = "curly-message-parser"
+version = "1.0.0rc0"
 source = { editable = "." }
 
 [package.optional-dependencies]

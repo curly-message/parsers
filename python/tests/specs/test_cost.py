@@ -12,7 +12,7 @@ from typing import Any
 
 import pytest
 
-from curly_message import (
+from curly_message_parser import (
     MAX_CONVERSION_NODES,
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
@@ -27,7 +27,7 @@ from curly_message import (
     create_parser,
     levels,
 )
-from curly_message._utils import Scanner
+from curly_message_parser._utils import Scanner
 
 
 def test_the_scanner_settles_each_opening_brace_once() -> None:

@@ -1,4 +1,4 @@
-"""The adapter of section 14.3: ``curly_message`` presented to the conformance runner."""
+"""The adapter of section 14.3: ``curly_message_parser`` presented to the conformance runner."""
 
 from __future__ import annotations
 
@@ -8,8 +8,8 @@ from typing import Any, cast
 from runner import OMIT, Adapter, Call, Cst, Resolution, Resolved
 from runner.model import Behaviour
 
-import curly_message
-from curly_message import (
+import curly_message_parser
+from curly_message_parser import (
     MAX_CONVERSION_NODES,
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
@@ -20,10 +20,10 @@ from curly_message import (
     Report,
     create_parser,
 )
-from curly_message._requests import UNEXPRESSIBLE, record
+from curly_message_parser._requests import UNEXPRESSIBLE, record
 
 
-def _modifier(behaviour: Behaviour) -> curly_message.Modifier:
+def _modifier(behaviour: Behaviour) -> curly_message_parser.Modifier:
     # The options pass through as they are, so their values stay unread until
     # a behaviour reads them.
     def modifier(given: ModifierInput) -> object:
@@ -76,7 +76,7 @@ def _resolve(resolution: Resolution) -> Resolved:
 
 
 def _adapter() -> Adapter:
-    claimed = curly_message.levels()
+    claimed = curly_message_parser.levels()
     return Adapter(
         levels=tuple(sorted(claimed)),
         limits={
@@ -89,7 +89,7 @@ def _adapter() -> Adapter:
         unexpressible=cast("Mapping[str, tuple[str, ...]]", UNEXPRESSIBLE)
         if "intl" in claimed
         else None,
-        cst=Cst(unit="code-point", parse=curly_message.cst),
+        cst=Cst(unit="code-point", parse=curly_message_parser.cst),
         undefined=UNDEFINED,
         # ``MAX_REENTRY`` bounds the resolutions in progress and the counted
         # reads together, and the resolution a read is made in holds one of

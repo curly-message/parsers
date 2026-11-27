@@ -102,10 +102,10 @@ const served = ({ name, kind }) => (kind === 'time'
 export default [
   { name: 'dist/*.whl', kind: 'size', run: wheel },
   ...listed.map(served),
-  { name: 'import curly_message, in a fresh interpreter', kind: 'time', run: lifetime('import curly_message') },
+  { name: 'import curly_message_parser, in a fresh interpreter', kind: 'time', run: lifetime('import curly_message_parser') },
   {
     name: 'first Intl call, in a fresh interpreter',
     kind: 'time',
-    run: lifetime("import curly_message; assert curly_message.create_parser().resolve('{{n:number}}', {'n': 1234.5}, locale='en') == '1,234.5'"),
+    run: lifetime("import curly_message_parser; assert curly_message_parser.create_parser().resolve('{{n:number}}', {'n': 1234.5}, locale='en') == '1,234.5'"),
   },
 ];

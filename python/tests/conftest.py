@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-import curly_message
+import curly_message_parser
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -43,10 +43,13 @@ def _expected() -> Path:
 
 
 def pytest_configure(config: pytest.Config) -> None:
-    location = Path(curly_message.__file__).resolve()
+    location = Path(curly_message_parser.__file__).resolve()
     if not location.is_relative_to(_expected()):
-        raise pytest.UsageError(f"curly_message was imported from {location}, not {_expected()}")
+        raise pytest.UsageError(
+            f"curly_message_parser was imported from {location}, not {_expected()}"
+        )
 
 
 def pytest_report_header() -> str:
-    return f"curly_message: {Path(curly_message.__file__).parent} ({'wheel' if DIST else 'source'})"
+    package = Path(curly_message_parser.__file__).parent
+    return f"curly_message_parser: {package} ({'wheel' if DIST else 'source'})"

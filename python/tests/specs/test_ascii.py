@@ -27,6 +27,6 @@ def test_source_is_ascii(path: Path) -> None:
 
 
 def test_sources_are_found() -> None:
-    assert ROOT.joinpath("src", "curly_message", "__init__.py") in SOURCES
+    assert ROOT.joinpath("src", "curly_message_parser", "__init__.py") in SOURCES
     assert ROOT.joinpath("tasks.py") in SOURCES
     assert ROOT.joinpath("bench", "rows.mjs") in SOURCES

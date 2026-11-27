@@ -99,7 +99,7 @@ jobs:
           # value, between what comes before it and what follows.
           PLACES = {
               "pyproject.toml": r'^(version = )"([^"\n]*)"()$',
-              "uv.lock": r'^(\[\[package\]\]\nname = "curly-message"\nversion = )"([^"\n]*)"(\nsource = \{ editable = "\." \})$',
+              "uv.lock": r'^(\[\[package\]\]\nname = "curly-message-parser"\nversion = )"([^"\n]*)"(\nsource = \{ editable = "\." \})$',
           }
 
 
@@ -301,8 +301,7 @@ jobs:
       # the one the publish step makes: PyPI mints a token only where a
       # publisher, pending or registered, names this repository, this workflow
       # and the release environment, and it refuses a pending publisher whose
-      # project someone else registered first. On the first release, this
-      # exchange is what creates the project. The token it answers with is
+      # project someone else registered first. The token it answers with is
       # masked and dropped; the publish step mints its own.
       - name: Check PyPI will take the release
         env:

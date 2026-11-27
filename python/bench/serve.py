@@ -2,7 +2,7 @@
 
 ``rows.mjs`` starts this file under ``.bench-venv``'s interpreter with ``-I``,
 so neither the source tree nor the environment's variables reach the import:
-``curly_message`` is the wheel that venv installed. Given ``--list``, it
+``curly_message_parser`` is the wheel that venv installed. Given ``--list``, it
 prints its rows by name and kind. Otherwise each line it reads asks for a row
 (``{"row": name}``), which a count or a size answers with its value and a time
 with readiness, or for one run of the time row asked for last
@@ -22,8 +22,8 @@ from pathlib import Path
 from types import FrameType
 from typing import Any
 
-import curly_message
-from curly_message import _resolve, _utils, create_parser
+import curly_message_parser
+from curly_message_parser import _resolve, _utils, create_parser
 
 MESSAGES = (
     "Hello, {{name}}!",
@@ -167,7 +167,7 @@ def numbers_over_props(placeholders: int) -> str:
 
 
 def props_texts_converted() -> int:
-    validate = importlib.import_module("curly_message._intl.validate")
+    validate = importlib.import_module("curly_message_parser._intl.validate")
     convert: Callable[[str], float] = validate._string_to_number
     converted = 0
 
@@ -215,17 +215,17 @@ def many_wrappers(name: str) -> Callable[[], object]:
 
 def kept_chain() -> Callable[[], object]:
     """Fifteen options a modifier kept, each read inside the render of the one before."""
-    kept: list[curly_message.Option] = []
+    kept: list[curly_message_parser.Option] = []
 
-    def keep(given: curly_message.ModifierInput) -> str:
+    def keep(given: curly_message_parser.ModifierInput) -> str:
         kept.append(given.options[0])
         return "k"
 
-    def pop(given: curly_message.ModifierInput) -> str:
+    def pop(given: curly_message_parser.ModifierInput) -> str:
         return kept.pop().value if kept else "e"
 
     keeping = create_parser(custom_modifiers={"k": keep, "m": pop})
-    message = "{{x:k; o:{{x:m}}}}" * (curly_message.MAX_REENTRY - 1) + "{{x:m}}"
+    message = "{{x:k; o:{{x:m}}}}" * (curly_message_parser.MAX_REENTRY - 1) + "{{x:m}}"
     return lambda: keeping.resolve(message, {"x": 1})
 
 
@@ -255,7 +255,7 @@ def joins_of_deep_text() -> int:
 
 
 def installed_bytes() -> int:
-    package = Path(curly_message.__file__).parent
+    package = Path(curly_message_parser.__file__).parent
     return sum(
         path.stat().st_size
         for path in package.rglob("*")
@@ -271,7 +271,7 @@ def catalogue() -> object:
 
 def trees() -> object:
     for message in MESSAGES:
-        curly_message.cst(message)
+        curly_message_parser.cst(message)
     return None
 
 
@@ -280,7 +280,7 @@ def resolving(text: str, payload: dict[str, object], locale: str = "en") -> Call
 
 
 def describing(text: str) -> Callable[[], object]:
-    return lambda: curly_message.cst(text)
+    return lambda: curly_message_parser.cst(text)
 
 
 def over_wide_props(name: str) -> Callable[[], object]:
@@ -295,7 +295,7 @@ def wrapper_props() -> Callable[[], object]:
 
 
 VALUES: dict[str, tuple[str, Callable[[], int]]] = {
-    "installed curly_message/": ("size", installed_bytes),
+    "installed curly_message_parser/": ("size", installed_bytes),
     "host conversions: resolving five catalogue messages": (
         "count",
         conversions_of_the_catalogue,

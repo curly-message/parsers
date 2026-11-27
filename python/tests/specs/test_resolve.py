@@ -15,7 +15,7 @@ from typing import Any, NamedTuple
 
 import pytest
 
-from curly_message import (
+from curly_message_parser import (
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
     MAX_READ_LENGTH,
@@ -32,7 +32,7 @@ from curly_message import (
     create_parser,
     levels,
 )
-from curly_message._utils import WHITESPACE
+from curly_message_parser._utils import WHITESPACE
 
 
 def resolve(message: object, payload: Any = None, **options: Any) -> tuple[str, list[Report]]:
@@ -287,7 +287,7 @@ def test_a_value_that_resolves_itself_takes_its_chain_at_the_reentry_bound() -> 
 
 SWEEP = """
 import traceback
-from curly_message import create_parser
+from curly_message_parser import create_parser
 
 parser = create_parser()
 
@@ -625,7 +625,7 @@ def test_importing_the_package_loads_nothing_it_does_not_need() -> None:
     # importlib.metadata as well: it costs more to import than the package,
     # and only the first question about the supplier reads it.
     probe = (
-        "import sys, curly_message; "
+        "import sys, curly_message_parser; "
         "print(sorted({'babel', 'dataclasses', 'importlib.metadata'} & set(sys.modules)))"
     )
     loaded = subprocess.run(

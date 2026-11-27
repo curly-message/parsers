@@ -1,6 +1,6 @@
 """The formatting modifiers and the plural selections, over Babel (sections 11.2 and 11.5).
 
-Imported on the first call of one of them, never by ``import curly_message``.
+Imported on the first call of one of them, never by ``import curly_message_parser``.
 Each modifier tests the caller's locale first, then reads its value and the
 properties the layers compose, builds its request in ECMA-402's vocabulary,
 offers it to the request seam, and only then performs it: a request

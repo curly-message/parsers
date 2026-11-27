@@ -14,8 +14,8 @@ from typing import Any, Literal, assert_type
 
 import pytest
 
-import curly_message
-from curly_message import (
+import curly_message_parser
+from curly_message_parser import (
     MAX_CONVERSION_NODES,
     MAX_NESTING,
     MAX_OUTPUT_LENGTH,
@@ -72,8 +72,8 @@ EXPORTED = {
 
 
 def test_the_package_exports_exactly_its_surface() -> None:
-    assert set(curly_message.__all__) == EXPORTED
-    assert all(hasattr(curly_message, name) for name in EXPORTED)
+    assert set(curly_message_parser.__all__) == EXPORTED
+    assert all(hasattr(curly_message_parser, name) for name in EXPORTED)
 
 
 def test_a_parser_resolves_to_text() -> None:
