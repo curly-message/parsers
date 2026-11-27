@@ -1,6 +1,6 @@
 """The runner held to RUNNER.md, through toy adapters over in-memory sets.
 
-None of these tests reads ``curly_message``: what the runner answers is a
+None of these tests reads ``curly_message_parser``: what the runner answers is a
 function of the set and of what an adapter answers, so each test states both.
 """
 
@@ -1373,7 +1373,7 @@ def test_beneath_a_defined_modifier_fails_where_a_modifier_of_the_format_is_not_
     # RUNNER.md has a port check this over a reading that does not take
     # section 13's permission to count an own read while another
     # placeholder's option is in production beneath the modifier's call:
-    # ``curly_message`` takes it, and a reading that takes it answers
+    # ``curly_message_parser`` takes it, and a reading that takes it answers
     # ``<empty>`` whichever modifier it holds current.
     own, defined = cases.FRAMED
     assert _beneath(Reading(bound, resolutions=counts), bound, stated, defined) == Passed()

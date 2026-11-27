@@ -4,7 +4,7 @@ RUNNER.md has a port check that ``reentry-over-limit-beneath-a-defined-modifier`
 fails over an implementation in which a modifier the format defines is not
 current, against a reading that does not take section 13's permission to count
 an own read while an option value or default of another placeholder, begun
-beneath the modifier's call, is in production. ``curly_message`` takes it, and
+beneath the modifier's call, is in production. ``curly_message_parser`` takes it, and
 a reading that takes it answers ``<empty>`` whichever modifier it holds
 current, so the runner's own tests check against this reading instead, as the
 JavaScript runner's do against the one its tests carry.

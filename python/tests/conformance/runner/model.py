@@ -2,7 +2,7 @@
 
 Everything here is spelled in the vocabulary of the specification: the inputs
 of section 4, the levels of section 2, the limits of section 13, the report
-codes of section 14.2. Nothing in it names ``curly_message``; an
+codes of section 14.2. Nothing in it names ``curly_message_parser``; an
 implementation meets the set through an ``Adapter`` (section 14.3), which is
 where its own calling convention is translated into this one.
 """

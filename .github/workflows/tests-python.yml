@@ -145,7 +145,7 @@ jobs:
           (wheel,) = pathlib.Path("dist").glob("*.whl")
           (sdist,) = pathlib.Path("dist").glob("*.tar.gz")
           names = set(zipfile.ZipFile(wheel).namelist())
-          for name in ("curly_message/__init__.py", "curly_message/py.typed"):
+          for name in ("curly_message_parser/__init__.py", "curly_message_parser/py.typed"):
               assert name in names, f"{wheel.name} holds no {name}"
           archive = f"tests/conformance/conformance-{pin[0]}.zip"
           with tarfile.open(sdist) as packed:

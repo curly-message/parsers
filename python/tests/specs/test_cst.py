@@ -10,7 +10,7 @@ from typing import Any, cast
 
 import pytest
 
-from curly_message import CstMessage, CstNode, cst
+from curly_message_parser import CstMessage, CstNode, cst
 
 
 def _fields(node: CstNode) -> dict[str, Any]:

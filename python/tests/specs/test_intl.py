@@ -24,8 +24,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from curly_message import Report, create_parser
-from curly_message._requests import UNEXPRESSIBLE, record
+from curly_message_parser import Report, create_parser
+from curly_message_parser._requests import UNEXPRESSIBLE, record
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +34,7 @@ def _supplier(expect_intl: bool) -> None:
         pytest.skip("this installation is not meant to carry the Intl supplier")
     # Imported here rather than through a modifier, which would contain a
     # failure to import as a failed modifier.
-    importlib.import_module("curly_message._intl")
+    importlib.import_module("curly_message_parser._intl")
 
 
 def resolve(
@@ -737,7 +737,7 @@ def test_one_locale_reading_its_data_leaves_another_locale_alone() -> None:
     # into, so ``he`` read first once gave ``es`` its stand-alone months. A
     # fresh process, since either may have been read already.
     probe = """
-from curly_message import create_parser
+from curly_message_parser import create_parser
 parser = create_parser()
 props = {"date": {"timeZone": "UTC", "month": "long"}}
 print(ascii([parser.resolve("{{v:date}}", {"v": "0"}, props=props, locale=tag)
@@ -757,7 +757,7 @@ def test_a_locale_read_through_the_supplier_first_leaves_the_package_s_alone() -
     probe = """
 import babel
 babel.Locale.parse("he").months["stand-alone"]["wide"][1]
-from curly_message import create_parser
+from curly_message_parser import create_parser
 props = {"date": {"timeZone": "UTC", "month": "long"}}
 print(ascii(create_parser().resolve("{{v:date}}", {"v": "0"}, props=props, locale="es")))
 """
@@ -843,7 +843,7 @@ def test_a_tag_the_supplier_has_no_data_for_is_looked_up_by_truncation() -> None
 
 
 def test_the_locale_lookup_keeps_what_the_supplier_reads_and_not_the_tag() -> None:
-    locale = importlib.import_module("curly_message._intl.locale")
+    locale = importlib.import_module("curly_message_parser._intl.locale")
 
     locale._lookup.cache_clear()
     for index in range(300):
@@ -858,7 +858,7 @@ def test_the_locale_lookup_keeps_what_the_supplier_reads_and_not_the_tag() -> No
 def test_a_short_tag_is_parsed_once_and_a_long_one_on_every_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    locale = importlib.import_module("curly_message._intl.locale")
+    locale = importlib.import_module("curly_message_parser._intl.locale")
     parsed: list[int] = []
     real = locale.parse_tag
 
@@ -884,7 +884,7 @@ def test_a_short_tag_is_parsed_once_and_a_long_one_on_every_call(
 def test_variants_past_the_one_the_supplier_holds_are_not_tried(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    locale = importlib.import_module("curly_message._intl.locale")
+    locale = importlib.import_module("curly_message_parser._intl.locale")
 
     tried: list[object] = []
     parse = locale._parse
@@ -917,7 +917,7 @@ def test_variants_past_the_one_the_supplier_holds_are_not_tried(
 def test_the_props_of_a_request_are_read_once_for_the_placeholders_they_compose_for(
     modifier: str, props: dict[str, Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    validate = importlib.import_module("curly_message._intl.validate")
+    validate = importlib.import_module("curly_message_parser._intl.validate")
     read: list[str] = []
     convert: Callable[[str], float] = validate._string_to_number
 
@@ -1063,7 +1063,7 @@ def test_plural_reads_only_the_digits_the_number_layers_name() -> None:
 def test_a_value_without_a_zone_is_read_and_shown_in_the_local_zone(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    date = importlib.import_module("curly_message._intl.date")
+    date = importlib.import_module("curly_message_parser._intl.date")
     monkeypatch.setattr(date, "local_zone", lambda: ZoneInfo("Europe/Prague"))
     style = {"dateStyle": "short", "timeStyle": "short"}
     # A local time the spring transition skips is read at the offset before
@@ -1089,7 +1089,7 @@ def test_a_value_without_a_zone_is_read_and_shown_in_the_local_zone(
 def test_a_local_zone_read_as_utc_is_named_so_before_the_epoch(
     zone: str, text: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    date = importlib.import_module("curly_message._intl.date")
+    date = importlib.import_module("curly_message_parser._intl.date")
     monkeypatch.setattr(date, "local_zone", lambda: ZoneInfo(zone))
     output = resolve("{{v:date}}", {"v": "-3000000000000"}, date={"timeStyle": "full"})
     assert output == (text, [])
@@ -1104,7 +1104,7 @@ class Block(importlib.abc.MetaPathFinder):
         if name == "tzdata" or name.startswith("tzdata."):
             raise ModuleNotFoundError(name)
 sys.meta_path.insert(0, Block())
-from curly_message import create_parser
+from curly_message_parser import create_parser
 codes = []
 parser = create_parser(on_report=lambda report: codes.append(report.code))
 for zone in ("UTC", "+01:00", "Europe/Prague"):
@@ -1125,7 +1125,7 @@ print(codes)
 @pytest.mark.parametrize("database", ["system", "tzdata"])
 def test_a_zone_that_saves_backwards_is_named_as_icu_reads_it(database: str) -> None:
     probe = """
-from curly_message import create_parser
+from curly_message_parser import create_parser
 parser = create_parser()
 for v in ("1704110400000", "1720000000000", "253399089600000"):
     for locale, style in (("en", "full"), ("en-IE", "long")):
@@ -1148,8 +1148,8 @@ for v in ("1704110400000", "1720000000000", "253399089600000"):
 
 LOCAL_PROBE = """
 import importlib, os, time
-from curly_message import create_parser
-date = importlib.import_module("curly_message._intl.date")
+from curly_message_parser import create_parser
+date = importlib.import_module("curly_message_parser._intl.date")
 codes = []
 parser = create_parser(on_report=lambda report: codes.append(report.code))
 payload = {"v": "0", "w": "2024-03-05T15:00:00", "s": "2024-08-15T12:00:00"}
@@ -1214,7 +1214,7 @@ def test_a_local_zone_is_python_s_local_time_named_by_its_offset(
 
 EDGE_PROBE = """
 import sys
-from curly_message import create_parser
+from curly_message_parser import create_parser
 codes = []
 parser = create_parser(on_report=lambda report: codes.append(report.code))
 props = {"date": {"dateStyle": "medium", "timeStyle": "medium", "timeZone": "UTC"}}
@@ -1288,7 +1288,7 @@ def test_a_naive_time_on_the_first_or_last_day_is_placed_in_local_time(
 @pytest.mark.skipif(sys.platform == "win32", reason="Windows reads its zone from the registry")
 def test_a_local_offset_of_a_day_or_more_takes_the_fallback_chain() -> None:
     probe = """
-from curly_message import create_parser
+from curly_message_parser import create_parser
 codes = []
 parser = create_parser(on_report=lambda report: codes.append(report.code))
 payload = {"v": "0", "w": "2024-03-05T15:00:00"}
@@ -1312,7 +1312,7 @@ print(codes)
 def test_on_windows_the_local_zone_is_the_registry_s_or_its_standard_offset(
     tz: str | None, named: str | None, text: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    date = importlib.import_module("curly_message._intl.date")
+    date = importlib.import_module("curly_message_parser._intl.date")
 
     def get_localzone() -> ZoneInfo:
         if named is None:
@@ -1353,7 +1353,7 @@ def test_a_local_zone_file_the_supplier_cannot_read_leaves_intl_unsatisfied(
     # and its locale data imports that reading: where the file holds no zone,
     # no Intl modifier can load, and Core is left as it was.
     probe = """
-from curly_message import create_parser, levels
+from curly_message_parser import create_parser, levels
 codes = []
 parser = create_parser(on_report=lambda report: codes.append(report.code))
 for message in ("{{n:number; default:-}}", "{{v:date; default:-}}", "{{n:eq; 1234.5:core}}"):
@@ -1396,7 +1396,7 @@ def test_the_host_decimal_context_decides_no_digit(host: str) -> None:
     probe = f"""
 import decimal
 {host}
-from curly_message import create_parser
+from curly_message_parser import create_parser
 reports = []
 parser = create_parser(on_report=reports.append)
 number = [
@@ -1433,7 +1433,7 @@ print(len(reports))
 FLAKY_FIRST_CALL = """
 import importlib
 import importlib.util
-from curly_message import create_parser, levels
+from curly_message_parser import create_parser, levels
 real = importlib.{name}
 calls = []
 def flaky(*args, **kwargs):
@@ -1455,7 +1455,7 @@ print(ascii([first, again, reports, sorted(levels()), len(calls)]))
 
 
 def _first_call_fails(name: str, error: str, before: str = "") -> object:
-    target = "babel" if name == "util.find_spec" else "curly_message._intl"
+    target = "babel" if name == "util.find_spec" else "curly_message_parser._intl"
     probe = FLAKY_FIRST_CALL.format(name=name, target=target, error=error, before=before)
     output = subprocess.run(
         [sys.executable, "-c", probe], capture_output=True, text=True, check=True
@@ -1498,7 +1498,7 @@ def test_a_supplier_whose_release_cannot_be_read_is_asked_once() -> None:
     # A distribution whose metadata carries no version answers ``None``.
     probe = """
 import importlib.metadata
-from curly_message import create_parser, levels
+from curly_message_parser import create_parser, levels
 calls = []
 def version(name):
     calls.append(name)

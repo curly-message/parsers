@@ -18,7 +18,7 @@ Request = dict[str, object]
 """``{"api", "options", "input"}``, and ``"category"`` for a selection the supplier answered."""
 
 _RECORDER: Final[ContextVar[list[Request] | None]] = ContextVar(
-    "curly_message_requests", default=None
+    "curly_message_parser_requests", default=None
 )
 
 UNEXPRESSIBLE: Final = MappingProxyType(

@@ -166,7 +166,7 @@ def _intl() -> ModuleType | None:
     if _LOADED:
         return _LOADED[0]
     try:
-        module = importlib.import_module("curly_message._intl")
+        module = importlib.import_module("curly_message_parser._intl")
     except UNFINISHED:
         return None
     except Exception:
@@ -224,7 +224,7 @@ def levels() -> frozenset[Level]:
     """The conformance levels this installation satisfies (section 2).
 
     ``"intl"`` is among them where the supplier is installed: Babel, at
-    release 2.14 or later, which ``curly-message[intl]`` installs. It leaves
+    release 2.14 or later, which ``curly-message-parser[intl]`` installs. It leaves
     once an Intl call has found a supplier the modifiers cannot import.
     """
     if _intl_satisfied():

@@ -3,8 +3,8 @@ requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [project]
-name = "curly-message"
-version = "1.0.0"
+name = "curly-message-parser"
+version = "1.0.0rc0"
 description = "Python implementation of the Curly Message Format."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -44,7 +44,7 @@ lint = ["ruff", "mypy", "types-jsonschema"]
 dev = [{ include-group = "test" }, { include-group = "lint" }]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/curly_message"]
+packages = ["src/curly_message_parser"]
 
 [tool.hatch.build.targets.sdist]
 include = [
