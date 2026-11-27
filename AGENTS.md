@@ -486,7 +486,7 @@ Tech stack of `python/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Package | `curly-message-parser` on PyPI, imported as `curly_message_parser`; released up to `1.0.0` as `curly-message`, imported as `curly_message`, a project now archived; `curly-message-parser` was created empty with its trusted publisher registered, so the workflow publishes its first version, `1.0.0` again, the tag `python-v1.0.0` of the former name's release having been removed |
+| Package | `curly-message-parser` on PyPI, imported as `curly_message_parser`, released, `1.0.0`; `1.0.0rc0` and `1.0.0` were first published as `curly-message`, imported as `curly_message`, a project now archived; `curly-message-parser` was created empty with its trusted publisher registered, and the workflow published its first version, `1.0.0` again, the tag `python-v1.0.0` of the former name's release having been removed |
 | Language | Python, typed (`py.typed`) |
 | Package manager | uv, one lockfile (`uv.lock`); the commands are `tasks.py`'s |
 | Build | hatchling, pinned by hash in `build-constraints.txt`: an sdist and a pure wheel |
