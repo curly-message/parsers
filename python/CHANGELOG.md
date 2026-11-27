@@ -1,6 +1,6 @@
 # Changelog
 
-### 1.0.0 (Unreleased)
+## 1.0.0
 
 * **The package is `curly-message-parser`, imported as
   `curly_message_parser`.** `1.0.0rc0` and `1.0.0` were first published as
