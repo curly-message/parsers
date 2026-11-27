@@ -27,8 +27,8 @@ The Rust implementation, `curly-message-parser`, implements the same version
 and is on crates.io as `1.0.0`.
 
 The Python implementation, `curly-message-parser` on PyPI, implements the
-same version. It was released as `1.0.0` under the name `curly-message`, a
-PyPI project now archived.
+same version and is released as `1.0.0`. Its first two versions were also
+published under the name `curly-message`, a PyPI project now archived.
 
 The PHP implementation, `curly-message/parser` for Composer, implements the
 same version and is released as `1.0.0`. It is developed in `php/` and served
@@ -43,7 +43,7 @@ which only its publish workflow writes to (see *Releasing*).
 | [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
 | [`go/`](./go) | `github.com/curly-message/parsers/go` | Stable, `v1.0.0` |
 | [`rust/`](./rust) | `curly-message-parser` (crates.io) | Stable, `1.0.0` |
-| [`python/`](./python) | `curly-message-parser` (PyPI) | Stable, `1.0.0` as `curly-message` |
+| [`python/`](./python) | `curly-message-parser` (PyPI) | Stable, `1.0.0` |
 | [`php/`](./php) | `curly-message/parser` (Packagist) | Stable, `1.0.0` |
 
 One directory per language, each a standalone package with its own build,
@@ -231,9 +231,9 @@ PyPI holds no token: the workflow is the project's
 `curly-message` up to `1.0.0`, its first release, `1.0.0rc0`, creating that
 project through a *pending publisher*; that project is archived and takes no
 more uploads. `curly-message-parser` was created empty by an owner, with its
-publisher registered, so no version is published by hand. Its first version
+publisher registered, so no version was published by hand. Its first version
 is `1.0.0`, as `curly-message`'s last: the tag `python-v1.0.0` that release
-was cut from was removed, so the workflow cuts it again. Before anything is
+was cut from was removed, and the workflow cut it again. Before anything is
 pushed, the release job checks that PyPI does not hold the
 version, unless origin holds its tag for a re-run to finish, and makes the
 OIDC exchange the publish step will make, so a publisher that is missing or
