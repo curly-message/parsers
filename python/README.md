@@ -1,6 +1,6 @@
-# curly-message
+# curly-message-parser
 
-[![PyPI](https://img.shields.io/pypi/v/curly-message)](https://pypi.org/project/curly-message/)
+[![PyPI](https://img.shields.io/pypi/v/curly-message-parser)](https://pypi.org/project/curly-message-parser/)
 [![tests](https://github.com/curly-message/parsers/actions/workflows/tests-python.yml/badge.svg?branch=main)](https://github.com/curly-message/parsers/actions/workflows/tests-python.yml)
 
 The Python implementation of the
@@ -35,8 +35,8 @@ many may be, and may pass on the stack running out (*Limits*).
 ## Installation
 
 ```bash
-pip install curly-message          # Core and Extensions, with no dependencies
-pip install "curly-message[intl]"  # and Intl, over Babel
+pip install curly-message-parser          # Core and Extensions, with no dependencies
+pip install "curly-message-parser[intl]"  # and Intl, over Babel
 ```
 
 The `intl` extra installs [Babel](https://babel.pocoo.org/) 2.14 or later,
@@ -46,10 +46,15 @@ that depends on Babel: in an environment that carries one,
 `{{n:number}}` formats rather than naming a modifier nobody registered.
 `levels()` says which it is.
 
+`1.0.0rc0` and `1.0.0` were first published as `curly-message`, imported as
+`curly_message`. That PyPI project is archived and takes no more releases;
+to move, install `curly-message-parser` in its place and import
+`curly_message_parser`.
+
 ## Usage
 
 ```python
-from curly_message import create_parser
+from curly_message_parser import create_parser
 
 parser = create_parser()
 
@@ -170,7 +175,7 @@ loses that report and nothing else.
 ### Describing a message
 
 ```python
-from curly_message import cst
+from curly_message_parser import cst
 
 cst("Hi {{name}}")
 # -> {'type': 'message', 'start': 0, 'end': 11, 'nodes': [
@@ -193,7 +198,7 @@ finds are the ones resolution finds, because one scanner finds both.
 With the `intl` extra installed:
 
 ```python
-from curly_message import levels
+from curly_message_parser import levels
 
 sorted(levels())
 # -> ['core', 'extensions', 'intl']
@@ -205,7 +210,7 @@ later is installed. `levels()` answers for the installation it runs in,
 as a `frozenset` of `Level`.
 Without Intl, `number`, `date`, `ago`, `currency`, `plural` and `ordinal` are
 modifier names nobody registered: `{{n:number; default:-}}` resolves to `-`
-and reports `unknown-modifier`. `import curly_message` imports no Babel;
+and reports `unknown-modifier`. `import curly_message_parser` imports no Babel;
 the first Intl call does. Where that import fails, as with a Babel missing
 what the modifiers import, the placeholder that tried it reports
 `failed-modifier` and takes its fallback chain; from then on the installation
@@ -351,13 +356,13 @@ The specification reads every value as text (section 4). In Python:
 
 - **`None` is the host's null:** a value, present, which converts to
   `"None"`. A value nobody supplied is spelled by leaving the entry out, or
-  by `curly_message.UNDEFINED`, which means the same. Idiomatic Python hands
-  over `None` where nothing was meant, so prefer
+  by `curly_message_parser.UNDEFINED`, which means the same. Idiomatic
+  Python hands over `None` where nothing was meant, so prefer
   `catalogue.get(key, UNDEFINED)` to `catalogue.get(key)`, and leave an entry
   out rather than setting it to `None`:
 
   ```python
-  from curly_message import UNDEFINED
+  from curly_message_parser import UNDEFINED
 
   parser.resolve("{{v; default:none}}", {"v": None})  # -> 'None'
   parser.resolve("{{v; default:none}}", {"v": UNDEFINED})  # -> 'none'

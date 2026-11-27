@@ -26,8 +26,9 @@ same version and is released as `v1.0.0`.
 The Rust implementation, `curly-message-parser`, implements the same version
 and is on crates.io as `1.0.0`.
 
-The Python implementation, `curly-message` on PyPI, implements the same
-version and is released as `1.0.0`.
+The Python implementation, `curly-message-parser` on PyPI, implements the
+same version. It was released as `1.0.0` under the name `curly-message`, a
+PyPI project now archived.
 
 The PHP implementation, `curly-message/parser` for Composer, implements the
 same version and is released as `1.0.0`. It is developed in `php/` and served
@@ -41,8 +42,8 @@ which only its publish workflow writes to (see *Releasing*).
 | --- | --- | --- |
 | [`js/`](./js) | `@curly-message/parser` | Stable, `latest` |
 | [`go/`](./go) | `github.com/curly-message/parsers/go` | Stable, `v1.0.0` |
-| [`rust/`](./rust) | `curly-message-parser` | Stable, `1.0.0` |
-| [`python/`](./python) | `curly-message` (PyPI) | Stable, `1.0.0` |
+| [`rust/`](./rust) | `curly-message-parser` (crates.io) | Stable, `1.0.0` |
+| [`python/`](./python) | `curly-message-parser` (PyPI) | Stable, `1.0.0` as `curly-message` |
 | [`php/`](./php) | `curly-message/parser` (Packagist) | Stable, `1.0.0` |
 
 One directory per language, each a standalone package with its own build,
@@ -210,30 +211,33 @@ does: `patch`, `minor` and `major` cut `### 1.1.0 (Unreleased)` and must
 arrive at the version it names, and `next` publishes a release candidate of
 that version — `1.1.0rc0`, then `rc1`, PEP 440's spelling — and leaves the
 section open. PyPI has no dist-tags: a candidate is a prerelease, which `pip`
-installs only when asked (`pip install --pre curly-message`, or the exact
-version). The workflow runs the test matrix (`tests-python.yml`), writes the
-version into `python/pyproject.toml`, `python/uv.lock` and the benchmark's
+installs only when asked (`pip install --pre curly-message-parser`, or the
+exact version). The workflow runs the test matrix (`tests-python.yml`), writes
+the version into `python/pyproject.toml`, `python/uv.lock` and the benchmark's
 `python/package.json`, builds the sdist and the wheel with the hash-pinned
 build backend, writes the benchmark of that wheel into `BENCH.md`, commits,
 tags (`python-v1.0.0`), pushes, publishes to PyPI with an attestation of each
 file, and publishes a GitHub release carrying the changelog section, never
-marked as the repository's latest, which stays the JavaScript parser's. It runs
-in the same three jobs, with the same App, written out in the workflow rather
-than called from `publish.yml`, because PyPI does not accept a reusable
+marked as the repository's latest, which stays the JavaScript parser's. It
+runs in the same three jobs, with the same App, written out in the workflow
+rather than called from `publish.yml`, because PyPI does not accept a reusable
 workflow as a trusted publisher.
 
 PyPI holds no token: the workflow is the project's
 [trusted publisher](https://docs.pypi.org/trusted-publishers/), with
-`release` as its environment. A trusted publisher can be registered before
-the project exists, as a *pending publisher* in the PyPI account of a
-maintainer, naming the project `curly-message`, the repository
-`curly-message/parsers`, the workflow `publish-python.yml` and the
-environment `release`; the first release, `1.0.0rc0` under `next`, then
-created the project, so no version was published by hand. Before anything is
-pushed, the release job checks that PyPI does not hold the version, unless
-origin holds its tag for a re-run to finish, and makes the OIDC exchange the
-publish step will make, so a publisher that is missing or names something
-else fails the run before a tag exists.
+`release` as its environment, registered in the settings of the project
+`curly-message-parser` on PyPI (repository `curly-message/parsers`, workflow
+`publish-python.yml`, environment `release`). The package was published as
+`curly-message` up to `1.0.0`, its first release, `1.0.0rc0`, creating that
+project through a *pending publisher*; that project is archived and takes no
+more uploads. `curly-message-parser` was created empty by an owner, with its
+publisher registered, so no version is published by hand. Its first version
+is `1.0.0`, as `curly-message`'s last: the tag `python-v1.0.0` that release
+was cut from was removed, so the workflow cuts it again. Before anything is
+pushed, the release job checks that PyPI does not hold the
+version, unless origin holds its tag for a re-run to finish, and makes the
+OIDC exchange the publish step will make, so a publisher that is missing or
+names something else fails the run before a tag exists.
 
 ### PHP
 

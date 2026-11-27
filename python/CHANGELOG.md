@@ -1,7 +1,15 @@
 # Changelog
 
-## 1.0.0
+### 1.0.0 (Unreleased)
 
+* **The package is `curly-message-parser`, imported as
+  `curly_message_parser`.** `1.0.0rc0` and `1.0.0` were first published as
+  `curly-message`, imported as `curly_message`; that PyPI project is
+  archived and takes no more releases. To move, install
+  `curly-message-parser` in its place (`pip install curly-message-parser`,
+  with `[intl]` where the extra was installed) and import
+  `curly_message_parser`. Nothing else changes from `1.0.0` as published
+  under the former name.
 * **The first implementation of `curly-message-3` in Python.** `create_parser`
   resolves a message at the Core and Extensions levels with no dependencies,
   and at the Intl level where Babel 2.14 or later is installed, as the

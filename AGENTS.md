@@ -486,7 +486,7 @@ Tech stack of `python/` — **ground truth, do not assume otherwise**:
 
 | | |
 |---|---|
-| Package | `curly-message` on PyPI, imported as `curly_message`, released, `1.0.0`; the first version, the release candidate `1.0.0rc0`, was published by the workflow through a pending trusted publisher |
+| Package | `curly-message-parser` on PyPI, imported as `curly_message_parser`; released up to `1.0.0` as `curly-message`, imported as `curly_message`, a project now archived; `curly-message-parser` was created empty with its trusted publisher registered, so the workflow publishes its first version, `1.0.0` again, the tag `python-v1.0.0` of the former name's release having been removed |
 | Language | Python, typed (`py.typed`) |
 | Package manager | uv, one lockfile (`uv.lock`); the commands are `tasks.py`'s |
 | Build | hatchling, pinned by hash in `build-constraints.txt`: an sdist and a pure wheel |
@@ -513,16 +513,16 @@ Map of `python/`:
 
 | Path | Role |
 |------|------|
-| `src/curly_message/__init__.py` | the public surface: `create_parser`, `cst`, `levels`, `UNDEFINED`, the limits and the types |
-| `src/curly_message/_resolve.py` | `create_parser` and the resolution walk, on an explicit stack, with its limits and reports |
-| `src/curly_message/_cst.py` | `cst`: the tree a message is described by, its spans in code points |
-| `src/curly_message/_modifiers.py` | the modifiers the format defines, and the detection of the Intl supplier |
-| `src/curly_message/_intl/` | the Intl modifiers over Babel: validation, digits, numbers, plurals, dates, relative time, locales |
-| `src/curly_message/_convert.py` | the value model of section 4: a value as text and as a number, and the wrappers of section 4.1 |
-| `src/curly_message/_utils.py` | pure helpers, the placeholder scanner, `LINE_TERM` and `own_value` among them |
-| `src/curly_message/_types.py` | the public types, the limits and their doc comments |
-| `src/curly_message/_reads.py` | how a read of an option's value or of a default renders and what it counts, `MAX_REENTRY` and the state a thread has in progress |
-| `src/curly_message/_requests.py` | the private seam that records the formatting requests a resolution makes, for the conformance adapter |
+| `src/curly_message_parser/__init__.py` | the public surface: `create_parser`, `cst`, `levels`, `UNDEFINED`, the limits and the types |
+| `src/curly_message_parser/_resolve.py` | `create_parser` and the resolution walk, on an explicit stack, with its limits and reports |
+| `src/curly_message_parser/_cst.py` | `cst`: the tree a message is described by, its spans in code points |
+| `src/curly_message_parser/_modifiers.py` | the modifiers the format defines, and the detection of the Intl supplier |
+| `src/curly_message_parser/_intl/` | the Intl modifiers over Babel: validation, digits, numbers, plurals, dates, relative time, locales |
+| `src/curly_message_parser/_convert.py` | the value model of section 4: a value as text and as a number, and the wrappers of section 4.1 |
+| `src/curly_message_parser/_utils.py` | pure helpers, the placeholder scanner, `LINE_TERM` and `own_value` among them |
+| `src/curly_message_parser/_types.py` | the public types, the limits and their doc comments |
+| `src/curly_message_parser/_reads.py` | how a read of an option's value or of a default renders and what it counts, `MAX_REENTRY` and the state a thread has in progress |
+| `src/curly_message_parser/_requests.py` | the private seam that records the formatting requests a resolution makes, for the conformance adapter |
 | `tests/specs/` | the suite (see *Tests*) |
 | `tests/conformance/` | the runner (`runner/`), the adapter of section 14.3 (`adapter.py`), the vendored set and `fetch.py` |
 | `tests/types/surface.py` | the types the wheel ships, checked as a consumer's checker reads them |
@@ -533,8 +533,8 @@ Map of `python/`:
 
 The rules of `js/` hold here, with these readings:
 
-- **The public surface** is what `curly_message/__init__.py` exports; the
-  modules named with a leading underscore are private.
+- **The public surface** is what `curly_message_parser/__init__.py` exports;
+  the modules named with a leading underscore are private.
 - **Diagnostics leave through `on_report` and nowhere else**, and resolving
   never raises: a handler that raises loses that report and nothing else.
   The one exception is a resolution host code asks for while another is in
