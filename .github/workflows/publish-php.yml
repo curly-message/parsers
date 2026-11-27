@@ -292,10 +292,10 @@ jobs:
           VERSION: ${{ needs.version.outputs.version }}
           RECOVER: ${{ inputs.mirror }}
         run: |
+          id=$(gh api "/users/${APP}[bot]" --jq .id)
+          git config user.name "${APP}[bot]"
+          git config user.email "$id+${APP}[bot]@users.noreply.github.com"
           if [ -z "$RECOVER" ]; then
-            id=$(gh api "/users/${APP}[bot]" --jq .id)
-            git config user.name "${APP}[bot]"
-            git config user.email "$id+${APP}[bot]@users.noreply.github.com"
             git commit --all --message "chore(php): release $PACKAGE@$VERSION"
             git tag --annotate --message "$PACKAGE@$VERSION" "php-v$VERSION"
             tag="php-v$VERSION"
